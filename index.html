@@ -4,13 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>麵包小姐代購系統 - 管理後台</title>
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Vue 3 -->
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-    <!-- Axios -->
     <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
-    <!-- FontAwesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <script>
         tailwind.config = {
@@ -28,13 +24,62 @@
     <style>
         [v-cloak] { display: none; }
         .sidebar-item.active { background-color: #F59E0B; color: white; }
-        .fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease; }
-        .fade-enter-from, .fade-leave-to { opacity: 0; }
     </style>
 </head>
 <body class="bg-gray-100">
     <div id="app" v-cloak>
-        <div class="flex h-screen">
+        <!-- 登入頁面 -->
+        <div v-if="!isLoggedIn" class="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900">
+            <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+                <div class="text-center mb-8">
+                    <div class="w-20 h-20 bg-primary rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-bread-slice text-white text-3xl"></i>
+                    </div>
+                    <h1 class="text-2xl font-bold text-gray-800">麵包小姐代購</h1>
+                    <p class="text-gray-500 mt-1">管理後台登入</p>
+                </div>
+                <form @submit.prevent="login" class="space-y-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">帳號</label>
+                        <div class="relative">
+                            <i class="fas fa-user absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                            <input v-model="loginForm.username" type="text" 
+                                   class="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
+                                   placeholder="請輸入帳號" required>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">密碼</label>
+                        <div class="relative">
+                            <i class="fas fa-lock absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                            <input v-model="loginForm.password" :type="showPassword ? 'text' : 'password'" 
+                                   class="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
+                                   placeholder="請輸入密碼" required>
+                            <button type="button" @click="showPassword = !showPassword" 
+                                    class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                                <i :class="showPassword ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div v-if="loginError" class="bg-red-50 text-red-600 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
+                        <i class="fas fa-exclamation-circle"></i>
+                        {{ loginError }}
+                    </div>
+                    <button type="submit" :disabled="loginLoading"
+                            class="w-full bg-primary hover:bg-yellow-600 text-white font-semibold py-3 rounded-lg transition flex items-center justify-center gap-2">
+                        <i v-if="loginLoading" class="fas fa-spinner fa-spin"></i>
+                        <i v-else class="fas fa-sign-in-alt"></i>
+                        {{ loginLoading ? '登入中...' : '登入' }}
+                    </button>
+                </form>
+                <p class="text-center text-gray-400 text-sm mt-6">
+                    <i class="fas fa-shield-alt mr-1"></i> 安全連線
+                </p>
+            </div>
+        </div>
+
+        <!-- 主系統 -->
+        <div v-else class="flex h-screen">
             <!-- Sidebar -->
             <aside class="w-64 bg-dark text-white flex flex-col">
                 <div class="p-4 border-b border-gray-700">
@@ -101,17 +146,20 @@
                         </li>
                     </ul>
                 </nav>
-                <div class="p-4 border-t border-gray-700">
+                <div class="p-4 border-t border-gray-700 space-y-2">
                     <button @click="refreshAll" class="w-full bg-primary hover:bg-yellow-600 text-white py-2 rounded-lg transition flex items-center justify-center gap-2">
                         <i class="fas fa-sync-alt" :class="{'animate-spin': loading}"></i>
                         重新整理
+                    </button>
+                    <button @click="logout" class="w-full bg-red-500 hover:bg-red-600 text-white py-2 rounded-lg transition flex items-center justify-center gap-2">
+                        <i class="fas fa-sign-out-alt"></i>
+                        登出
                     </button>
                 </div>
             </aside>
 
             <!-- Main Content -->
             <main class="flex-1 overflow-auto">
-                <!-- Header -->
                 <header class="bg-white shadow-sm p-4 flex items-center justify-between">
                     <h2 class="text-xl font-semibold text-gray-800">
                         <span v-if="currentPage === 'dashboard'">📊 儀表板</span>
@@ -123,15 +171,16 @@
                     </h2>
                     <div class="flex items-center gap-4">
                         <span class="text-sm text-gray-500">
-                            <i class="fas fa-clock mr-1"></i>
-                            最後更新: {{ lastUpdated }}
+                            <i class="fas fa-user mr-1"></i> {{ currentUser }}
+                        </span>
+                        <span class="text-sm text-gray-500">
+                            <i class="fas fa-clock mr-1"></i> {{ lastUpdated }}
                         </span>
                     </div>
                 </header>
 
-                <!-- Page Content -->
                 <div class="p-6">
-                    <!-- Loading Overlay -->
+                    <!-- Loading -->
                     <div v-if="loading" class="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
                         <div class="bg-white p-6 rounded-lg shadow-xl flex items-center gap-4">
                             <i class="fas fa-spinner fa-spin text-2xl text-primary"></i>
@@ -139,9 +188,8 @@
                         </div>
                     </div>
 
-                    <!-- Dashboard Page -->
+                    <!-- Dashboard -->
                     <div v-if="currentPage === 'dashboard'" class="space-y-6">
-                        <!-- Stats Cards -->
                         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                             <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-primary">
                                 <div class="flex items-center justify-between">
@@ -188,33 +236,20 @@
                                 </div>
                             </div>
                         </div>
-
-                        <!-- Second Row Stats -->
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                             <div class="bg-white rounded-xl shadow-sm p-6">
-                                <div class="flex items-center justify-between mb-4">
-                                    <h3 class="font-semibold text-gray-800">總客戶數</h3>
-                                    <i class="fas fa-users text-purple-500"></i>
-                                </div>
+                                <h3 class="font-semibold text-gray-800 mb-4">總客戶數</h3>
                                 <p class="text-4xl font-bold text-purple-500">{{ stats.customers }}</p>
                             </div>
                             <div class="bg-white rounded-xl shadow-sm p-6">
-                                <div class="flex items-center justify-between mb-4">
-                                    <h3 class="font-semibold text-gray-800">總訂單數</h3>
-                                    <i class="fas fa-shopping-cart text-blue-500"></i>
-                                </div>
+                                <h3 class="font-semibold text-gray-800 mb-4">總訂單數</h3>
                                 <p class="text-4xl font-bold text-blue-500">{{ stats.totalOrders }}</p>
                             </div>
                             <div class="bg-white rounded-xl shadow-sm p-6">
-                                <div class="flex items-center justify-between mb-4">
-                                    <h3 class="font-semibold text-gray-800">總結帳單數</h3>
-                                    <i class="fas fa-receipt text-green-500"></i>
-                                </div>
+                                <h3 class="font-semibold text-gray-800 mb-4">總結帳單數</h3>
                                 <p class="text-4xl font-bold text-green-500">{{ stats.totalCheckout }}</p>
                             </div>
                         </div>
-
-                        <!-- Quick Actions -->
                         <div class="bg-white rounded-xl shadow-sm p-6">
                             <h3 class="font-semibold text-gray-800 mb-4">快速操作</h3>
                             <div class="flex flex-wrap gap-3">
@@ -231,26 +266,23 @@
                         </div>
                     </div>
 
-                    <!-- Products Page -->
+                    <!-- Products -->
                     <div v-if="currentPage === 'products'" class="space-y-6">
-                        <!-- Search & Filter -->
                         <div class="bg-white rounded-xl shadow-sm p-4 flex flex-wrap gap-4 items-center">
                             <div class="flex-1 min-w-64">
                                 <div class="relative">
                                     <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
                                     <input v-model="searchProducts" type="text" placeholder="搜尋商品名稱或 SKU..." 
-                                           class="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary">
+                                           class="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary">
                                 </div>
                             </div>
-                            <select v-model="filterStock" class="border rounded-lg px-4 py-2 focus:ring-2 focus:ring-primary">
+                            <select v-model="filterStock" class="border rounded-lg px-4 py-2">
                                 <option value="all">全部庫存</option>
                                 <option value="instock">有庫存</option>
                                 <option value="low">低庫存 (&lt;5)</option>
                                 <option value="out">無庫存</option>
                             </select>
                         </div>
-
-                        <!-- Products Table -->
                         <div class="bg-white rounded-xl shadow-sm overflow-hidden">
                             <table class="w-full">
                                 <thead class="bg-gray-50">
@@ -287,7 +319,7 @@
                                             <span v-else class="bg-gray-100 text-gray-600 px-2 py-1 rounded-full text-xs">一般</span>
                                         </td>
                                         <td class="px-6 py-4">
-                                            <button @click="editProduct(product)" class="text-blue-500 hover:text-blue-700 mr-3">
+                                            <button @click="editProduct(product)" class="text-blue-500 hover:text-blue-700">
                                                 <i class="fas fa-edit"></i>
                                             </button>
                                         </td>
@@ -297,25 +329,22 @@
                         </div>
                     </div>
 
-                    <!-- Orders Page -->
+                    <!-- Orders -->
                     <div v-if="currentPage === 'orders'" class="space-y-6">
-                        <!-- Search & Filter -->
                         <div class="bg-white rounded-xl shadow-sm p-4 flex flex-wrap gap-4 items-center">
                             <div class="flex-1 min-w-64">
                                 <div class="relative">
                                     <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
                                     <input v-model="searchOrders" type="text" placeholder="搜尋客戶名稱或 SKU..." 
-                                           class="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary">
+                                           class="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary">
                                 </div>
                             </div>
-                            <select v-model="filterOrderStatus" class="border rounded-lg px-4 py-2 focus:ring-2 focus:ring-primary">
+                            <select v-model="filterOrderStatus" class="border rounded-lg px-4 py-2">
                                 <option value="all">全部狀態</option>
                                 <option value="pending">未結單</option>
                                 <option value="done">已結單</option>
                             </select>
                         </div>
-
-                        <!-- Orders Table -->
                         <div class="bg-white rounded-xl shadow-sm overflow-hidden">
                             <table class="w-full">
                                 <thead class="bg-gray-50">
@@ -364,25 +393,22 @@
                         </div>
                     </div>
 
-                    <!-- Checkout Page -->
+                    <!-- Checkout -->
                     <div v-if="currentPage === 'checkout'" class="space-y-6">
-                        <!-- Search & Filter -->
                         <div class="bg-white rounded-xl shadow-sm p-4 flex flex-wrap gap-4 items-center">
                             <div class="flex-1 min-w-64">
                                 <div class="relative">
                                     <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
                                     <input v-model="searchCheckout" type="text" placeholder="搜尋客戶名稱..." 
-                                           class="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary">
+                                           class="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary">
                                 </div>
                             </div>
-                            <select v-model="filterCheckoutStatus" class="border rounded-lg px-4 py-2 focus:ring-2 focus:ring-primary">
+                            <select v-model="filterCheckoutStatus" class="border rounded-lg px-4 py-2">
                                 <option value="all">全部狀態</option>
                                 <option value="pending">待寄出</option>
                                 <option value="shipped">已寄出</option>
                             </select>
                         </div>
-
-                        <!-- Checkout Table -->
                         <div class="bg-white rounded-xl shadow-sm overflow-hidden">
                             <table class="w-full">
                                 <thead class="bg-gray-50">
@@ -390,7 +416,6 @@
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">客戶</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">總金額</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">結帳商品</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">匯款資訊</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">建立時間</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">已通知</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">已寄出</th>
@@ -398,34 +423,29 @@
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-200">
-                                    <tr v-for="checkout in filteredCheckout" :key="checkout.id" class="hover:bg-gray-50">
-                                        <td class="px-6 py-4 font-medium">{{ checkout['名稱'] }}</td>
-                                        <td class="px-6 py-4 text-green-600 font-bold">NT$ {{ checkout['總金額'] }}</td>
-                                        <td class="px-6 py-4 text-sm max-w-xs truncate" :title="checkout['結帳商品']">
-                                            {{ checkout['結帳商品']?.substring(0, 50) }}{{ checkout['結帳商品']?.length > 50 ? '...' : '' }}
-                                        </td>
-                                        <td class="px-6 py-4 text-sm max-w-xs truncate" :title="checkout['匯款資訊']">
-                                            {{ checkout['匯款資訊']?.substring(0, 30) }}{{ checkout['匯款資訊']?.length > 30 ? '...' : '' }}
-                                        </td>
-                                        <td class="px-6 py-4 text-sm text-gray-500">{{ checkout['建立時間'] }}</td>
+                                    <tr v-for="c in filteredCheckout" :key="c.id" class="hover:bg-gray-50">
+                                        <td class="px-6 py-4 font-medium">{{ c['名稱'] }}</td>
+                                        <td class="px-6 py-4 text-green-600 font-bold">NT$ {{ c['總金額'] }}</td>
+                                        <td class="px-6 py-4 text-sm max-w-xs truncate">{{ c['結帳商品']?.substring(0, 50) }}...</td>
+                                        <td class="px-6 py-4 text-sm text-gray-500">{{ c['建立時間'] }}</td>
                                         <td class="px-6 py-4">
-                                            <button @click="toggleCheckoutField(checkout, '已通知')" 
-                                                    :class="checkout['已通知'] ? 'bg-green-500' : 'bg-gray-300'"
+                                            <button @click="toggleCheckoutField(c, '已通知')" 
+                                                    :class="c['已通知'] ? 'bg-green-500' : 'bg-gray-300'"
                                                     class="w-12 h-6 rounded-full relative transition">
-                                                <span :class="checkout['已通知'] ? 'translate-x-6' : 'translate-x-1'"
+                                                <span :class="c['已通知'] ? 'translate-x-6' : 'translate-x-1'"
                                                       class="absolute top-1 w-4 h-4 bg-white rounded-full transition-transform"></span>
                                             </button>
                                         </td>
                                         <td class="px-6 py-4">
-                                            <button @click="toggleCheckoutField(checkout, '已寄出')" 
-                                                    :class="checkout['已寄出'] ? 'bg-green-500' : 'bg-gray-300'"
+                                            <button @click="toggleCheckoutField(c, '已寄出')" 
+                                                    :class="c['已寄出'] ? 'bg-green-500' : 'bg-gray-300'"
                                                     class="w-12 h-6 rounded-full relative transition">
-                                                <span :class="checkout['已寄出'] ? 'translate-x-6' : 'translate-x-1'"
+                                                <span :class="c['已寄出'] ? 'translate-x-6' : 'translate-x-1'"
                                                       class="absolute top-1 w-4 h-4 bg-white rounded-full transition-transform"></span>
                                             </button>
                                         </td>
                                         <td class="px-6 py-4">
-                                            <button @click="viewCheckoutDetail(checkout)" class="text-blue-500 hover:text-blue-700 mr-2">
+                                            <button @click="viewCheckoutDetail(c)" class="text-blue-500 hover:text-blue-700">
                                                 <i class="fas fa-eye"></i>
                                             </button>
                                         </td>
@@ -435,25 +455,22 @@
                         </div>
                     </div>
 
-                    <!-- Support Page -->
+                    <!-- Support -->
                     <div v-if="currentPage === 'support'" class="space-y-6">
-                        <!-- Filter -->
                         <div class="bg-white rounded-xl shadow-sm p-4 flex flex-wrap gap-4 items-center">
                             <div class="flex-1 min-w-64">
                                 <div class="relative">
                                     <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
                                     <input v-model="searchSupport" type="text" placeholder="搜尋客戶名稱..." 
-                                           class="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary">
+                                           class="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary">
                                 </div>
                             </div>
-                            <select v-model="filterSupportStatus" class="border rounded-lg px-4 py-2 focus:ring-2 focus:ring-primary">
+                            <select v-model="filterSupportStatus" class="border rounded-lg px-4 py-2">
                                 <option value="all">全部狀態</option>
                                 <option value="pending">待處理</option>
                                 <option value="done">已處理</option>
                             </select>
                         </div>
-
-                        <!-- Support Table -->
                         <div class="bg-white rounded-xl shadow-sm overflow-hidden">
                             <table class="w-full">
                                 <thead class="bg-gray-50">
@@ -466,27 +483,19 @@
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-200">
-                                    <tr v-for="support in filteredSupport" :key="support.id" 
-                                        :class="{'bg-red-50': !support['已處理']}"
-                                        class="hover:bg-gray-50">
-                                        <td class="px-6 py-4 font-medium">{{ support['名稱'] }}</td>
-                                        <td class="px-6 py-4 font-mono text-sm text-gray-500">{{ support.LINE_ID }}</td>
-                                        <td class="px-6 py-4 text-sm text-gray-500">{{ support['建立時間'] }}</td>
+                                    <tr v-for="s in filteredSupport" :key="s.id" :class="{'bg-red-50': !s['已處理']}" class="hover:bg-gray-50">
+                                        <td class="px-6 py-4 font-medium">{{ s['名稱'] }}</td>
+                                        <td class="px-6 py-4 font-mono text-sm text-gray-500">{{ s.LINE_ID }}</td>
+                                        <td class="px-6 py-4 text-sm text-gray-500">{{ s['建立時間'] }}</td>
                                         <td class="px-6 py-4">
-                                            <span v-if="support['已處理']" class="bg-green-100 text-green-600 px-3 py-1 rounded-full text-sm">
-                                                <i class="fas fa-check mr-1"></i>已處理
-                                            </span>
-                                            <span v-else class="bg-red-100 text-red-600 px-3 py-1 rounded-full text-sm animate-pulse">
-                                                <i class="fas fa-clock mr-1"></i>待處理
-                                            </span>
+                                            <span v-if="s['已處理']" class="bg-green-100 text-green-600 px-3 py-1 rounded-full text-sm">已處理</span>
+                                            <span v-else class="bg-red-100 text-red-600 px-3 py-1 rounded-full text-sm animate-pulse">待處理</span>
                                         </td>
                                         <td class="px-6 py-4">
-                                            <button v-if="!support['已處理']" 
-                                                    @click="markSupportDone(support)"
-                                                    class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm transition">
+                                            <button v-if="!s['已處理']" @click="markSupportDone(s)"
+                                                    class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm">
                                                 <i class="fas fa-check mr-1"></i>標記已處理
                                             </button>
-                                            <span v-else class="text-gray-400 text-sm">-</span>
                                         </td>
                                     </tr>
                                 </tbody>
@@ -494,18 +503,15 @@
                         </div>
                     </div>
 
-                    <!-- Customers Page -->
+                    <!-- Customers -->
                     <div v-if="currentPage === 'customers'" class="space-y-6">
-                        <!-- Search -->
                         <div class="bg-white rounded-xl shadow-sm p-4">
                             <div class="relative max-w-md">
                                 <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
-                                <input v-model="searchCustomers" type="text" placeholder="搜尋客戶名稱、LINE ID 或社群名稱..." 
-                                       class="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary">
+                                <input v-model="searchCustomers" type="text" placeholder="搜尋客戶名稱、LINE ID..." 
+                                       class="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary">
                             </div>
                         </div>
-
-                        <!-- Customers Table -->
                         <div class="bg-white rounded-xl shadow-sm overflow-hidden">
                             <table class="w-full">
                                 <thead class="bg-gray-50">
@@ -542,15 +548,15 @@
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">商品名稱</label>
-                        <input v-model="editingProduct.name" type="text" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary">
+                        <input v-model="editingProduct.name" type="text" class="w-full px-4 py-2 border rounded-lg">
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">價格</label>
-                        <input v-model="editingProduct.price" type="text" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary">
+                        <input v-model="editingProduct.price" type="text" class="w-full px-4 py-2 border rounded-lg">
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">庫存</label>
-                        <input v-model="editingProduct.stock" type="number" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary">
+                        <input v-model="editingProduct.stock" type="number" class="w-full px-4 py-2 border rounded-lg">
                     </div>
                     <div class="flex items-center">
                         <input v-model="editingProduct['限量']" type="checkbox" class="w-4 h-4 text-primary rounded">
@@ -558,8 +564,8 @@
                     </div>
                 </div>
                 <div class="flex justify-end gap-3 mt-6">
-                    <button @click="showEditModal = false" class="px-4 py-2 border rounded-lg hover:bg-gray-100 transition">取消</button>
-                    <button @click="saveProduct" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-yellow-600 transition">儲存</button>
+                    <button @click="showEditModal = false" class="px-4 py-2 border rounded-lg hover:bg-gray-100">取消</button>
+                    <button @click="saveProduct" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-yellow-600">儲存</button>
                 </div>
             </div>
         </div>
@@ -593,14 +599,13 @@
                     </div>
                 </div>
                 <div class="flex justify-end mt-6">
-                    <button @click="showCheckoutModal = false" class="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition">關閉</button>
+                    <button @click="showCheckoutModal = false" class="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600">關閉</button>
                 </div>
             </div>
         </div>
 
-        <!-- Toast Notification -->
-        <div v-if="toast.show" 
-             :class="toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'"
+        <!-- Toast -->
+        <div v-if="toast.show" :class="toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'"
              class="fixed bottom-6 right-6 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 z-50">
             <i :class="toast.type === 'success' ? 'fas fa-check-circle' : 'fas fa-exclamation-circle'"></i>
             {{ toast.message }}
@@ -610,9 +615,89 @@
     <script>
         const { createApp, ref, computed, onMounted } = Vue;
 
+        // 密碼加密 (簡單 hash)
+        const hashPassword = (str) => {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                const char = str.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash;
+            }
+            return hash.toString(16);
+        };
+
+        // 認證設定 (密碼已加密儲存)
+        const AUTH_CONFIG = {
+            username: 'kenji',
+            passwordHash: hashPassword('anngoo113023'),
+            sessionKey: 'bread_admin_session',
+            sessionDuration: 24 * 60 * 60 * 1000 // 24 小時
+        };
+
         createApp({
             setup() {
-                // Baserow API 設定
+                // 登入狀態
+                const isLoggedIn = ref(false);
+                const currentUser = ref('');
+                const loginForm = ref({ username: '', password: '' });
+                const loginError = ref('');
+                const loginLoading = ref(false);
+                const showPassword = ref(false);
+
+                // 檢查 session
+                const checkSession = () => {
+                    const session = localStorage.getItem(AUTH_CONFIG.sessionKey);
+                    if (session) {
+                        try {
+                            const data = JSON.parse(session);
+                            if (data.expiry > Date.now() && data.user === AUTH_CONFIG.username) {
+                                isLoggedIn.value = true;
+                                currentUser.value = data.user;
+                                return true;
+                            }
+                        } catch (e) {}
+                    }
+                    localStorage.removeItem(AUTH_CONFIG.sessionKey);
+                    return false;
+                };
+
+                // 登入
+                const login = () => {
+                    loginError.value = '';
+                    loginLoading.value = true;
+
+                    setTimeout(() => {
+                        const inputHash = hashPassword(loginForm.value.password);
+                        
+                        if (loginForm.value.username === AUTH_CONFIG.username && 
+                            inputHash === AUTH_CONFIG.passwordHash) {
+                            // 建立 session
+                            const session = {
+                                user: loginForm.value.username,
+                                expiry: Date.now() + AUTH_CONFIG.sessionDuration
+                            };
+                            localStorage.setItem(AUTH_CONFIG.sessionKey, JSON.stringify(session));
+                            
+                            isLoggedIn.value = true;
+                            currentUser.value = loginForm.value.username;
+                            loginForm.value = { username: '', password: '' };
+                            refreshAll();
+                        } else {
+                            loginError.value = '帳號或密碼錯誤';
+                        }
+                        loginLoading.value = false;
+                    }, 500);
+                };
+
+                // 登出
+                const logout = () => {
+                    localStorage.removeItem(AUTH_CONFIG.sessionKey);
+                    isLoggedIn.value = false;
+                    currentUser.value = '';
+                    showToast('已登出', 'success');
+                };
+
+                // Baserow API
                 const API_TOKEN = 'rongKTYvKbj0K9c5MAygk1l619JSsHkN';
                 const API_BASE = 'https://api.baserow.io/api/database/rows/table';
                 const TABLES = {
@@ -623,19 +708,16 @@
                     customers: 777737
                 };
 
-                // 狀態
                 const currentPage = ref('dashboard');
                 const loading = ref(false);
                 const lastUpdated = ref('-');
 
-                // 資料
                 const products = ref([]);
                 const orders = ref([]);
                 const support = ref([]);
                 const checkout = ref([]);
                 const customers = ref([]);
 
-                // 搜尋與篩選
                 const searchProducts = ref('');
                 const searchOrders = ref('');
                 const searchCheckout = ref('');
@@ -646,16 +728,12 @@
                 const filterCheckoutStatus = ref('all');
                 const filterSupportStatus = ref('all');
 
-                // Modal
                 const showEditModal = ref(false);
                 const showCheckoutModal = ref(false);
                 const editingProduct = ref({});
                 const viewingCheckout = ref({});
-
-                // Toast
                 const toast = ref({ show: false, message: '', type: 'success' });
 
-                // API 請求
                 const api = axios.create({
                     headers: { 'Authorization': `Token ${API_TOKEN}` }
                 });
@@ -673,8 +751,8 @@
                     await api.delete(`${API_BASE}/${tableId}/${rowId}/`);
                 };
 
-                // 載入所有資料
                 const refreshAll = async () => {
+                    if (!isLoggedIn.value) return;
                     loading.value = true;
                     try {
                         const [p, o, s, c, cu] = await Promise.all([
@@ -699,7 +777,6 @@
                     }
                 };
 
-                // 統計
                 const stats = computed(() => ({
                     products: products.value.length,
                     pendingOrders: orders.value.filter(o => !o['已結單']).length,
@@ -710,15 +787,11 @@
                     customers: customers.value.length
                 }));
 
-                // 篩選
                 const filteredProducts = computed(() => {
                     let result = products.value;
                     if (searchProducts.value) {
                         const search = searchProducts.value.toLowerCase();
-                        result = result.filter(p => 
-                            p.name?.toLowerCase().includes(search) || 
-                            p.SKU?.toLowerCase().includes(search)
-                        );
+                        result = result.filter(p => p.name?.toLowerCase().includes(search) || p.SKU?.toLowerCase().includes(search));
                     }
                     if (filterStock.value === 'instock') result = result.filter(p => p.stock > 0);
                     if (filterStock.value === 'low') result = result.filter(p => p.stock > 0 && p.stock < 5);
@@ -730,10 +803,7 @@
                     let result = orders.value;
                     if (searchOrders.value) {
                         const search = searchOrders.value.toLowerCase();
-                        result = result.filter(o => 
-                            o['名稱']?.toLowerCase().includes(search) || 
-                            o.SKU?.toLowerCase().includes(search)
-                        );
+                        result = result.filter(o => o['名稱']?.toLowerCase().includes(search) || o.SKU?.toLowerCase().includes(search));
                     }
                     if (filterOrderStatus.value === 'pending') result = result.filter(o => !o['已結單']);
                     if (filterOrderStatus.value === 'done') result = result.filter(o => o['已結單']);
@@ -769,16 +839,11 @@
                     let result = customers.value;
                     if (searchCustomers.value) {
                         const search = searchCustomers.value.toLowerCase();
-                        result = result.filter(c => 
-                            c['名稱']?.toLowerCase().includes(search) || 
-                            c.LINE_ID?.toLowerCase().includes(search) ||
-                            c['社群名稱']?.toLowerCase().includes(search)
-                        );
+                        result = result.filter(c => c['名稱']?.toLowerCase().includes(search) || c.LINE_ID?.toLowerCase().includes(search));
                     }
                     return result;
                 });
 
-                // 操作函數
                 const stockClass = (stock) => {
                     if (stock <= 0) return 'text-red-500 font-bold';
                     if (stock < 5) return 'text-yellow-500 font-bold';
@@ -836,11 +901,11 @@
                     }
                 };
 
-                const toggleCheckoutField = async (checkout, field) => {
+                const toggleCheckoutField = async (c, field) => {
                     loading.value = true;
                     try {
-                        await updateRow(TABLES.checkout, checkout.id, { [field]: !checkout[field] });
-                        checkout[field] = !checkout[field];
+                        await updateRow(TABLES.checkout, c.id, { [field]: !c[field] });
+                        c[field] = !c[field];
                         showToast('狀態已更新', 'success');
                     } catch (error) {
                         showToast('更新失敗', 'error');
@@ -872,19 +937,21 @@
                     setTimeout(() => { toast.value.show = false; }, 3000);
                 };
 
-                // 初始化
                 onMounted(() => {
-                    refreshAll();
+                    if (checkSession()) {
+                        refreshAll();
+                    }
                 });
 
                 return {
+                    isLoggedIn, currentUser, loginForm, loginError, loginLoading, showPassword,
+                    login, logout,
                     currentPage, loading, lastUpdated,
                     products, orders, support, checkout, customers,
                     searchProducts, searchOrders, searchCheckout, searchSupport, searchCustomers,
                     filterStock, filterOrderStatus, filterCheckoutStatus, filterSupportStatus,
-                    showEditModal, showCheckoutModal, editingProduct, viewingCheckout,
-                    toast, stats,
-                    filteredProducts, filteredOrders, filteredCheckout, filteredSupport, filteredCustomers,
+                    showEditModal, showCheckoutModal, editingProduct, viewingCheckout, toast,
+                    stats, filteredProducts, filteredOrders, filteredCheckout, filteredSupport, filteredCustomers,
                     refreshAll, stockClass, editProduct, saveProduct,
                     toggleOrderField, deleteOrder, toggleCheckoutField, viewCheckoutDetail, markSupportDone
                 };
