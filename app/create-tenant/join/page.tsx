@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
@@ -29,7 +29,7 @@ interface RequestJoinResponse {
     error?: string
 }
 
-export default function JoinTenantPage() {
+function JoinTenantContent() {
     const { user, isLoading: authLoading, signOut } = useAuth()
     const searchParams = useSearchParams()
     const [slug, setSlug] = useState(searchParams.get('slug') || '')
@@ -356,5 +356,20 @@ export default function JoinTenantPage() {
                 </motion.p>
             </motion.div>
         </div>
+    )
+}
+
+export default function JoinTenantPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen flex items-center justify-center p-4">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto" />
+                    <p className="text-muted-foreground mt-4">載入中...</p>
+                </div>
+            </div>
+        }>
+            <JoinTenantContent />
+        </Suspense>
     )
 }
