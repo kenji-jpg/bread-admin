@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tree:*)",
+      "Bash(curl:*)",
+      "mcp__mcp-registry__search_mcp_registry",
+      "Bash(npx -y @supabase/mcp-server-supabase@latest --help)",
+      "Bash(echo:*)",
+      "Bash(claude --version:*)",
+      "Bash(SUPABASE_ACCESS_TOKEN=\"sbp_8d41e14638674575ae8b98a78cf8bd5573fc0a21\" timeout 5 npx:*)",
+      "Bash(export SUPABASE_ACCESS_TOKEN=\"sbp_8d41e14638674575ae8b98a78cf8bd5573fc0a21\")",
+      "Bash(gtimeout:*)",
+      "Bash(perl -e 'alarm 5; exec @ARGV' npx -y @supabase/mcp-server-supabase@latest)",
+      "Bash(supabase --version:*)",
+      "Bash(python3:*)"
+    ]
+  }
+}
