@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { Check, ChevronsUpDown, Building2, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -29,7 +29,7 @@ export function TenantSwitcher() {
     const [isLoading, setIsLoading] = useState(true)
     const { tenant: currentTenant } = useTenant()
     const router = useRouter()
-    const supabase = createClient()
+    const supabase = useMemo(() => createClient(), [])
 
     useEffect(() => {
         const fetchTenants = async () => {

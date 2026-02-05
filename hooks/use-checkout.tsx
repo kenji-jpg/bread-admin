@@ -121,16 +121,6 @@ export interface NotifyMyshipResult {
     message?: string
 }
 
-// 更新結帳模式回傳
-export interface UpdateShippingMethodResult {
-    success: boolean
-    checkout_id?: string
-    old_method?: string
-    new_method?: string
-    message?: string
-    error?: string
-}
-
 // 刪除結帳單回傳
 export interface DeleteCheckoutResult {
     success: boolean
@@ -165,7 +155,6 @@ interface UseCheckoutReturn {
     markOrdered: (checkoutId: string, orderNo?: string, note?: string) => Promise<UpdateStatusResult>
     markShipped: (checkoutId: string, note?: string) => Promise<UpdateStatusResult>
     markCompleted: (checkoutId: string, note?: string) => Promise<UpdateStatusResult>
-    updateShippingMethod: (checkoutId: string, shippingMethod: ShippingMethod) => Promise<UpdateShippingMethodResult>
     deleteCheckout: (checkoutId: string) => Promise<DeleteCheckoutResult>
     batchDeleteCheckouts: (checkoutIds: string[]) => Promise<BatchDeleteCheckoutsResult>
 }
@@ -227,18 +216,6 @@ export const useCheckout = (tenantId: string): UseCheckoutReturn => {
             p_store_url: extra?.storeUrl || null,
             p_myship_order_no: extra?.myshipOrderNo || null,
             p_note: extra?.note || null
-        })
-    }, [tenantId, callRpc])
-
-    // 更新結帳模式（只有 pending/ready 狀態可修改）
-    const updateShippingMethod = useCallback((
-        checkoutId: string,
-        shippingMethod: ShippingMethod
-    ): Promise<UpdateShippingMethodResult> => {
-        return callRpc<UpdateShippingMethodResult>('update_checkout_shipping_method', {
-            p_tenant_id: tenantId,
-            p_checkout_id: checkoutId,
-            p_shipping_method: shippingMethod
         })
     }, [tenantId, callRpc])
 
@@ -346,7 +323,6 @@ export const useCheckout = (tenantId: string): UseCheckoutReturn => {
         markOrdered: (id, orderNo, note) => updateStatus(id, 'mark_ordered', { myshipOrderNo: orderNo, note }),
         markShipped: (id, note) => updateStatus(id, 'mark_shipped', { note }),
         markCompleted: (id, note) => updateStatus(id, 'mark_completed', { note }),
-        updateShippingMethod,
         deleteCheckout,
         batchDeleteCheckouts
     }

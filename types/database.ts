@@ -11,17 +11,6 @@ export const SHIPPING_METHOD_OPTIONS: Record<ShippingMethod, { label: string; ic
   pickup: { label: '自取', icon: '🏠' },
 }
 
-export const getShippingMethodLabel = (method: ShippingMethod | null): string => {
-  if (!method) return '-'
-  return SHIPPING_METHOD_OPTIONS[method]?.label || method
-}
-
-export const getShippingMethodDisplay = (method: ShippingMethod | null): string => {
-  if (!method) return '-'
-  const opt = SHIPPING_METHOD_OPTIONS[method]
-  return opt ? `${opt.icon} ${opt.label}` : method
-}
-
 // ========================================
 // Tenant
 // ========================================
@@ -45,18 +34,6 @@ export interface MaskedAdminLineIds extends MaskedField {
 /** 判斷欄位是否為遮罩格式 */
 export function isMasked(val: unknown): val is MaskedField {
   return typeof val === 'object' && val !== null && '_masked' in val && (val as MaskedField)._masked === true
-}
-
-/** 判斷 payment_info 是否為正常（非遮罩）格式 */
-export function isValidPaymentInfo(val: unknown): val is { bank: string; account: string; name: string } {
-  return (
-    typeof val === 'object' &&
-    val !== null &&
-    !('_masked' in val) &&
-    'bank' in val &&
-    'account' in val &&
-    'name' in val
-  )
 }
 
 export interface Tenant {
@@ -231,84 +208,6 @@ export interface Checkout {
   member?: Member
 }
 
-// 結帳單狀態更新 RPC 回應
-export interface UpdateCheckoutStatusResponse {
-  success: boolean
-  message: string
-  checkout_id: string
-  new_status: string
-}
-
-// 結帳單列表 RPC 回應
-export interface ListCheckoutsResponse {
-  id: string
-  checkout_no: string
-  customer_name: string | null
-  total_amount: number
-  item_count: number | null
-  payment_status: string
-  shipping_status: string
-  shipping_method: 'myship' | 'delivery' | null
-  shipping_fee: number
-  shipping_details: ShippingDetails | null  // ✅ 新增
-  created_at: string
-  updated_at: string
-  member_id: string
-  member_display_name: string | null
-  member_line_user_id: string | null
-
-  // ⚠️ 以下欄位即將廢棄
-  /** @deprecated 請使用 shipping_details.store_url */
-  store_url: string | null
-  /** @deprecated 請使用 shipping_details.myship_order_no */
-  myship_order_no: string | null
-}
-
-// 結帳單詳情 RPC 回應
-export interface CheckoutDetailResponse {
-  id: string
-  checkout_no: string
-  customer_name: string | null
-  total_amount: number
-  item_count: number | null
-  payment_status: string
-  shipping_status: string
-  shipping_method: 'myship' | 'delivery' | null
-  shipping_fee: number
-  shipping_details: ShippingDetails | null  // ✅ 新增
-  note: string | null
-  created_at: string
-  updated_at: string
-  shipped_at: string | null
-  completed_at: string | null
-  member: {
-    id: string
-    display_name: string | null
-    line_user_id: string
-    phone: string | null
-  }
-  items: Array<{
-    id: string
-    sku: string
-    item_name: string | null
-    quantity: number
-    unit_price: number
-    product_name: string | null
-  }>
-
-  // ⚠️ 以下欄位即將廢棄
-  /** @deprecated 請使用 shipping_details.store_url */
-  store_url: string | null
-  /** @deprecated 請使用 shipping_details.myship_order_no */
-  myship_order_no: string | null
-  /** @deprecated 請使用 shipping_details.shipping_address */
-  shipping_address: string | null
-  /** @deprecated 請使用 shipping_details.receiver_name */
-  receiver_name: string | null
-  /** @deprecated 請使用 shipping_details.receiver_phone */
-  receiver_phone: string | null
-}
-
 export interface TenantUser {
   id: string
   tenant_id: string
@@ -347,26 +246,6 @@ export interface JoinRequest {
   created_at: string
 }
 
-export interface SuperAdmin {
-  id: string
-  user_id: string
-  email: string | null
-  note: string | null
-  created_at: string
-}
-
-// Dashboard statistics
-export interface DashboardStats {
-  totalOrders: number
-  todayOrders: number
-  totalRevenue: number
-  todayRevenue: number
-  pendingOrders: number
-  memberCount: number
-  productCount: number
-  activeProducts: number
-}
-
 // Restock RPC response
 export interface RestockResponse {
   success: boolean
@@ -379,44 +258,6 @@ export interface RestockResponse {
   fulfilled_qty: number
   remaining_available: number
   message: string
-}
-
-// Create Order RPC response
-export interface CreateOrderResponse {
-  success: boolean
-  action: 'created' | 'updated'
-  is_arrived: boolean
-  arrived_qty: number
-  total_qty: number
-  new_stock: number
-  product: { name: string; sku: string; price: number }
-}
-
-// Delete Order RPC response
-export interface DeleteOrderResponse {
-  success: boolean
-  message: string
-  deleted: {
-    id: string
-    sku: string
-    quantity: number
-    arrived_qty: number
-    reallocated_count: number
-    reallocated_qty: number
-  }
-}
-
-// Update Order Quantity RPC response
-export interface UpdateOrderQuantityResponse {
-  success: boolean
-  message: string
-  old_quantity: number
-  new_quantity: number
-  old_arrived_qty: number
-  new_arrived_qty: number
-  is_arrived: boolean
-  reallocated_count: number
-  reallocated_qty: number
 }
 
 // ========================================

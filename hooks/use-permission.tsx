@@ -93,25 +93,3 @@ export function usePermission(): Permissions {
 
     return permissions
 }
-
-// 便捷的權限檢查 HOC
-export function withPermission<P extends object>(
-    WrappedComponent: React.ComponentType<P>,
-    requiredPermission: keyof Omit<Permissions, 'role'>
-) {
-    return function PermissionGuard(props: P) {
-        const permissions = usePermission()
-
-        if (!permissions[requiredPermission]) {
-            return (
-                <div className="flex h-[60vh] items-center justify-center">
-                    <div className="text-center">
-                        <p className="text-muted-foreground">您沒有權限存取此功能</p>
-                    </div>
-                </div>
-            )
-        }
-
-        return <WrappedComponent {...props} />
-    }
-}
