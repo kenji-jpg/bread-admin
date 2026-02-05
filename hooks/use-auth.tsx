@@ -49,56 +49,108 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const supabase = createClient()
         let isMounted = true
 
-        // 初始化：只取得 user，其他資料讓 TenantProvider 處理
+        // 初始化：先用 getSession() 從本地取得 session（不發網路請求），
+        // 再用 getUser() 向 server 驗證（可能會被 abort）
         const initAuth = async () => {
-            // Timeout 保護：最多等 10 秒，避免 RPC 卡住導致永遠 loading
+            // Timeout 保護：最多等 15 秒
             const timeoutId = setTimeout(() => {
                 if (isMounted) {
                     console.warn('[Auth] 初始化超時，強制結束 loading')
                     setIsLoading(false)
                 }
-            }, 10000)
+            }, 15000)
 
             try {
-                const { data: { user } } = await supabase.auth.getUser()
-
-                // 如果組件已卸載，不更新 state
+                // 第一步：從本地 session 快速取得 user（不會卡住）
+                const { data: { session } } = await supabase.auth.getSession()
                 if (!isMounted) return
 
-                currentUserIdRef.current = user?.id ?? null
-                setUser(user)
+                const sessionUser = session?.user ?? null
+                currentUserIdRef.current = sessionUser?.id ?? null
+                setUser(sessionUser)
 
-                // 如果有用戶，做一次基本的初始化（不帶 slug）
-                if (user) {
-                    const { data } = await supabase.rpc('get_dashboard_init_v1', {
-                        p_tenant_slug: null
-                    }) as {
-                        data: {
-                            success: boolean
-                            is_super_admin: boolean
-                            tenants: TenantInfo[]
-                        } | null
-                    }
+                // 如果沒有 session，直接結束
+                if (!sessionUser) {
+                    setIsSuperAdmin(false)
+                    setTenants([])
+                    return
+                }
 
-                    // 再次檢查是否已卸載
+                // 第二步：向 server 驗證 user（可能較慢，但不阻塞 UI）
+                // 同時發起 RPC 呼叫取得角色資料
+                try {
+                    const [userResult, rpcResult] = await Promise.all([
+                        supabase.auth.getUser().catch(() => ({ data: { user: null } })),
+                        (supabase.rpc('get_dashboard_init_v1', {
+                            p_tenant_slug: null
+                        }) as unknown as Promise<{
+                            data: {
+                                success: boolean
+                                is_super_admin: boolean
+                                tenants: TenantInfo[]
+                            } | null
+                        }>)
+                    ])
+
                     if (!isMounted) return
 
-                    if (data?.success) {
-                        setIsSuperAdmin(data.is_super_admin)
-                        setTenants(data.tenants || [])
+                    // 如果 server 驗證 user 無效，清除 session
+                    const verifiedUser = userResult.data.user
+                    if (!verifiedUser) {
+                        setUser(null)
+                        currentUserIdRef.current = null
+                        setIsSuperAdmin(false)
+                        setTenants([])
+                        return
+                    }
+
+                    // 更新為 server 驗證後的 user
+                    setUser(verifiedUser)
+                    currentUserIdRef.current = verifiedUser.id
+
+                    if (rpcResult.data?.success) {
+                        setIsSuperAdmin(rpcResult.data.is_super_admin)
+                        setTenants(rpcResult.data.tenants || [])
                     } else {
-                        // RPC 失敗時重置狀態，避免保留之前用戶的權限
                         setIsSuperAdmin(false)
                         setTenants([])
                     }
+                } catch (innerError) {
+                    // getUser() 或 RPC 失敗（例如 AbortError），
+                    // 但我們已經有 session user，嘗試只用 RPC
+                    if (!isMounted) return
+                    if (innerError instanceof Error && innerError.name === 'AbortError') {
+                        // AbortError: 用 session user 繼續，嘗試單獨呼叫 RPC
+                        try {
+                            const { data } = await supabase.rpc('get_dashboard_init_v1', {
+                                p_tenant_slug: null
+                            }) as {
+                                data: {
+                                    success: boolean
+                                    is_super_admin: boolean
+                                    tenants: TenantInfo[]
+                                } | null
+                            }
+                            if (!isMounted) return
+                            if (data?.success) {
+                                setIsSuperAdmin(data.is_super_admin)
+                                setTenants(data.tenants || [])
+                            }
+                        } catch {
+                            // RPC 也失敗了，保持 session user 但沒有角色資料
+                            console.warn('[Auth] RPC 呼叫失敗，使用基本 session')
+                        }
+                        return
+                    }
+                    console.error('Error verifying user:', innerError)
+                    setIsSuperAdmin(false)
+                    setTenants([])
                 }
             } catch (error) {
-                // 如果是 AbortError 或組件已卸載，靜默處理
                 if (!isMounted) return
                 if (error instanceof Error && error.name === 'AbortError') return
 
                 console.error('Error initializing auth:', error)
-                // 錯誤時也要重置狀態
                 setIsSuperAdmin(false)
                 setTenants([])
             } finally {
