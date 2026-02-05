@@ -39,9 +39,15 @@ export default function AdminHomePage() {
     useEffect(() => {
         if (authLoading) return
 
-        // If not super admin, redirect to their tenant
-        if (!isSuperAdmin && userTenants.length > 0) {
-            router.push(`/admin/t/${userTenants[0].slug}`)
+        // If not super admin, redirect based on tenant status
+        if (!isSuperAdmin) {
+            if (userTenants.length > 0) {
+                // Has tenant(s), redirect to first tenant dashboard
+                router.push(`/admin/t/${userTenants[0].slug}`)
+            } else {
+                // No tenant, redirect to create tenant page
+                router.push('/create-tenant')
+            }
             return
         }
 
@@ -82,7 +88,8 @@ export default function AdminHomePage() {
         }
     }, [isSuperAdmin, userTenants, authLoading, router, supabase])
 
-    if (authLoading || (!isSuperAdmin && userTenants.length > 0)) {
+    // Show loading while auth is loading or while redirecting non-super-admin users
+    if (authLoading || !isSuperAdmin) {
         return (
             <div className="flex h-[60vh] items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
