@@ -24,7 +24,6 @@ interface AuthContextType {
     setCurrentTenant: (tenant: Tenant | null) => void
     isLoading: boolean
     signOut: () => Promise<void>
-    // 新增：給 TenantProvider 用來更新資料的方法
     updateFromDashboardInit: (data: {
         is_super_admin: boolean
         tenants: TenantInfo[]
@@ -32,6 +31,40 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
+
+/**
+ * 直接從 cookie 解碼 JWT 取得用戶資訊
+ * 完全不依賴 Supabase client，避免 AbortError
+ */
+function getUserFromCookie(): { id: string; email: string } | null {
+    try {
+        const cookies = document.cookie.split(';')
+        const authCookie = cookies.find(c => c.trim().startsWith('sb-') && c.includes('-auth-token'))
+        if (!authCookie) return null
+
+        const value = authCookie.split('=').slice(1).join('=').trim()
+        // cookie 值可能有 base64- 前綴
+        const jsonStr = value.startsWith('base64-')
+            ? atob(value.slice(7))
+            : decodeURIComponent(value)
+
+        const parsed = JSON.parse(jsonStr)
+        const accessToken = parsed.access_token
+        if (!accessToken) return null
+
+        // 解碼 JWT payload（第二段）
+        const payload = JSON.parse(atob(accessToken.split('.')[1]))
+        const exp = payload.exp * 1000
+        if (Date.now() > exp) return null // token 已過期
+
+        return {
+            id: payload.sub,
+            email: payload.email || ''
+        }
+    } catch {
+        return null
+    }
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null)
@@ -49,108 +82,74 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const supabase = createClient()
         let isMounted = true
 
-        // 初始化：先用 getSession() 從本地取得 session（不發網路請求），
-        // 再用 getUser() 向 server 驗證（可能會被 abort）
         const initAuth = async () => {
-            // Timeout 保護：最多等 15 秒
             const timeoutId = setTimeout(() => {
                 if (isMounted) {
                     console.warn('[Auth] 初始化超時，強制結束 loading')
                     setIsLoading(false)
                 }
-            }, 15000)
+            }, 10000)
 
             try {
-                // 第一步：從本地 session 快速取得 user（不會卡住）
-                const { data: { session } } = await supabase.auth.getSession()
-                if (!isMounted) return
+                // ===== 第一步：從 cookie 直接解碼 JWT（零網路請求，不受 AbortError 影響）=====
+                const cookieUser = getUserFromCookie()
 
-                const sessionUser = session?.user ?? null
-                currentUserIdRef.current = sessionUser?.id ?? null
-                setUser(sessionUser)
-
-                // 如果沒有 session，直接結束
-                if (!sessionUser) {
+                if (!cookieUser) {
+                    // 沒有有效的 session cookie
+                    setUser(null)
+                    currentUserIdRef.current = null
                     setIsSuperAdmin(false)
                     setTenants([])
                     return
                 }
 
-                // 第二步：向 server 驗證 user（可能較慢，但不阻塞 UI）
-                // 同時發起 RPC 呼叫取得角色資料
+                // 設定臨時 user（讓 UI 可以先渲染）
+                currentUserIdRef.current = cookieUser.id
+                setUser({ id: cookieUser.id, email: cookieUser.email } as User)
+
+                // ===== 第二步：直接呼叫 RPC 取得角色資料（這個不會被 abort）=====
                 try {
-                    const [userResult, rpcResult] = await Promise.all([
-                        supabase.auth.getUser().catch(() => ({ data: { user: null } })),
-                        (supabase.rpc('get_dashboard_init_v1', {
-                            p_tenant_slug: null
-                        }) as unknown as Promise<{
-                            data: {
-                                success: boolean
-                                is_super_admin: boolean
-                                tenants: TenantInfo[]
-                            } | null
-                        }>)
-                    ])
+                    const { data, error } = await supabase.rpc('get_dashboard_init_v1', {
+                        p_tenant_slug: null
+                    })
 
                     if (!isMounted) return
 
-                    // 如果 server 驗證 user 無效，清除 session
-                    const verifiedUser = userResult.data.user
-                    if (!verifiedUser) {
-                        setUser(null)
-                        currentUserIdRef.current = null
-                        setIsSuperAdmin(false)
-                        setTenants([])
-                        return
-                    }
-
-                    // 更新為 server 驗證後的 user
-                    setUser(verifiedUser)
-                    currentUserIdRef.current = verifiedUser.id
-
-                    if (rpcResult.data?.success) {
-                        setIsSuperAdmin(rpcResult.data.is_super_admin)
-                        setTenants(rpcResult.data.tenants || [])
+                    if (!error && data?.success) {
+                        setIsSuperAdmin(data.is_super_admin)
+                        setTenants(data.tenants || [])
                     } else {
+                        console.warn('[Auth] RPC 回傳錯誤:', error?.message || data?.error)
                         setIsSuperAdmin(false)
                         setTenants([])
                     }
-                } catch (innerError) {
-                    // getUser() 或 RPC 失敗（例如 AbortError），
-                    // 但我們已經有 session user，嘗試只用 RPC
+                } catch (rpcError) {
                     if (!isMounted) return
-                    if (innerError instanceof Error && innerError.name === 'AbortError') {
-                        // AbortError: 用 session user 繼續，嘗試單獨呼叫 RPC
-                        try {
-                            const { data } = await supabase.rpc('get_dashboard_init_v1', {
-                                p_tenant_slug: null
-                            }) as {
-                                data: {
-                                    success: boolean
-                                    is_super_admin: boolean
-                                    tenants: TenantInfo[]
-                                } | null
-                            }
-                            if (!isMounted) return
-                            if (data?.success) {
-                                setIsSuperAdmin(data.is_super_admin)
-                                setTenants(data.tenants || [])
-                            }
-                        } catch {
-                            // RPC 也失敗了，保持 session user 但沒有角色資料
-                            console.warn('[Auth] RPC 呼叫失敗，使用基本 session')
-                        }
-                        return
+                    // AbortError 也要處理：保留 cookie user，但沒有角色資料
+                    if (rpcError instanceof Error && rpcError.name === 'AbortError') {
+                        console.warn('[Auth] RPC 被 abort，使用基本 session')
+                    } else {
+                        console.error('[Auth] RPC 呼叫失敗:', rpcError)
                     }
-                    console.error('Error verifying user:', innerError)
                     setIsSuperAdmin(false)
                     setTenants([])
                 }
+
+                // ===== 第三步：背景驗證 user（非阻塞，不影響 UI）=====
+                supabase.auth.getUser().then(({ data: { user: verifiedUser } }) => {
+                    if (!isMounted) return
+                    if (verifiedUser) {
+                        setUser(verifiedUser)
+                        currentUserIdRef.current = verifiedUser.id
+                    }
+                }).catch(() => {
+                    // getUser() 常常被 abort，忽略即可
+                })
+
             } catch (error) {
                 if (!isMounted) return
                 if (error instanceof Error && error.name === 'AbortError') return
-
-                console.error('Error initializing auth:', error)
+                console.error('[Auth] 初始化錯誤:', error)
                 setIsSuperAdmin(false)
                 setTenants([])
             } finally {
@@ -170,14 +169,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 const newUserId = newUser?.id ?? null
                 const previousUserId = currentUserIdRef.current
 
-                // 只在 user ID 真的改變時才更新 state，避免不必要的 re-render
-                // TOKEN_REFRESHED 事件不需要更新 user state
-                if (event === 'TOKEN_REFRESHED') {
-                    // Token refresh 不需要做任何事，middleware 會處理 cookie
-                    return
-                }
+                if (event === 'TOKEN_REFRESHED') return
 
-                // 檢查 user 是否真的改變
                 if (newUserId === previousUserId && event !== 'SIGNED_IN' && event !== 'SIGNED_OUT') {
                     return
                 }
@@ -211,7 +204,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                             setTenants([])
                         }
                     } catch (error) {
-                        console.error('Error fetching user data:', error)
+                        console.error('[Auth] SIGNED_IN RPC 失敗:', error)
                         setIsSuperAdmin(false)
                         setTenants([])
                     } finally {
@@ -228,7 +221,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     }, [])
 
-    // 給 TenantProvider 用來同步更新資料（用 useCallback 避免無限循環）
     const updateFromDashboardInit = useCallback((data: {
         is_super_admin: boolean
         tenants: TenantInfo[]
@@ -238,12 +230,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, [])
 
     const signOut = async () => {
-        const supabase = createClient()
-        await supabase.auth.signOut()
+        try {
+            const supabase = createClient()
+            await supabase.auth.signOut()
+        } catch {
+            // signOut 也可能被 abort，手動清除 cookie
+            document.cookie.split(';').forEach(c => {
+                const name = c.trim().split('=')[0]
+                if (name.startsWith('sb-')) {
+                    document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`
+                }
+            })
+        }
         setUser(null)
         setIsSuperAdmin(false)
         setTenants([])
         setCurrentTenant(null)
+        // 強制跳轉到登入頁
+        window.location.href = '/login'
     }
 
     return (
