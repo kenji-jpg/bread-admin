@@ -51,6 +51,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         // 初始化：只取得 user，其他資料讓 TenantProvider 處理
         const initAuth = async () => {
+            // Timeout 保護：最多等 10 秒，避免 RPC 卡住導致永遠 loading
+            const timeoutId = setTimeout(() => {
+                if (isMounted) {
+                    console.warn('[Auth] 初始化超時，強制結束 loading')
+                    setIsLoading(false)
+                }
+            }, 10000)
+
             try {
                 const { data: { user } } = await supabase.auth.getUser()
 
@@ -94,6 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setIsSuperAdmin(false)
                 setTenants([])
             } finally {
+                clearTimeout(timeoutId)
                 if (isMounted) {
                     setIsLoading(false)
                 }

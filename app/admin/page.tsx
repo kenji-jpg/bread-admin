@@ -34,24 +34,26 @@ export default function AdminHomePage() {
     const [isLoading, setIsLoading] = useState(true)
     const { isSuperAdmin, tenants: userTenants, isLoading: authLoading } = useAuth()
     const router = useRouter()
-    const supabase = createClient()
+    const [redirecting, setRedirecting] = useState(false)
 
+    // 處理非 super admin 的重導向
     useEffect(() => {
-        if (authLoading) return
+        if (authLoading || isSuperAdmin) return
 
-        // If not super admin, redirect based on tenant status
-        if (!isSuperAdmin) {
-            if (userTenants.length > 0) {
-                // Has tenant(s), redirect to first tenant dashboard
-                router.push(`/admin/t/${userTenants[0].slug}`)
-            } else {
-                // No tenant, redirect to create tenant page
-                router.push('/create-tenant')
-            }
-            return
+        setRedirecting(true)
+        if (userTenants.length > 0) {
+            router.push(`/admin/t/${userTenants[0].slug}`)
+        } else {
+            router.push('/create-tenant')
         }
+    }, [isSuperAdmin, userTenants, authLoading, router])
 
-        // Fetch data for super admin
+    // Super admin 載入資料
+    useEffect(() => {
+        if (authLoading || !isSuperAdmin) return
+
+        const supabase = createClient()
+
         const fetchData = async () => {
             setIsLoading(true)
 
@@ -69,9 +71,8 @@ export default function AdminHomePage() {
             if (data?.success && data.tenants) {
                 setTenants(data.tenants)
 
-                // Calculate stats
                 const totalOrders = data.tenants.reduce((sum, t) => sum + (t.monthly_orders || 0), 0)
-                const totalRevenue = data.tenants.reduce((sum, t) => sum + (t.monthly_messages || 0) * 100, 0) // Placeholder calculation
+                const totalRevenue = data.tenants.reduce((sum, t) => sum + (t.monthly_messages || 0) * 100, 0)
 
                 setStats({
                     totalTenants: data.total || data.tenants.length,
@@ -83,13 +84,11 @@ export default function AdminHomePage() {
             setIsLoading(false)
         }
 
-        if (isSuperAdmin) {
-            fetchData()
-        }
-    }, [isSuperAdmin, userTenants, authLoading, router, supabase])
+        fetchData()
+    }, [isSuperAdmin, authLoading])
 
     // Show loading while auth is loading or while redirecting non-super-admin users
-    if (authLoading || !isSuperAdmin) {
+    if (authLoading || redirecting || !isSuperAdmin) {
         return (
             <div className="flex h-[60vh] items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />

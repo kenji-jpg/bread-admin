@@ -71,6 +71,16 @@ export function TenantProvider({ children }: { children: ReactNode }) {
         }
 
         setIsLoading(true)
+
+        // Timeout 保護：最多等 10 秒
+        let timeoutId: ReturnType<typeof setTimeout> | null = null
+        if (!signal) {
+            timeoutId = setTimeout(() => {
+                console.warn('[Tenant] 載入超時，強制結束 loading')
+                setIsLoading(false)
+            }, 10000)
+        }
+
         try {
             // 使用聚合 RPC，一次取得所有資料
             const { data, error } = await supabase.rpc('get_dashboard_init_v1', {
@@ -164,6 +174,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
             setIsSuperAdminUser(false)
             setStats(null)
         } finally {
+            if (timeoutId) clearTimeout(timeoutId)
             // 只有在請求沒被取消時才更新 loading state
             if (!signal?.aborted) {
                 setIsLoading(false)
