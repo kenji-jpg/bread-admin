@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, ReactNode, useEffect, useRef, useCallback } from 'react'
 import { useParams } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { directRpc } from '@/lib/supabase/direct-rpc'
 import type { Tenant } from '@/types/database'
 import { useAuth } from './use-auth'
 
@@ -42,8 +42,23 @@ interface TenantContextType {
 
 const TenantContext = createContext<TenantContextType | undefined>(undefined)
 
-// 移到組件外部，避免每次 render 都建立新實例導致無限循環
-const supabase = createClient()
+// RPC 回傳資料型別
+interface DashboardInitResponse {
+    success: boolean
+    is_super_admin: boolean
+    tenants: { id: string; name: string; slug: string; plan: string; is_active: boolean; subscription_status: string; user_role: string; created_at: string }[]
+    current_tenant: (Tenant & {
+        is_active?: boolean
+        actual_is_active?: boolean
+        is_super_admin?: boolean
+        is_cross_tenant_access?: boolean
+        user_role?: string
+    }) | null
+    user_role: string | null
+    is_cross_tenant_access: boolean
+    stats: DashboardStats | null
+    error?: string
+}
 
 export function TenantProvider({ children }: { children: ReactNode }) {
     const [tenant, setTenant] = useState<Tenant | null>(null)
@@ -82,28 +97,12 @@ export function TenantProvider({ children }: { children: ReactNode }) {
         }
 
         try {
-            // 使用聚合 RPC，一次取得所有資料
-            const { data, error } = await supabase.rpc('get_dashboard_init_v1', {
-                p_tenant_slug: slug
-            }) as {
-                data: {
-                    success: boolean
-                    is_super_admin: boolean
-                    tenants: { id: string; name: string; slug: string; plan: string; is_active: boolean; subscription_status: string; user_role: string; created_at: string }[]
-                    current_tenant: (Tenant & {
-                        is_active?: boolean
-                        actual_is_active?: boolean
-                        is_super_admin?: boolean
-                        is_cross_tenant_access?: boolean
-                        user_role?: string
-                    }) | null
-                    user_role: string | null
-                    is_cross_tenant_access: boolean
-                    stats: DashboardStats | null
-                    error?: string
-                } | null
-                error: Error | null
-            }
+            // 使用 directRpc 繞過 Supabase client 的 auth 初始化阻塞
+            const { data, error } = await directRpc<DashboardInitResponse>(
+                'get_dashboard_init_v1',
+                { p_tenant_slug: slug },
+                { signal }
+            )
 
             // 如果請求被取消，不要更新 state
             if (signal?.aborted) {

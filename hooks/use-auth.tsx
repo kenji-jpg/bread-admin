@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, useRef, ReactNode, useCallback } from 'react'
 import { User } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
+import { directRpc } from '@/lib/supabase/direct-rpc'
 import type { Tenant } from '@/types/database'
 
 interface TenantInfo {
@@ -79,7 +80,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (initializedRef.current) return
         initializedRef.current = true
 
-        const supabase = createClient()
         let isMounted = true
 
         const initAuth = async () => {
@@ -107,11 +107,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 currentUserIdRef.current = cookieUser.id
                 setUser({ id: cookieUser.id, email: cookieUser.email } as User)
 
-                // ===== 第二步：直接呼叫 RPC 取得角色資料（這個不會被 abort）=====
+                // ===== 第二步：直接 fetch 呼叫 RPC（繞過 Supabase client 的 auth 初始化阻塞）=====
                 try {
-                    const { data, error } = await supabase.rpc('get_dashboard_init_v1', {
-                        p_tenant_slug: null
-                    })
+                    const { data, error } = await directRpc<{
+                        success: boolean
+                        is_super_admin: boolean
+                        tenants: TenantInfo[]
+                        error?: string
+                    }>('get_dashboard_init_v1', { p_tenant_slug: null })
 
                     if (!isMounted) return
 
@@ -125,7 +128,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     }
                 } catch (rpcError) {
                     if (!isMounted) return
-                    // AbortError 也要處理：保留 cookie user，但沒有角色資料
                     if (rpcError instanceof Error && rpcError.name === 'AbortError') {
                         console.warn('[Auth] RPC 被 abort，使用基本 session')
                     } else {
@@ -135,7 +137,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     setTenants([])
                 }
 
-                // ===== 第三步：背景驗證 user（非阻塞，不影響 UI）=====
+                // ===== 第三步：背景初始化 Supabase client（非阻塞，為後續操作預熱）=====
+                // 讓 Supabase client 在背景完成 auth 初始化，
+                // 這樣後續的 .from() 查詢和 realtime 訂閱可以正常運作
+                const supabase = createClient()
                 supabase.auth.getUser().then(({ data: { user: verifiedUser } }) => {
                     if (!isMounted) return
                     if (verifiedUser) {
@@ -162,7 +167,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         initAuth()
 
-        // 監聽登入狀態變化
+        // 延遲設定 auth state listener，避免在初始化期間觸發
+        // Supabase client 的 onAuthStateChange 也會等 initializePromise，
+        // 但因為是事件驅動，不會阻塞 initAuth
+        const supabase = createClient()
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
             async (event, session) => {
                 const newUser = session?.user ?? null
@@ -186,15 +194,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 } else if (event === 'SIGNED_IN') {
                     setIsLoading(true)
                     try {
-                        const { data } = await supabase.rpc('get_dashboard_init_v1', {
-                            p_tenant_slug: null
-                        }) as {
-                            data: {
-                                success: boolean
-                                is_super_admin: boolean
-                                tenants: TenantInfo[]
-                            } | null
-                        }
+                        // SIGNED_IN 事件時 Supabase client 已經完成初始化，
+                        // 可以安全使用 directRpc（cookie 已更新）
+                        const { data } = await directRpc<{
+                            success: boolean
+                            is_super_admin: boolean
+                            tenants: TenantInfo[]
+                        }>('get_dashboard_init_v1', { p_tenant_slug: null })
 
                         if (data?.success) {
                             setIsSuperAdmin(data.is_super_admin)
