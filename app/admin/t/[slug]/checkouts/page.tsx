@@ -883,7 +883,10 @@ export default function CheckoutsPage() {
                                                 </code>
                                             </TableCell>
                                             <TableCell className="font-medium">
-                                                {item.customer_name || item.member_display_name || item.member_nickname || '-'}
+                                                {item.customer_name || item.member_display_name || '-'}
+                                                {item.member_nickname && (
+                                                    <span className="text-muted-foreground ml-1">({item.member_nickname})</span>
+                                                )}
                                                 {item.member_line_user_id && (
                                                     <Badge variant="outline" className="ml-2 text-xs">
                                                         LINE
