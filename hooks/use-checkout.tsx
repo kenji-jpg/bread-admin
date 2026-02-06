@@ -6,6 +6,18 @@ import type { ShippingDetails, ShippingMethod } from '@/types/database'
 type ShippingStatus = 'pending' | 'url_sent' | 'ordered' | 'shipped' | 'completed'
 type PaymentStatus = 'pending' | 'paid'
 
+// 商品明細項目（checkout_items JSON 格式）
+export interface CheckoutItemDetail {
+    name: string
+    qty: number
+    sku: string | null
+    unit_price: number
+    subtotal: number
+    price_source?: 'product' | 'manual' | 'promotion'
+    order_item_id?: string
+    original_price?: number | null
+}
+
 // 結帳單列表項目
 export interface CheckoutListItem {
     id: string
@@ -14,10 +26,11 @@ export interface CheckoutListItem {
     total_amount: number
     shipping_fee: number
     item_count: number
+    checkout_items: string | null  // ✅ 新增：商品明細 JSON 字串
     shipping_status: ShippingStatus
     payment_status: PaymentStatus
     shipping_method: ShippingMethod | null
-    shipping_details: ShippingDetails | null  // ✅ 新增
+    shipping_details: ShippingDetails | null
     is_notified: boolean  // 通知狀態
     created_at: string
     shipped_at: string | null

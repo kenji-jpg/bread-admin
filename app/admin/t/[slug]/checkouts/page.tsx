@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { useTenant } from '@/hooks/use-tenant'
-import { useCheckout, type CheckoutListItem, type CheckoutDetailResult, type ListCheckoutsResult } from '@/hooks/use-checkout'
+import { useCheckout, type CheckoutListItem, type CheckoutDetailResult, type ListCheckoutsResult, type CheckoutItemDetail } from '@/hooks/use-checkout'
 import { SHIPPING_METHOD_OPTIONS, type ShippingMethod } from '@/types/database'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -852,6 +852,7 @@ export default function CheckoutsPage() {
                                         <TableHead>單號</TableHead>
                                         <TableHead>客戶</TableHead>
                                         <TableHead className="text-right">金額</TableHead>
+                                        <TableHead>商品明細</TableHead>
                                         <TableHead>付款狀態</TableHead>
                                         <TableHead>出貨狀態</TableHead>
                                         <TableHead>結帳模式</TableHead>
@@ -900,6 +901,31 @@ export default function CheckoutsPage() {
                                                         (+${item.shipping_fee}運費)
                                                     </span>
                                                 )}
+                                            </TableCell>
+                                            <TableCell className="max-w-[200px]">
+                                                {(() => {
+                                                    if (!item.checkout_items) return <span className="text-muted-foreground">-</span>
+                                                    try {
+                                                        const items: CheckoutItemDetail[] = JSON.parse(item.checkout_items)
+                                                        if (items.length === 0) return <span className="text-muted-foreground">-</span>
+                                                        return (
+                                                            <div className="text-xs space-y-0.5">
+                                                                {items.slice(0, 3).map((detail, idx) => (
+                                                                    <div key={idx} className="truncate">
+                                                                        {detail.name} x{detail.qty}
+                                                                    </div>
+                                                                ))}
+                                                                {items.length > 3 && (
+                                                                    <div className="text-muted-foreground">
+                                                                        ...還有 {items.length - 3} 項
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )
+                                                    } catch {
+                                                        return <span className="text-muted-foreground">-</span>
+                                                    }
+                                                })()}
                                             </TableCell>
                                             <TableCell>{getPaymentBadge(item.payment_status)}</TableCell>
                                             <TableCell>{getShippingBadge(item.shipping_status)}</TableCell>

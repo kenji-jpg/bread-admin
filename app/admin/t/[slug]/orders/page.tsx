@@ -502,11 +502,15 @@ export default function OrdersPage() {
 
     // 計算選中訂單的統計資訊
     const selectedStats = useMemo(() => {
-        const arrivedCount = Array.from(selectedOrders).filter((id) => {
+        const arrivedOrders = Array.from(selectedOrders).filter((id) => {
             const order = orders.find((o) => o.id === id)
             return order && order.is_arrived && !order.checkout_id
-        }).length
-        return { arrivedCount }
+        })
+        const arrivedCount = arrivedOrders.length
+        const uniqueMembers = new Set(
+            arrivedOrders.map((id) => orders.find((o) => o.id === id)?.member_id).filter(Boolean)
+        )
+        return { arrivedCount, uniqueMemberCount: uniqueMembers.size }
     }, [selectedOrders, orders])
 
     if (tenantLoading) {
@@ -1024,7 +1028,7 @@ export default function OrdersPage() {
                     <DialogHeader>
                         <DialogTitle>確認批量結帳</DialogTitle>
                         <DialogDescription>
-                            將為 <span className="font-semibold text-foreground">{selectedStats.arrivedCount}</span> 位客戶建立結帳單
+                            將為 <span className="font-semibold text-foreground">{selectedStats.uniqueMemberCount}</span> 位客戶建立結帳單
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4">

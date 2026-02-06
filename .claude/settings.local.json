@@ -12,7 +12,22 @@
       "Bash(gtimeout:*)",
       "Bash(perl -e 'alarm 5; exec @ARGV' npx -y @supabase/mcp-server-supabase@latest)",
       "Bash(supabase --version:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "mcp__Baserow_MCP__list_tables",
+      "Bash(gh auth status:*)",
+      "Bash(brew --version:*)",
+      "Bash(gh repo view:*)",
+      "mcp__c2ff53ca-7c7a-41b2-bfcc-7ff7498863e1__get_runtime_logs",
+      "Bash(npm run build:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(npm ls:*)",
+      "WebFetch(domain:supabase.com)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(git diff:*)"
     ]
   }
 }

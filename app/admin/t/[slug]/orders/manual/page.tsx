@@ -639,8 +639,7 @@ export default function ManualOrdersPage() {
         const orderList = pendingOrders
             .map(o => {
                 const nickname = o.winner_nickname || o.nickname
-                const productName = o.product_name ? ` ${o.product_name}` : ''
-                return `${nickname}${productName} $${(o.amount ?? 0).toLocaleString()}`
+                return `${nickname}`
             })
             .join('\n')
 
