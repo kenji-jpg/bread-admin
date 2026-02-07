@@ -10,6 +10,14 @@ const nextConfig: NextConfig = {
         hostname: 'kashgsxlrdyuirijocld.supabase.co',
         pathname: '/storage/v1/object/public/**',
       },
+      {
+        protocol: 'https',
+        hostname: 'profile.line-scdn.net',
+      },
+      {
+        protocol: 'https',
+        hostname: 'sprofile.line-scdn.net',
+      },
     ],
   },
 };

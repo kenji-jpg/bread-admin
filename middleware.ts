@@ -31,11 +31,11 @@ export async function middleware(request: NextRequest) {
 
     const pathname = request.nextUrl.pathname
 
-    // 不需要 auth 檢查的路由（避免循環）
-    const skipAuthPaths = ['/auth/redirect', '/auth/callback']
+    // 不需要 auth 檢查的路由（避免循環或干擾 LIFF）
+    const skipAuthPaths = ['/auth/redirect', '/auth/callback', '/s/']
     const shouldSkipAuth = skipAuthPaths.some(path => pathname.startsWith(path))
 
-    // 如果是 auth 相關的內部路由，直接放行，不做任何檢查
+    // 如果是 auth 相關的內部路由或公開購物頁面，直接放行
     if (shouldSkipAuth) {
         return supabaseResponse
     }

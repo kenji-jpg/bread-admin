@@ -75,7 +75,8 @@ export function LiffProvider({ children }: LiffProviderProps) {
 
   const login = () => {
     if (!liff.isLoggedIn()) {
-      liff.login()
+      // 明確指定 redirectUri 為當前頁面，確保 LINE Login 完成後跳回正確頁面
+      liff.login({ redirectUri: window.location.href })
     }
   }
 
