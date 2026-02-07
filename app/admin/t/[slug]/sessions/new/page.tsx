@@ -11,9 +11,42 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
-import { ArrowLeft, Camera, X, Loader2, Copy, Check, Package } from 'lucide-react'
+import { ArrowLeft, Camera, X, Loader2, Copy, Check, Package, Clock } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
+
+// 快速時間選項
+const QUICK_TIME_OPTIONS = [
+  { label: '10分', minutes: 10 },
+  { label: '30分', minutes: 30 },
+  { label: '1hr', minutes: 60 },
+  { label: '2hr', minutes: 120 },
+]
+
+// 計算截止時間（本地時區）
+function getEndTimeFromMinutes(minutes: number): string {
+  const date = new Date(Date.now() + minutes * 60 * 1000)
+  // 使用本地時區格式化，供 datetime-local input 使用
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hours = String(date.getHours()).padStart(2, '0')
+  const mins = String(date.getMinutes()).padStart(2, '0')
+  return `${year}-${month}-${day}T${hours}:${mins}`
+}
+
+// 格式化顯示時間（簡短版）
+function formatEndTime(isoString: string): string {
+  if (!isoString) return ''
+  const date = new Date(isoString)
+  const now = new Date()
+  const isToday = date.toDateString() === now.toDateString()
+
+  if (isToday) {
+    return date.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })
+  }
+  return date.toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
 
 // 壓縮圖片
 async function compressImage(file: File, maxWidth = 800, quality = 0.8): Promise<Blob> {
@@ -60,6 +93,7 @@ interface ProductItem {
   id: string
   file: File | null
   preview: string | null
+  name: string
   price: string
   stock: string
   endTime: string
@@ -76,8 +110,10 @@ export default function NewSessionPage() {
 
   // 場次資訊
   const [title, setTitle] = useState('')
-  const [defaultEndTime, setDefaultEndTime] = useState('')
   const [defaultStock, setDefaultStock] = useState('') // 空 = 預購模式
+
+  // 目前選擇的商品（用於設定截止時間）
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null)
 
   // 商品列表
   const [products, setProducts] = useState<ProductItem[]>([])
@@ -105,9 +141,10 @@ export default function NewSessionPage() {
         id: crypto.randomUUID(),
         file,
         preview,
+        name: '', // 商品名稱
         price: '',
         stock: defaultStock,
-        endTime: defaultEndTime,
+        endTime: '', // 每個商品各自設定
         isUploading: false,
         isUploaded: false,
         imageUrl: null,
@@ -140,15 +177,29 @@ export default function NewSessionPage() {
     })
   }
 
-  // 快捷截止時間
-  const setQuickEndTime = (minutes: number) => {
-    const date = new Date(Date.now() + minutes * 60 * 1000)
-    const formatted = date.toISOString().slice(0, 16)
-    setDefaultEndTime(formatted)
-    // 更新所有還沒設定的商品
+  // 為單一商品設定快捷截止時間
+  const setProductQuickEndTime = (productId: string, minutes: number) => {
+    const formatted = getEndTimeFromMinutes(minutes)
+    setProducts((prev) =>
+      prev.map((p) => (p.id === productId ? { ...p, endTime: formatted } : p))
+    )
+    setSelectedProductId(null)
+  }
+
+  // 為單一商品設定自訂截止時間
+  const setProductCustomEndTime = (productId: string, datetime: string) => {
+    setProducts((prev) =>
+      prev.map((p) => (p.id === productId ? { ...p, endTime: datetime } : p))
+    )
+  }
+
+  // 批次套用截止時間到所有未設定的商品
+  const applyEndTimeToAll = (minutes: number) => {
+    const formatted = getEndTimeFromMinutes(minutes)
     setProducts((prev) =>
       prev.map((p) => (p.endTime === '' ? { ...p, endTime: formatted } : p))
     )
+    toast.success(`已套用到 ${products.filter(p => p.endTime === '').length} 個商品`)
   }
 
   // 建立場次並上架
@@ -165,7 +216,13 @@ export default function NewSessionPage() {
       return
     }
 
-    // 檢查是否所有商品都有價格
+    // 檢查是否所有商品都有名稱和價格
+    const missingName = products.some((p) => !p.name || p.name.trim() === '')
+    if (missingName) {
+      toast.error('請為所有商品填入名稱')
+      return
+    }
+
     const missingPrice = products.some((p) => !p.price || parseFloat(p.price) <= 0)
     if (missingPrice) {
       toast.error('請為所有商品填入價格')
@@ -204,17 +261,17 @@ export default function NewSessionPage() {
         )
 
         let imageUrl: string | null = null
+        const productSku = `S${Date.now()}-${i + 1}`
 
         // 上傳圖片
         if (product.file) {
           try {
-            const sku = `S${Date.now()}-${i + 1}`
             const compressedBlob = await compressImage(product.file)
-            const compressedFile = new File([compressedBlob], `${sku}.webp`, {
+            const compressedFile = new File([compressedBlob], `${productSku}.webp`, {
               type: 'image/webp',
             })
 
-            const filePath = `${tenant.id}/products/${sku}.webp`
+            const filePath = `${tenant.id}/products/${productSku}.webp`
             const { error: uploadError } = await supabase.storage
               .from('product-images')
               .upload(filePath, compressedFile, {
@@ -233,46 +290,30 @@ export default function NewSessionPage() {
           }
         }
 
-        // 建立商品
-        const { error: productError } = await supabase.rpc('create_product_v2', {
-          p_tenant_id: tenant.id,
-          p_name: `商品 #${i + 1}`,
-          p_price: parseFloat(product.price),
-          p_stock: product.stock ? parseInt(product.stock) : null,
-          p_sku: null, // 自動生成
-          p_is_limited: false,
-          p_end_time: product.endTime
-            ? new Date(product.endTime).toISOString()
-            : null,
-          p_image_url: imageUrl,
-          p_description: null,
-          p_cost: null,
-          p_category: null,
-          p_limit_qty: null,
-          p_variants: null,
-        })
+        // 建立商品（直接插入 products 表，確保能取得 id）
+        const { data: insertedProduct, error: productError } = await supabase
+          .from('products')
+          .insert({
+            tenant_id: tenant.id,
+            name: product.name.trim(),
+            price: parseFloat(product.price),
+            stock: product.stock ? parseInt(product.stock) : 0, // 預購模式用 0
+            sku: productSku,
+            status: 'active', // 使用 status 而非 is_active
+            is_limited: false,
+            end_time: product.endTime
+              ? new Date(product.endTime).toISOString()
+              : null,
+            image_url: imageUrl,
+            session_id: sessionId, // 直接設定 session_id
+          })
+          .select('id')
+          .single()
 
         if (productError) {
           console.error('Create product error:', productError)
-        }
-
-        // 取得剛建立的商品 ID，更新 session_id
-        // 由於 create_product_v2 不直接支援 session_id，我們用另一個方式
-        // 先找到剛建立的商品
-        const { data: newProduct } = await supabase
-          .from('products')
-          .select('id')
-          .eq('tenant_id', tenant.id)
-          .eq('image_url', imageUrl)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .single()
-
-        if (newProduct) {
-          await supabase
-            .from('products')
-            .update({ session_id: sessionId })
-            .eq('id', newProduct.id)
+        } else {
+          console.log('Created product:', insertedProduct?.id)
         }
 
         // 更新完成狀態
@@ -420,53 +461,6 @@ export default function NewSessionPage() {
           </div>
 
           <div className="space-y-2">
-            <Label>預設截止時間</Label>
-            <div className="flex flex-wrap gap-2 mb-2">
-              {[
-                { label: '30分', value: 30 },
-                { label: '1小時', value: 60 },
-                { label: '2小時', value: 120 },
-                { label: '今晚10點', value: null },
-              ].map((opt) => (
-                <Button
-                  key={opt.label}
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="rounded-lg"
-                  onClick={() => {
-                    if (opt.value) {
-                      setQuickEndTime(opt.value)
-                    } else {
-                      // 今晚 10 點
-                      const today = new Date()
-                      today.setHours(22, 0, 0, 0)
-                      if (today.getTime() < Date.now()) {
-                        today.setDate(today.getDate() + 1)
-                      }
-                      const formatted = today.toISOString().slice(0, 16)
-                      setDefaultEndTime(formatted)
-                      setProducts((prev) =>
-                        prev.map((p) =>
-                          p.endTime === '' ? { ...p, endTime: formatted } : p
-                        )
-                      )
-                    }
-                  }}
-                >
-                  {opt.label}
-                </Button>
-              ))}
-            </div>
-            <Input
-              type="datetime-local"
-              value={defaultEndTime}
-              onChange={(e) => setDefaultEndTime(e.target.value)}
-              className="rounded-xl"
-            />
-          </div>
-
-          <div className="space-y-2">
             <Label htmlFor="defaultStock">
               預設庫存
               <span className="text-muted-foreground font-normal ml-1">
@@ -483,6 +477,29 @@ export default function NewSessionPage() {
               className="rounded-xl"
             />
           </div>
+
+          {/* 批次套用截止時間 */}
+          {products.some(p => p.endTime === '') && (
+            <div className="space-y-2">
+              <Label className="text-muted-foreground text-sm">
+                快速套用截止時間（未設定的商品）
+              </Label>
+              <div className="flex flex-wrap gap-2">
+                {QUICK_TIME_OPTIONS.map((opt) => (
+                  <Button
+                    key={opt.label}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="rounded-lg"
+                    onClick={() => applyEndTimeToAll(opt.minutes)}
+                  >
+                    全部 +{opt.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -503,62 +520,133 @@ export default function NewSessionPage() {
             className="hidden"
           />
 
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-3">
             {/* 已新增的商品 */}
             {products.map((product, index) => (
               <div
                 key={product.id}
-                className="relative aspect-square rounded-xl overflow-hidden border bg-muted"
+                className="relative rounded-xl overflow-hidden border bg-muted"
               >
-                {product.preview && (
-                  <Image
-                    src={product.preview}
-                    alt={`商品 ${index + 1}`}
-                    fill
-                    className="object-cover"
-                  />
-                )}
+                {/* 圖片區 */}
+                <div className="relative aspect-square">
+                  {product.preview && (
+                    <Image
+                      src={product.preview}
+                      alt={`商品 ${index + 1}`}
+                      fill
+                      className="object-cover"
+                    />
+                  )}
 
-                {/* 編號 */}
-                <div className="absolute top-1 left-1 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded">
-                  #{index + 1}
+                  {/* 編號 */}
+                  <div className="absolute top-1 left-1 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded">
+                    #{index + 1}
+                  </div>
+
+                  {/* 上傳狀態 */}
+                  {product.isUploading && (
+                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                      <Loader2 className="w-6 h-6 text-white animate-spin" />
+                    </div>
+                  )}
+                  {product.isUploaded && (
+                    <div className="absolute top-1 right-1 bg-green-500 text-white rounded-full p-0.5">
+                      <Check className="w-3 h-3" />
+                    </div>
+                  )}
+
+                  {/* 刪除按鈕 */}
+                  {!product.isUploading && !product.isUploaded && (
+                    <button
+                      type="button"
+                      className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-0.5"
+                      onClick={() => removeProduct(product.id)}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
                 </div>
 
-                {/* 上傳狀態 */}
-                {product.isUploading && (
-                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                    <Loader2 className="w-6 h-6 text-white animate-spin" />
-                  </div>
-                )}
-                {product.isUploaded && (
-                  <div className="absolute top-1 right-1 bg-green-500 text-white rounded-full p-0.5">
-                    <Check className="w-3 h-3" />
-                  </div>
-                )}
+                {/* 輸入區 */}
+                <div className="p-2 space-y-2 bg-background">
+                  {/* 價格輸入 */}
+                  {/* 商品名稱 */}
+                  <Input
+                    type="text"
+                    placeholder="商品名稱"
+                    value={product.name}
+                    onChange={(e) =>
+                      updateProduct(product.id, 'name', e.target.value)
+                    }
+                    className="h-8 text-sm rounded-lg"
+                    disabled={product.isUploading || product.isUploaded}
+                  />
 
-                {/* 刪除按鈕 */}
-                {!product.isUploading && !product.isUploaded && (
-                  <button
-                    type="button"
-                    className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-0.5"
-                    onClick={() => removeProduct(product.id)}
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                )}
-
-                {/* 價格輸入 */}
-                <div className="absolute bottom-0 left-0 right-0 p-1 bg-gradient-to-t from-black/80 to-transparent">
+                  {/* 價格 */}
                   <Input
                     type="number"
-                    placeholder="$"
+                    placeholder="價格 $"
                     value={product.price}
                     onChange={(e) =>
                       updateProduct(product.id, 'price', e.target.value)
                     }
-                    className="h-7 text-sm bg-white/90 border-0 rounded-lg"
+                    className="h-8 text-sm rounded-lg"
                     disabled={product.isUploading || product.isUploaded}
                   />
+
+                  {/* 截止時間 */}
+                  {!product.isUploading && !product.isUploaded && (
+                    <div className="space-y-1">
+                      {selectedProductId === product.id ? (
+                        // 展開的時間選擇器
+                        <div className="space-y-1.5">
+                          <div className="flex flex-wrap gap-1">
+                            {QUICK_TIME_OPTIONS.map((opt) => (
+                              <Button
+                                key={opt.label}
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-6 px-2 text-xs rounded"
+                                onClick={() => setProductQuickEndTime(product.id, opt.minutes)}
+                              >
+                                +{opt.label}
+                              </Button>
+                            ))}
+                          </div>
+                          <Input
+                            type="datetime-local"
+                            value={product.endTime}
+                            onChange={(e) => setProductCustomEndTime(product.id, e.target.value)}
+                            className="h-7 text-xs rounded-lg"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-full text-xs"
+                            onClick={() => setSelectedProductId(null)}
+                          >
+                            收起
+                          </Button>
+                        </div>
+                      ) : (
+                        // 收起的狀態
+                        <button
+                          type="button"
+                          className={`w-full flex items-center justify-center gap-1 h-7 text-xs rounded-lg border transition-colors ${
+                            product.endTime
+                              ? 'bg-orange-50 border-orange-200 text-orange-700 dark:bg-orange-900/20 dark:border-orange-800 dark:text-orange-400'
+                              : 'border-dashed border-muted-foreground/30 text-muted-foreground hover:border-primary/50'
+                          }`}
+                          onClick={() => setSelectedProductId(product.id)}
+                        >
+                          <Clock className="w-3 h-3" />
+                          {product.endTime ? formatEndTime(product.endTime) : '設定截止時間'}
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

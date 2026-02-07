@@ -39,6 +39,7 @@ export default function SessionsPage() {
     try {
       const { data, error } = await supabase.rpc('list_purchase_sessions_v1', {
         p_tenant_id: tenant.id,
+        p_status: null,
         p_limit: 50,
         p_offset: 0,
       })
