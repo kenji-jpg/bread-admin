@@ -302,7 +302,7 @@ export const useCheckout = (tenantId: string): UseCheckoutReturn => {
                         tenant_id: tenantId,
                         checkout_id: checkoutId,
                         store_url: storeUrl,
-                        myship_store_name: `${checkoutNo}_${customerName}`,
+                        myship_store_name: `${checkoutNo}_${customerName}`.slice(0, 50),
                     }),
                 }
             )

@@ -69,6 +69,8 @@ export interface Tenant {
   is_super_admin_access?: boolean   // 是否為超管存取
   is_cross_tenant_access?: boolean  // 是否為跨租戶存取（超管看別人的租戶）
   user_role?: 'owner' | 'admin' | 'staff' | 'viewer' | 'super_admin'
+  // 賣貨便通知 email（Cloudflare Email Routing 用）
+  myship_notify_email?: string | null
 }
 
 export interface Product {

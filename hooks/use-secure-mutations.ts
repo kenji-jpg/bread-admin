@@ -61,6 +61,7 @@ export interface TenantSettingsData {
   line_channel_secret?: string | null
   line_oa_id?: string | null
   admin_line_ids?: string[] | null
+  myship_notify_email?: string | null
 }
 
 // ============================

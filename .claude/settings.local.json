@@ -27,7 +27,9 @@
       "Bash(ls:*)",
       "Bash(find:*)",
       "Bash(grep:*)",
-      "Bash(git diff:*)"
+      "Bash(git diff:*)",
+      "Bash(npm run dev:*)",
+      "Bash(npm install:*)"
     ]
   }
 }

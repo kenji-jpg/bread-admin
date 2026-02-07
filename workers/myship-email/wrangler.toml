@@ -1,0 +1,9 @@
+name = "myship-email-worker"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+[vars]
+SUPABASE_URL = "https://kashgsxlrdyuirijocld.supabase.co"
+
+# SUPABASE_SERVICE_ROLE_KEY 需要在 Cloudflare Dashboard 設定為 Secret
+# wrangler secret put SUPABASE_SERVICE_ROLE_KEY

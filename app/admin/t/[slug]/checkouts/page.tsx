@@ -330,10 +330,15 @@ export default function CheckoutsPage() {
 
         setIsUpdating(true)
         try {
-            const customerName = storeUrlCheckout.customer_name ||
+            const displayName = storeUrlCheckout.customer_name ||
                                  storeUrlCheckout.member_display_name ||
                                  storeUrlCheckout.member_nickname ||
                                  '顧客'
+            const nickname = storeUrlCheckout.member_nickname
+            // 賣場名稱格式：名稱(暱稱)，與 Chrome 插件一致
+            const customerName = nickname && nickname !== displayName
+                ? `${displayName}(${nickname})`
+                : displayName
 
             const result = await checkoutApiRef.current.setUrl(
                 storeUrlCheckout.id,
