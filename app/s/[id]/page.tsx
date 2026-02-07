@@ -290,7 +290,6 @@ export default function SessionShopPage() {
         <div className="grid grid-cols-3 gap-2">
           {products.map((product, index) => {
             const isExpired = product.is_expired
-            const isSoldOut = product.is_sold_out
             const isHot = product.sold_qty >= 5
             const timeRemaining = product.end_time
               ? getTimeRemaining(product.end_time)
@@ -303,12 +302,12 @@ export default function SessionShopPage() {
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: index * 0.03 }}
                 className={`relative rounded-xl overflow-hidden bg-card border ${
-                  isExpired || isSoldOut
+                  isExpired
                     ? 'opacity-60'
                     : 'cursor-pointer active:scale-95'
                 } transition-transform`}
                 onClick={() => {
-                  if (isExpired || isSoldOut || !session.is_open) return
+                  if (isExpired || !session.is_open) return
                   if (!isLoggedIn) {
                     login()
                     return
@@ -356,12 +355,10 @@ export default function SessionShopPage() {
                     </div>
                   )}
 
-                  {/* 已截止/售完 遮罩 */}
-                  {(isExpired || isSoldOut) && (
+                  {/* 已截止 遮罩（代購模式無售完概念） */}
+                  {isExpired && (
                     <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                      <span className="text-white text-sm font-bold">
-                        {isSoldOut ? '售完' : '已截止'}
-                      </span>
+                      <span className="text-white text-sm font-bold">已截止</span>
                     </div>
                   )}
                 </div>
