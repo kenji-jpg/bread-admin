@@ -11,6 +11,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { toast } from 'sonner'
 import { Plus, Package, Users, Clock, CheckCircle, XCircle, ChevronRight, Copy } from 'lucide-react'
 import Link from 'next/link'
+import { getLiffShareUrl } from '@/hooks/use-liff'
 
 interface PurchaseSession {
   id: string
@@ -64,7 +65,7 @@ export default function SessionsPage() {
   }, [tenant, loadSessions])
 
   const copyShareLink = (sessionId: string) => {
-    const url = `${window.location.origin}/s/${sessionId}`
+    const url = getLiffShareUrl(`/s/${sessionId}`)
     navigator.clipboard.writeText(url)
     toast.success('已複製連結')
   }

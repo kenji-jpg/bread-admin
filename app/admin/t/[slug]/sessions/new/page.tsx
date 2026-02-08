@@ -14,6 +14,7 @@ import { toast } from 'sonner'
 import { ArrowLeft, Camera, X, Loader2, Copy, Check, Package, Clock } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
+import { getLiffShareUrl } from '@/hooks/use-liff'
 
 // 快速時間選項
 const QUICK_TIME_OPTIONS = [
@@ -336,10 +337,10 @@ export default function NewSessionPage() {
     }
   }
 
-  // 複製連結
+  // 複製連結（使用 LIFF URL，LINE 內開啟自動授權）
   const copyLink = () => {
     if (!createdSessionId) return
-    const url = `${window.location.origin}/s/${createdSessionId}`
+    const url = getLiffShareUrl(`/s/${createdSessionId}`)
     navigator.clipboard.writeText(url)
     setCopied(true)
     toast.success('已複製連結')
@@ -365,7 +366,7 @@ export default function NewSessionPage() {
 
   // 建立成功畫面
   if (createdSessionId) {
-    const shareUrl = `${window.location.origin}/s/${createdSessionId}`
+    const shareUrl = getLiffShareUrl(`/s/${createdSessionId}`)
 
     return (
       <motion.div
