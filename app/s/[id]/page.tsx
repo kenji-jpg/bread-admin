@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
@@ -93,7 +93,8 @@ interface StaffStats {
 export default function SessionShopPage() {
   const params = useParams()
   const sessionId = params.id as string
-  const supabase = createClient()
+  const supabaseRef = useRef(createClient())
+  const supabase = supabaseRef.current
   const { isReady, isLoggedIn, profile, login, isInClient } = useLiff()
 
   // 狀態
@@ -180,7 +181,10 @@ export default function SessionShopPage() {
         p_tenant_id: session.tenant_id,
       })
 
-      if (error) throw error
+      if (error) {
+        console.error('Check staff RPC error:', error)
+        return
+      }
 
       if (data.success && data.is_staff) {
         setIsStaff(true)
@@ -232,7 +236,7 @@ export default function SessionShopPage() {
     }
   }, [isStaff, loadAllPreorders])
 
-  // Realtime 訂閱 - 商品更新
+  // Realtime 訂閱 - 商品更新（sold_qty, stock 即時跳動）
   useEffect(() => {
     if (!sessionId) return
 
@@ -256,12 +260,25 @@ export default function SessionShopPage() {
           )
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'products',
+          filter: `session_id=eq.${sessionId}`,
+        },
+        () => {
+          // 新商品加入 → 重新載入
+          loadSession()
+        }
+      )
       .subscribe()
 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [sessionId, supabase])
+  }, [sessionId, supabase, loadSession])
 
   // 喊單
   const handleOrder = async () => {
@@ -295,32 +312,6 @@ export default function SessionShopPage() {
       toast.error('喊單失敗')
     } finally {
       setIsOrdering(false)
-    }
-  }
-
-  // 取消喊單
-  const handleCancelOrder = async (orderId: string) => {
-    if (!profile) return
-
-    try {
-      const { data, error } = await supabase.rpc('cancel_preorder_v1', {
-        p_order_item_id: orderId,
-        p_line_user_id: profile.userId,
-      })
-
-      if (error) throw error
-
-      if (!data.success) {
-        toast.error(data.error)
-        return
-      }
-
-      toast.success('已取消')
-      loadPreorders()
-      if (isStaff) loadAllPreorders()
-    } catch (err) {
-      console.error('Cancel error:', err)
-      toast.error('取消失敗')
     }
   }
 
@@ -868,16 +859,6 @@ export default function SessionShopPage() {
                                 ? `部分購得 (${order.arrived_qty}/${order.quantity})`
                                 : '等待配貨'}
                             </span>
-                            {order.can_modify && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-red-500 h-7"
-                                onClick={() => handleCancelOrder(order.id)}
-                              >
-                                取消
-                              </Button>
-                            )}
                           </div>
                         </div>
                       </div>
