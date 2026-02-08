@@ -6,9 +6,24 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
 import { useLiff } from '@/hooks/use-liff'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
-import { ShoppingCart, Clock, Flame, Package, Minus, Plus, X, Loader2 } from 'lucide-react'
+import {
+  ShoppingCart,
+  Clock,
+  Flame,
+  Package,
+  Minus,
+  Plus,
+  X,
+  Loader2,
+  Shield,
+  PackagePlus,
+  XCircle,
+  Users,
+} from 'lucide-react'
 import Image from 'next/image'
 
 interface Product {
@@ -54,6 +69,27 @@ interface PreorderItem {
   can_modify: boolean
 }
 
+interface StaffPreorderItem {
+  id: string
+  product_id: string
+  product_name: string
+  member_name: string
+  member_picture: string | null
+  quantity: number
+  arrived_qty: number
+  unit_price: number
+  status: string
+  created_at: string
+}
+
+interface StaffStats {
+  total_orders: number
+  pending_count: number
+  allocated_count: number
+  cancelled_count: number
+  total_sales: number
+}
+
 export default function SessionShopPage() {
   const params = useParams()
   const sessionId = params.id as string
@@ -74,6 +110,21 @@ export default function SessionShopPage() {
 
   // 購物車 Drawer 狀態
   const [isCartOpen, setIsCartOpen] = useState(false)
+
+  // ========== 管理員模式 ==========
+  const [isStaff, setIsStaff] = useState(false)
+  const [staffRole, setStaffRole] = useState<string | null>(null)
+  const [allPreorders, setAllPreorders] = useState<StaffPreorderItem[]>([])
+  const [staffStats, setStaffStats] = useState<StaffStats | null>(null)
+  const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false)
+
+  // 補貨 Modal
+  const [restockProduct, setRestockProduct] = useState<Product | null>(null)
+  const [restockQty, setRestockQty] = useState('')
+  const [isRestocking, setIsRestocking] = useState(false)
+
+  // 關閉收單
+  const [isClosing, setIsClosing] = useState(false)
 
   // 載入場次資料
   const loadSession = useCallback(async () => {
@@ -119,17 +170,67 @@ export default function SessionShopPage() {
     }
   }, [sessionId, profile?.userId, session?.tenant_id, supabase])
 
+  // 檢查是否為管理員
+  const checkStaffRole = useCallback(async () => {
+    if (!profile?.userId || !session?.tenant_id) return
+
+    try {
+      const { data, error } = await supabase.rpc('check_staff_by_line_id_v1', {
+        p_line_user_id: profile.userId,
+        p_tenant_id: session.tenant_id,
+      })
+
+      if (error) throw error
+
+      if (data.success && data.is_staff) {
+        setIsStaff(true)
+        setStaffRole(data.role)
+      }
+    } catch (err) {
+      console.error('Check staff error:', err)
+    }
+  }, [profile?.userId, session?.tenant_id, supabase])
+
+  // 載入全部預購訂單（管理員）
+  const loadAllPreorders = useCallback(async () => {
+    if (!profile?.userId || !isStaff) return
+
+    try {
+      const { data, error } = await supabase.rpc('get_session_all_preorders_v1', {
+        p_session_id: sessionId,
+        p_line_user_id: profile.userId,
+      })
+
+      if (error) throw error
+
+      if (data.success) {
+        setAllPreorders(data.orders || [])
+        setStaffStats(data.stats || null)
+      }
+    } catch (err) {
+      console.error('Load all preorders error:', err)
+    }
+  }, [sessionId, profile?.userId, isStaff, supabase])
+
   // 初始載入
   useEffect(() => {
     loadSession()
   }, [loadSession])
 
-  // 登入後載入喊單
+  // 登入後載入喊單 + 檢查管理員
   useEffect(() => {
     if (isLoggedIn && profile && session) {
       loadPreorders()
+      checkStaffRole()
     }
-  }, [isLoggedIn, profile, session, loadPreorders])
+  }, [isLoggedIn, profile, session, loadPreorders, checkStaffRole])
+
+  // 管理員身份確認後，載入全部訂單
+  useEffect(() => {
+    if (isStaff) {
+      loadAllPreorders()
+    }
+  }, [isStaff, loadAllPreorders])
 
   // Realtime 訂閱 - 商品更新
   useEffect(() => {
@@ -146,7 +247,6 @@ export default function SessionShopPage() {
           filter: `session_id=eq.${sessionId}`,
         },
         (payload) => {
-          // 更新商品的 sold_qty
           setProducts((prev) =>
             prev.map((p) =>
               p.id === payload.new.id
@@ -189,6 +289,7 @@ export default function SessionShopPage() {
       setSelectedProduct(null)
       setQuantity(1)
       loadPreorders()
+      if (isStaff) loadAllPreorders()
     } catch (err) {
       console.error('Order error:', err)
       toast.error('喊單失敗')
@@ -216,9 +317,66 @@ export default function SessionShopPage() {
 
       toast.success('已取消')
       loadPreorders()
+      if (isStaff) loadAllPreorders()
     } catch (err) {
       console.error('Cancel error:', err)
       toast.error('取消失敗')
+    }
+  }
+
+  // ========== 管理員操作 ==========
+
+  // 補貨
+  const handleRestock = async () => {
+    if (!restockProduct || !restockQty) return
+
+    setIsRestocking(true)
+    try {
+      const { data, error } = await supabase.rpc('restock_session_product_v1', {
+        p_product_id: restockProduct.id,
+        p_actual_qty: parseInt(restockQty),
+      })
+
+      if (error) throw error
+
+      if (data.success) {
+        toast.success(`已補貨 ${restockQty} 件，分配 ${data.allocated_count} 筆`)
+        setRestockProduct(null)
+        setRestockQty('')
+        loadSession()
+        loadAllPreorders()
+      } else {
+        toast.error(data.error || '補貨失敗')
+      }
+    } catch (err) {
+      console.error('Restock error:', err)
+      toast.error('補貨失敗')
+    } finally {
+      setIsRestocking(false)
+    }
+  }
+
+  // 關閉收單
+  const handleCloseSession = async () => {
+    setIsClosing(true)
+    try {
+      const { data, error } = await supabase.rpc('close_purchase_session_v1', {
+        p_session_id: sessionId,
+      })
+
+      if (error) throw error
+
+      if (data.success) {
+        toast.success('已關閉收單')
+        loadSession()
+      } else {
+        toast.error(data.error)
+      }
+    } catch (err) {
+      console.error('Close session error:', err)
+      toast.error('操作失敗')
+    } finally {
+      setIsClosing(false)
     }
   }
 
@@ -271,19 +429,64 @@ export default function SessionShopPage() {
 
   const cartItemCount = preorders.filter((o) => o.status !== 'cancelled').length
 
+  // 管理員：每個商品的預購統計
+  const getProductStats = (productId: string) => {
+    const productOrders = allPreorders.filter((o) => o.product_id === productId)
+    const pending = productOrders.filter((o) => o.status === 'pending').length
+    const allocated = productOrders.filter((o) => o.status === 'allocated').length
+    return { pending, allocated, total: productOrders.length }
+  }
+
   return (
     <div className="min-h-screen pb-20">
       {/* Header */}
       <header className="sticky top-0 z-40 bg-background/95 backdrop-blur border-b">
         <div className="px-4 py-3">
-          <h1 className="text-lg font-bold truncate">{session.title}</h1>
-          {session.is_open ? (
-            <p className="text-xs text-green-600">接單中</p>
-          ) : (
-            <p className="text-xs text-muted-foreground">已結束</p>
-          )}
+          <div className="flex items-center gap-2">
+            <h1 className="text-lg font-bold truncate">{session.title}</h1>
+            {isStaff && (
+              <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 text-xs">
+                <Shield className="w-3 h-3 mr-0.5" />
+                管理
+              </Badge>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {session.is_open ? (
+              <p className="text-xs text-green-600">接單中</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                {session.status === 'closed' ? '補貨中' : '已結算'}
+              </p>
+            )}
+            {isStaff && staffStats && (
+              <p className="text-xs text-muted-foreground">
+                · 預購 {staffStats.total_orders - staffStats.cancelled_count} · ${staffStats.total_sales.toLocaleString()}
+              </p>
+            )}
+          </div>
         </div>
       </header>
+
+      {/* 管理員：關閉收單按鈕 */}
+      {isStaff && session.is_open && (
+        <div className="px-4 py-2 border-b bg-purple-50 dark:bg-purple-950/20">
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full rounded-lg border-purple-200 text-purple-700 dark:border-purple-800 dark:text-purple-400"
+            onClick={handleCloseSession}
+            disabled={isClosing}
+          >
+            {isClosing ? (
+              <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+            ) : (
+              <XCircle className="w-3 h-3 mr-1" />
+            )}
+            關閉收單
+          </Button>
+        </div>
+      )}
 
       {/* 商品列表 */}
       <main className="p-2">
@@ -294,6 +497,7 @@ export default function SessionShopPage() {
             const timeRemaining = product.end_time
               ? getTimeRemaining(product.end_time)
               : null
+            const pStats = isStaff ? getProductStats(product.id) : null
 
             return (
               <motion.div
@@ -355,7 +559,7 @@ export default function SessionShopPage() {
                     </div>
                   )}
 
-                  {/* 已截止 遮罩（代購模式無售完概念） */}
+                  {/* 已截止 遮罩 */}
                   {isExpired && (
                     <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
                       <span className="text-white text-sm font-bold">已截止</span>
@@ -374,6 +578,31 @@ export default function SessionShopPage() {
                       限購 {product.limit_qty}
                     </p>
                   )}
+
+                  {/* 管理員：顯示分配狀態 + 補貨按鈕 */}
+                  {isStaff && pStats && (
+                    <div className="mt-1 space-y-1">
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>{pStats.allocated}/{pStats.total}</span>
+                        {pStats.pending > 0 && (
+                          <span className="text-orange-600">{pStats.pending}待</span>
+                        )}
+                      </div>
+                      {session.status === 'closed' && pStats.pending > 0 && (
+                        <button
+                          className="w-full h-6 text-xs bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 rounded flex items-center justify-center gap-0.5"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setRestockProduct(product)
+                            setRestockQty('')
+                          }}
+                        >
+                          <PackagePlus className="w-3 h-3" />
+                          補貨
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               </motion.div>
             )
@@ -387,7 +616,7 @@ export default function SessionShopPage() {
         )}
       </main>
 
-      {/* 底部購物車 Bar */}
+      {/* 底部 Bar */}
       <div className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t px-4 py-3 safe-bottom">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -411,21 +640,40 @@ export default function SessionShopPage() {
             )}
           </div>
 
-          {isLoggedIn && (
-            <Button
-              variant="default"
-              className="relative"
-              onClick={() => setIsCartOpen(true)}
-            >
-              <ShoppingCart className="w-4 h-4 mr-2" />
-              我的喊單
-              {cartItemCount > 0 && (
-                <span className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
-                  {cartItemCount}
-                </span>
-              )}
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {/* 管理員：管理面板按鈕 */}
+            {isStaff && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-purple-200 text-purple-700 dark:border-purple-800 dark:text-purple-400"
+                onClick={() => {
+                  loadAllPreorders()
+                  setIsAdminPanelOpen(true)
+                }}
+              >
+                <Users className="w-4 h-4 mr-1" />
+                訂單
+              </Button>
+            )}
+
+            {/* 顧客：購物車按鈕 */}
+            {isLoggedIn && (
+              <Button
+                variant="default"
+                className="relative"
+                onClick={() => setIsCartOpen(true)}
+              >
+                <ShoppingCart className="w-4 h-4 mr-2" />
+                喊單
+                {cartItemCount > 0 && (
+                  <span className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
+                    {cartItemCount}
+                  </span>
+                )}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -672,6 +920,192 @@ export default function SessionShopPage() {
                   </Button>
                 </div>
               )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ========== 管理員面板 Drawer ========== */}
+      <AnimatePresence>
+        {isAdminPanelOpen && isStaff && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/50"
+            onClick={() => setIsAdminPanelOpen(false)}
+          >
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 25 }}
+              className="absolute top-0 right-0 bottom-0 w-full max-w-sm bg-background"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between p-4 border-b">
+                <div>
+                  <h2 className="text-lg font-bold">管理面板</h2>
+                  <p className="text-xs text-muted-foreground">
+                    {staffRole === 'owner' ? '負責人' : staffRole === 'admin' ? '管理員' : '工作人員'}
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setIsAdminPanelOpen(false)}
+                >
+                  <X className="w-5 h-5" />
+                </Button>
+              </div>
+
+              {/* 統計 */}
+              {staffStats && (
+                <div className="grid grid-cols-3 gap-2 p-4 border-b">
+                  <div className="text-center">
+                    <p className="text-lg font-bold">{staffStats.total_orders - staffStats.cancelled_count}</p>
+                    <p className="text-xs text-muted-foreground">總預購</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-lg font-bold text-green-600">{staffStats.allocated_count}</p>
+                    <p className="text-xs text-muted-foreground">已分配</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-lg font-bold text-primary">${staffStats.total_sales.toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">銷售額</p>
+                  </div>
+                </div>
+              )}
+
+              {/* 訂單列表 - 按商品分組 */}
+              <div className="p-4 overflow-y-auto h-[calc(100vh-220px)]">
+                {products.map((product) => {
+                  const productOrders = allPreorders.filter(
+                    (o) => o.product_id === product.id && o.status !== 'cancelled'
+                  )
+                  if (productOrders.length === 0) return null
+
+                  return (
+                    <div key={product.id} className="mb-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-sm font-bold">{product.name}</h3>
+                        <span className="text-xs text-muted-foreground">
+                          ${product.price} · {productOrders.length} 筆
+                        </span>
+                      </div>
+                      <div className="space-y-1">
+                        {productOrders.map((order) => (
+                          <div
+                            key={order.id}
+                            className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-muted/50 text-sm"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              {order.member_picture && (
+                                <Image
+                                  src={order.member_picture}
+                                  alt=""
+                                  width={20}
+                                  height={20}
+                                  className="rounded-full flex-shrink-0"
+                                />
+                              )}
+                              <span className="truncate">{order.member_name}</span>
+                              <span className="text-muted-foreground flex-shrink-0">×{order.quantity}</span>
+                            </div>
+                            <span
+                              className={`text-xs px-1.5 py-0.5 rounded flex-shrink-0 ${
+                                order.status === 'allocated'
+                                  ? 'bg-green-100 text-green-700'
+                                  : order.status === 'partial'
+                                  ? 'bg-blue-100 text-blue-700'
+                                  : 'bg-yellow-100 text-yellow-700'
+                              }`}
+                            >
+                              {order.status === 'allocated'
+                                ? '已配'
+                                : order.status === 'partial'
+                                ? `${order.arrived_qty}/${order.quantity}`
+                                : '待配'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
+
+                {allPreorders.filter((o) => o.status !== 'cancelled').length === 0 && (
+                  <p className="text-center text-muted-foreground py-8">
+                    尚無預購訂單
+                  </p>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ========== 補貨 Modal ========== */}
+      <AnimatePresence>
+        {restockProduct && isStaff && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] bg-black/50"
+            onClick={() => setRestockProduct(null)}
+          >
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 25 }}
+              className="absolute bottom-0 left-0 right-0 bg-background rounded-t-2xl p-4 safe-bottom"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-bold mb-1">
+                補貨 - {restockProduct.name}
+              </h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                {(() => {
+                  const stats = getProductStats(restockProduct.id)
+                  return `${stats.pending} 筆待分配`
+                })()}
+              </p>
+
+              <Input
+                type="number"
+                min="1"
+                placeholder="輸入實際購買數量"
+                value={restockQty}
+                onChange={(e) => setRestockQty(e.target.value)}
+                className="mb-4 rounded-xl"
+                autoFocus
+              />
+
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setRestockProduct(null)}
+                >
+                  取消
+                </Button>
+                <Button
+                  className="flex-1 bg-purple-600 hover:bg-purple-700"
+                  onClick={handleRestock}
+                  disabled={!restockQty || isRestocking}
+                >
+                  {isRestocking ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <PackagePlus className="w-4 h-4 mr-1" />
+                      確認補貨
+                    </>
+                  )}
+                </Button>
+              </div>
             </motion.div>
           </motion.div>
         )}

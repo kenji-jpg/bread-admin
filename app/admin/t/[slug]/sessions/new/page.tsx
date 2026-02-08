@@ -111,7 +111,6 @@ export default function NewSessionPage() {
 
   // 場次資訊
   const [title, setTitle] = useState('')
-  const [defaultStock, setDefaultStock] = useState('') // 空 = 預購模式
 
   // 目前選擇的商品（用於設定截止時間）
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null)
@@ -144,7 +143,7 @@ export default function NewSessionPage() {
         preview,
         name: '', // 商品名稱
         price: '',
-        stock: defaultStock,
+        stock: '', // 空白 = 預購模式（庫存 0）
         endTime: '', // 每個商品各自設定
         isUploading: false,
         isUploaded: false,
@@ -461,24 +460,6 @@ export default function NewSessionPage() {
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="defaultStock">
-              預設庫存
-              <span className="text-muted-foreground font-normal ml-1">
-                （空白 = 預購模式）
-              </span>
-            </Label>
-            <Input
-              id="defaultStock"
-              type="number"
-              min="0"
-              placeholder="不填則開放預購"
-              value={defaultStock}
-              onChange={(e) => setDefaultStock(e.target.value)}
-              className="rounded-xl"
-            />
-          </div>
-
           {/* 批次套用截止時間 */}
           {products.some(p => p.endTime === '') && (
             <div className="space-y-2">
@@ -590,6 +571,19 @@ export default function NewSessionPage() {
                     value={product.price}
                     onChange={(e) =>
                       updateProduct(product.id, 'price', e.target.value)
+                    }
+                    className="h-8 text-sm rounded-lg"
+                    disabled={product.isUploading || product.isUploaded}
+                  />
+
+                  {/* 庫存 */}
+                  <Input
+                    type="number"
+                    min="0"
+                    placeholder="庫存（空白=預購）"
+                    value={product.stock}
+                    onChange={(e) =>
+                      updateProduct(product.id, 'stock', e.target.value)
                     }
                     className="h-8 text-sm rounded-lg"
                     disabled={product.isUploading || product.isUploaded}

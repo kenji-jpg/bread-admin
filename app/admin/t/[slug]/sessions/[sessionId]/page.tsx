@@ -33,6 +33,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
+import { getLiffShareUrl } from '@/hooks/use-liff'
 
 interface SessionProduct {
   id: string
@@ -61,6 +62,7 @@ interface PreorderItem {
   product_name: string
   member_name: string
   quantity: number
+  unit_price: number
   status: string
   created_at: string
 }
@@ -126,6 +128,7 @@ export default function SessionDetailPage() {
           id,
           product_id,
           quantity,
+          unit_price,
           status,
           created_at,
           products!inner(name, session_id),
@@ -142,6 +145,7 @@ export default function SessionDetailPage() {
             product_name: item.products?.name || '商品',
             member_name: item.members?.display_name || '客戶',
             quantity: item.quantity,
+            unit_price: item.unit_price || 0,
             status: item.status,
             created_at: item.created_at,
           }))
@@ -163,7 +167,7 @@ export default function SessionDetailPage() {
 
   // 複製連結
   const copyLink = () => {
-    const url = `${window.location.origin}/s/${sessionId}`
+    const url = getLiffShareUrl(`/s/${sessionId}`)
     navigator.clipboard.writeText(url)
     setCopied(true)
     toast.success('已複製連結')
@@ -310,6 +314,9 @@ export default function SessionDetailPage() {
 
   const pendingCount = preorders.filter((p) => p.status === 'pending').length
   const allocatedCount = preorders.filter((p) => p.status === 'allocated').length
+  const totalSales = preorders
+    .filter((p) => p.status !== 'cancelled')
+    .reduce((sum, p) => sum + p.quantity * p.unit_price, 0)
 
   return (
     <motion.div
@@ -355,7 +362,7 @@ export default function SessionDetailPage() {
       </div>
 
       {/* 統計 */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-4">
             <div className="flex items-center gap-2">
@@ -381,6 +388,15 @@ export default function SessionDetailPage() {
               <span className="text-2xl font-bold">{allocatedCount}</span>
             </div>
             <p className="text-sm text-muted-foreground">已分配</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-2">
+              <span className="text-lg text-muted-foreground">$</span>
+              <span className="text-2xl font-bold">{totalSales.toLocaleString()}</span>
+            </div>
+            <p className="text-sm text-muted-foreground">銷售總額</p>
           </CardContent>
         </Card>
       </div>
