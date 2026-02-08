@@ -157,6 +157,7 @@ export default function SessionShopPage() {
   // ========== 管理員模式 ==========
   const [isStaff, setIsStaff] = useState(false)
   const [staffRole, setStaffRole] = useState<string | null>(null)
+  const [staffCheckDone, setStaffCheckDone] = useState(false)
   const [allPreorders, setAllPreorders] = useState<StaffPreorderItem[]>([])
   const [staffStats, setStaffStats] = useState<StaffStats | null>(null)
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false)
@@ -223,9 +224,6 @@ export default function SessionShopPage() {
     }
   }, [sessionId, profile?.userId, session?.tenant_id, supabase])
 
-  // 檢查是否為管理員（不用 useCallback，直接在 effect 中呼叫避免 timing issue）
-  const staffCheckedRef = useRef(false)
-
   // 載入全部預購訂單（管理員）
   const loadAllPreorders = useCallback(async () => {
     if (!profile?.userId || !isStaff) return
@@ -252,37 +250,44 @@ export default function SessionShopPage() {
     loadSession()
   }, [loadSession])
 
-  // 登入後載入喊單 + 檢查管理員
+  // 登入後載入喊單
   useEffect(() => {
     if (isLoggedIn && profile && session) {
       loadPreorders()
-
-      // 只檢查一次管理員身份（避免重複呼叫）
-      if (!staffCheckedRef.current) {
-        staffCheckedRef.current = true
-        console.log('[LIFF] Checking staff role:', profile.userId, session.tenant_id)
-        ;(async () => {
-          try {
-            const { data, error } = await supabase.rpc('check_staff_by_line_id_v1', {
-              p_line_user_id: profile.userId,
-              p_tenant_id: session.tenant_id,
-            })
-            if (error) {
-              console.error('[LIFF] Check staff RPC error:', error)
-              return
-            }
-            console.log('[LIFF] Staff check result:', data)
-            if (data?.success && data.is_staff) {
-              setIsStaff(true)
-              setStaffRole(data.role)
-            }
-          } catch (err) {
-            console.error('[LIFF] Check staff error:', err)
-          }
-        })()
-      }
     }
-  }, [isLoggedIn, profile, session, loadPreorders, supabase])
+  }, [isLoggedIn, profile, session, loadPreorders])
+
+  // 獨立 effect：檢查管理員身份（只要 profile + session.tenant_id 都有就檢查一次）
+  useEffect(() => {
+    if (!isLoggedIn || !profile?.userId || !session?.tenant_id || staffCheckDone) return
+
+    setStaffCheckDone(true)
+    const tenantId = session.tenant_id
+    const lineUserId = profile.userId
+    console.log('[LIFF] Checking staff role for:', lineUserId, 'tenant:', tenantId)
+
+    ;(async () => {
+      try {
+        const { data, error } = await supabase.rpc('check_staff_by_line_id_v1', {
+          p_line_user_id: lineUserId,
+          p_tenant_id: tenantId,
+        })
+        if (error) {
+          console.error('[LIFF] Check staff RPC error:', error)
+          setStaffCheckDone(false) // 允許重試
+          return
+        }
+        console.log('[LIFF] Staff check result:', JSON.stringify(data))
+        if (data?.success && data.is_staff) {
+          setIsStaff(true)
+          setStaffRole(data.role)
+        }
+      } catch (err) {
+        console.error('[LIFF] Check staff error:', err)
+        setStaffCheckDone(false) // 允許重試
+      }
+    })()
+  }, [isLoggedIn, profile?.userId, session?.tenant_id, staffCheckDone, supabase])
 
   // 管理員身份確認後，載入全部訂單
   useEffect(() => {
@@ -586,6 +591,13 @@ export default function SessionShopPage() {
           </div>
         </div>
       </header>
+
+      {/* DEBUG: 暫時顯示管理員檢查狀態（上線後移除） */}
+      {isLoggedIn && profile && (
+        <div className="px-4 py-1 bg-yellow-50 dark:bg-yellow-950/20 border-b text-xs text-yellow-800 dark:text-yellow-200 font-mono">
+          uid:{profile.userId.slice(-8)} | tid:{session.tenant_id.slice(-8)} | staff:{String(isStaff)} | checked:{String(staffCheckDone)} | role:{staffRole || 'none'}
+        </div>
+      )}
 
       {/* 管理員：操作列 */}
       {isStaff && session.is_open && (
