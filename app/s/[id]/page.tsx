@@ -592,13 +592,6 @@ export default function SessionShopPage() {
         </div>
       </header>
 
-      {/* DEBUG: 暫時顯示管理員檢查狀態（上線後移除） */}
-      {isLoggedIn && profile && (
-        <div className="px-4 py-1 bg-yellow-50 dark:bg-yellow-950/20 border-b text-xs text-yellow-800 dark:text-yellow-200 font-mono">
-          uid:{profile.userId.slice(-8)} | tid:{session.tenant_id.slice(-8)} | staff:{String(isStaff)} | checked:{String(staffCheckDone)} | role:{staffRole || 'none'}
-        </div>
-      )}
-
       {/* 管理員：操作列 */}
       {isStaff && session.is_open && (
         <div className="px-4 py-2 border-b bg-purple-50 dark:bg-purple-950/20 flex gap-2">
