@@ -23,8 +23,50 @@ import {
   PackagePlus,
   XCircle,
   Users,
+  Camera,
 } from 'lucide-react'
 import Image from 'next/image'
+
+// 壓縮圖片（複製自 sessions/new/page.tsx）
+async function compressImage(file: File, maxWidth = 800, quality = 0.8): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const img = new window.Image()
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      let width = img.width
+      let height = img.height
+
+      if (width > maxWidth) {
+        height = (height * maxWidth) / width
+        width = maxWidth
+      }
+
+      canvas.width = width
+      canvas.height = height
+
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        reject(new Error('Failed to get canvas context'))
+        return
+      }
+
+      ctx.drawImage(img, 0, 0, width, height)
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            resolve(blob)
+          } else {
+            reject(new Error('Failed to compress image'))
+          }
+        },
+        'image/webp',
+        quality
+      )
+    }
+    img.onerror = reject
+    img.src = URL.createObjectURL(file)
+  })
+}
 
 interface Product {
   id: string
@@ -127,6 +169,16 @@ export default function SessionShopPage() {
   // 關閉收單
   const [isClosing, setIsClosing] = useState(false)
 
+  // 上架 Modal
+  const [isAddProductOpen, setIsAddProductOpen] = useState(false)
+  const [newProductName, setNewProductName] = useState('')
+  const [newProductPrice, setNewProductPrice] = useState('')
+  const [newProductStock, setNewProductStock] = useState('')
+  const [newProductImage, setNewProductImage] = useState<File | null>(null)
+  const [newProductPreview, setNewProductPreview] = useState<string | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
+  const addProductFileRef = useRef<HTMLInputElement>(null)
+
   // 載入場次資料
   const loadSession = useCallback(async () => {
     try {
@@ -171,29 +223,8 @@ export default function SessionShopPage() {
     }
   }, [sessionId, profile?.userId, session?.tenant_id, supabase])
 
-  // 檢查是否為管理員
-  const checkStaffRole = useCallback(async () => {
-    if (!profile?.userId || !session?.tenant_id) return
-
-    try {
-      const { data, error } = await supabase.rpc('check_staff_by_line_id_v1', {
-        p_line_user_id: profile.userId,
-        p_tenant_id: session.tenant_id,
-      })
-
-      if (error) {
-        console.error('Check staff RPC error:', error)
-        return
-      }
-
-      if (data.success && data.is_staff) {
-        setIsStaff(true)
-        setStaffRole(data.role)
-      }
-    } catch (err) {
-      console.error('Check staff error:', err)
-    }
-  }, [profile?.userId, session?.tenant_id, supabase])
+  // 檢查是否為管理員（不用 useCallback，直接在 effect 中呼叫避免 timing issue）
+  const staffCheckedRef = useRef(false)
 
   // 載入全部預購訂單（管理員）
   const loadAllPreorders = useCallback(async () => {
@@ -225,9 +256,33 @@ export default function SessionShopPage() {
   useEffect(() => {
     if (isLoggedIn && profile && session) {
       loadPreorders()
-      checkStaffRole()
+
+      // 只檢查一次管理員身份（避免重複呼叫）
+      if (!staffCheckedRef.current) {
+        staffCheckedRef.current = true
+        console.log('[LIFF] Checking staff role:', profile.userId, session.tenant_id)
+        ;(async () => {
+          try {
+            const { data, error } = await supabase.rpc('check_staff_by_line_id_v1', {
+              p_line_user_id: profile.userId,
+              p_tenant_id: session.tenant_id,
+            })
+            if (error) {
+              console.error('[LIFF] Check staff RPC error:', error)
+              return
+            }
+            console.log('[LIFF] Staff check result:', data)
+            if (data?.success && data.is_staff) {
+              setIsStaff(true)
+              setStaffRole(data.role)
+            }
+          } catch (err) {
+            console.error('[LIFF] Check staff error:', err)
+          }
+        })()
+      }
     }
-  }, [isLoggedIn, profile, session, loadPreorders, checkStaffRole])
+  }, [isLoggedIn, profile, session, loadPreorders, supabase])
 
   // 管理員身份確認後，載入全部訂單
   useEffect(() => {
@@ -371,6 +426,79 @@ export default function SessionShopPage() {
     }
   }
 
+  // 上架新商品
+  const handleAddProduct = async () => {
+    if (!profile || !session || !newProductName.trim() || !newProductPrice) return
+
+    setIsUploading(true)
+    try {
+      let imageUrl: string | null = null
+      const sku = `S${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+
+      // 上傳圖片
+      if (newProductImage) {
+        try {
+          const compressedBlob = await compressImage(newProductImage)
+          const compressedFile = new File([compressedBlob], `${sku}.webp`, {
+            type: 'image/webp',
+          })
+
+          const filePath = `${session.tenant_id}/products/${sku}.webp`
+          const { error: uploadError } = await supabase.storage
+            .from('product-images')
+            .upload(filePath, compressedFile, {
+              cacheControl: '3600',
+              upsert: true,
+            })
+
+          if (!uploadError) {
+            const { data: { publicUrl } } = supabase.storage
+              .from('product-images')
+              .getPublicUrl(filePath)
+            imageUrl = publicUrl
+          } else {
+            console.error('Upload error:', uploadError)
+          }
+        } catch (err) {
+          console.error('Compress/upload error:', err)
+        }
+      }
+
+      // 呼叫 RPC 建立商品
+      const { data, error } = await supabase.rpc('add_session_product_v1', {
+        p_session_id: sessionId,
+        p_line_user_id: profile.userId,
+        p_name: newProductName.trim(),
+        p_price: parseFloat(newProductPrice),
+        p_stock: newProductStock ? parseInt(newProductStock) : 0,
+        p_image_url: imageUrl,
+      })
+
+      if (error) throw error
+
+      if (!data.success) {
+        toast.error(data.error)
+        return
+      }
+
+      toast.success(`已上架 ${newProductName.trim()}`)
+      // 清空表單
+      setNewProductName('')
+      setNewProductPrice('')
+      setNewProductStock('')
+      setNewProductImage(null)
+      setNewProductPreview(null)
+      setIsAddProductOpen(false)
+      // Realtime INSERT 會自動觸發 loadSession，但手動也呼叫一次確保
+      loadSession()
+    } catch (err) {
+      console.error('Add product error:', err)
+      toast.error('上架失敗')
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
   // 計算倒數時間
   const getTimeRemaining = (endTime: string) => {
     const diff = new Date(endTime).getTime() - Date.now()
@@ -459,13 +587,22 @@ export default function SessionShopPage() {
         </div>
       </header>
 
-      {/* 管理員：關閉收單按鈕 */}
+      {/* 管理員：操作列 */}
       {isStaff && session.is_open && (
-        <div className="px-4 py-2 border-b bg-purple-50 dark:bg-purple-950/20">
+        <div className="px-4 py-2 border-b bg-purple-50 dark:bg-purple-950/20 flex gap-2">
           <Button
             variant="outline"
             size="sm"
-            className="w-full rounded-lg border-purple-200 text-purple-700 dark:border-purple-800 dark:text-purple-400"
+            className="flex-1 rounded-lg border-purple-200 text-purple-700 dark:border-purple-800 dark:text-purple-400"
+            onClick={() => setIsAddProductOpen(true)}
+          >
+            <Camera className="w-3 h-3 mr-1" />
+            上架
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1 rounded-lg border-purple-200 text-purple-700 dark:border-purple-800 dark:text-purple-400"
             onClick={handleCloseSession}
             disabled={isClosing}
           >
@@ -1020,6 +1157,126 @@ export default function SessionShopPage() {
                     尚無預購訂單
                   </p>
                 )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ========== 上架商品 Modal ========== */}
+      <AnimatePresence>
+        {isAddProductOpen && isStaff && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] bg-black/50"
+            onClick={() => setIsAddProductOpen(false)}
+          >
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 25 }}
+              className="absolute bottom-0 left-0 right-0 bg-background rounded-t-2xl p-4 safe-bottom"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-bold mb-4">上架新商品</h3>
+
+              {/* 拍照/選圖 */}
+              <input
+                ref={addProductFileRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) {
+                    setNewProductImage(file)
+                    setNewProductPreview(URL.createObjectURL(file))
+                  }
+                }}
+              />
+
+              <div
+                className="w-full h-32 rounded-xl border-2 border-dashed border-muted-foreground/30 flex items-center justify-center mb-4 cursor-pointer overflow-hidden"
+                onClick={() => addProductFileRef.current?.click()}
+              >
+                {newProductPreview ? (
+                  <Image
+                    src={newProductPreview}
+                    alt="預覽"
+                    width={200}
+                    height={128}
+                    className="object-cover w-full h-full"
+                  />
+                ) : (
+                  <div className="text-center text-muted-foreground">
+                    <Camera className="w-8 h-8 mx-auto mb-1" />
+                    <p className="text-sm">拍照或選擇圖片</p>
+                  </div>
+                )}
+              </div>
+
+              {/* 商品名稱 */}
+              <Input
+                placeholder="商品名稱"
+                value={newProductName}
+                onChange={(e) => setNewProductName(e.target.value)}
+                className="mb-3 rounded-xl"
+                autoFocus
+              />
+
+              {/* 價格 + 庫存 */}
+              <div className="flex gap-2 mb-4">
+                <Input
+                  type="number"
+                  min="1"
+                  placeholder="價格"
+                  value={newProductPrice}
+                  onChange={(e) => setNewProductPrice(e.target.value)}
+                  className="flex-1 rounded-xl"
+                />
+                <Input
+                  type="number"
+                  min="0"
+                  placeholder="庫存（空白=預購）"
+                  value={newProductStock}
+                  onChange={(e) => setNewProductStock(e.target.value)}
+                  className="flex-1 rounded-xl"
+                />
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => {
+                    setIsAddProductOpen(false)
+                    setNewProductName('')
+                    setNewProductPrice('')
+                    setNewProductStock('')
+                    setNewProductImage(null)
+                    setNewProductPreview(null)
+                  }}
+                >
+                  取消
+                </Button>
+                <Button
+                  className="flex-1 bg-purple-600 hover:bg-purple-700"
+                  onClick={handleAddProduct}
+                  disabled={!newProductName.trim() || !newProductPrice || isUploading}
+                >
+                  {isUploading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Camera className="w-4 h-4 mr-1" />
+                      確認上架
+                    </>
+                  )}
+                </Button>
               </div>
             </motion.div>
           </motion.div>
