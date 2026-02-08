@@ -1230,7 +1230,6 @@ export default function SessionShopPage() {
                 value={newProductName}
                 onChange={(e) => setNewProductName(e.target.value)}
                 className="mb-3 rounded-xl"
-                autoFocus
               />
 
               {/* 價格 + 庫存 */}
@@ -1323,7 +1322,6 @@ export default function SessionShopPage() {
                 value={restockQty}
                 onChange={(e) => setRestockQty(e.target.value)}
                 className="mb-4 rounded-xl"
-                autoFocus
               />
 
               <div className="flex gap-2">
