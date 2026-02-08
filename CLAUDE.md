@@ -197,6 +197,7 @@ viewer       → 唯讀存取
 - `notifications` 表尚未使用
 - `is_shipped`（checkouts）已棄用，改用 `shipping_status`
 - 部分舊 RPC 函數已清理，但 `shipping_details` JSONB 遷移仍在進行
+- **【架構】多租戶 LIFF 隔離（付費功能）**：目前所有租戶共用一個 LIFF（環境變數 `NEXT_PUBLIC_LIFF_ID`），導致 LIFF userId 來自平台 Provider，和各租戶 OA 的 userId 不同。需改為每個租戶設定自己的 LIFF ID（`tenants.liff_id`），場次連結改用租戶的 LIFF。改動範圍：DB 加欄位、後台設定頁加輸入框、LIFF 初始化改動態、`getLiffShareUrl()` 改從租戶取 liff_id。
 
 ## 參考文件
 

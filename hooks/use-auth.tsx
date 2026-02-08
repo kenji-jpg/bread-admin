@@ -85,7 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const initAuth = async () => {
             const timeoutId = setTimeout(() => {
                 if (isMounted) {
-                    console.warn('[Auth] 初始化超時，強制結束 loading')
+                    if (process.env.NODE_ENV === 'development') console.warn('[Auth] 初始化超時，強制結束 loading')
                     setIsLoading(false)
                 }
             }, 10000)
@@ -122,16 +122,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                         setIsSuperAdmin(data.is_super_admin)
                         setTenants(data.tenants || [])
                     } else {
-                        console.warn('[Auth] RPC 回傳錯誤:', error?.message || data?.error)
+                        if (process.env.NODE_ENV === 'development') console.warn('[Auth] RPC 回傳錯誤:', error?.message || data?.error)
                         setIsSuperAdmin(false)
                         setTenants([])
                     }
                 } catch (rpcError) {
                     if (!isMounted) return
                     if (rpcError instanceof Error && rpcError.name === 'AbortError') {
-                        console.warn('[Auth] RPC 被 abort，使用基本 session')
+                        if (process.env.NODE_ENV === 'development') console.warn('[Auth] RPC 被 abort，使用基本 session')
                     } else {
-                        console.error('[Auth] RPC 呼叫失敗:', rpcError)
+                        if (process.env.NODE_ENV === 'development') console.error('[Auth] RPC 呼叫失敗:', rpcError)
                     }
                     setIsSuperAdmin(false)
                     setTenants([])
@@ -154,7 +154,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             } catch (error) {
                 if (!isMounted) return
                 if (error instanceof Error && error.name === 'AbortError') return
-                console.error('[Auth] 初始化錯誤:', error)
+                if (process.env.NODE_ENV === 'development') console.error('[Auth] 初始化錯誤:', error)
                 setIsSuperAdmin(false)
                 setTenants([])
             } finally {
@@ -210,7 +210,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                             setTenants([])
                         }
                     } catch (error) {
-                        console.error('[Auth] SIGNED_IN RPC 失敗:', error)
+                        if (process.env.NODE_ENV === 'development') console.error('[Auth] SIGNED_IN RPC 失敗:', error)
                         setIsSuperAdmin(false)
                         setTenants([])
                     } finally {

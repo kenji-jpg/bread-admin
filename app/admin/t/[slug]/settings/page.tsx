@@ -260,16 +260,16 @@ export default function SettingsPage() {
         setGeneratingBindCode(true)
 
         try {
-            console.log('[LINE Bind] Calling generate_admin_bind_code with tenant_id:', tenant.id)
+            if (process.env.NODE_ENV === 'development') console.log('[LINE Bind] Calling generate_admin_bind_code with tenant_id:', tenant.id)
 
             const { data, error } = await supabase.rpc('generate_admin_bind_code', {
                 p_tenant_id: tenant.id,
             }) as { data: GenerateBindCodeResponse | null; error: Error | null }
 
-            console.log('[LINE Bind] Response:', { data, error })
+            if (process.env.NODE_ENV === 'development') console.log('[LINE Bind] Response:', { data, error })
 
             if (error) {
-                console.error('[LINE Bind] RPC Error:', error)
+                if (process.env.NODE_ENV === 'development') console.error('[LINE Bind] RPC Error:', error)
                 toast.error('生成失敗', { description: error.message })
                 return
             }
@@ -282,11 +282,11 @@ export default function SettingsPage() {
                 setShowBindCodeDialog(true)
                 toast.success('綁定碼已生成')
             } else {
-                console.warn('[LINE Bind] RPC returned failure:', data)
+                if (process.env.NODE_ENV === 'development') console.warn('[LINE Bind] RPC returned failure:', data)
                 toast.error('生成失敗', { description: data?.message || data?.error || '未知錯誤' })
             }
         } catch (err) {
-            console.error('[LINE Bind] Unexpected error:', err)
+            if (process.env.NODE_ENV === 'development') console.error('[LINE Bind] Unexpected error:', err)
             toast.error('系統發生錯誤', { description: err instanceof Error ? err.message : '請稍後再試' })
         } finally {
             setGeneratingBindCode(false)
