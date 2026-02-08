@@ -200,7 +200,7 @@ export default function SessionDetailPage() {
     setIsRestocking(true)
 
     try {
-      const { data, error } = await supabase.rpc('restock_product_v2', {
+      const { data, error } = await supabase.rpc('restock_session_product_v1', {
         p_product_id: restockProduct.id,
         p_actual_qty: parseInt(restockQty),
       })
