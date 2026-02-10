@@ -28,6 +28,7 @@ import {
   Store,
   Eye,
   EyeOff,
+  Megaphone,
 } from 'lucide-react'
 import Image from 'next/image'
 
@@ -96,6 +97,20 @@ interface Tenant {
   slug: string
 }
 
+interface ShopSettings {
+  banner_url?: string | null
+  announcement?: string | null
+  accent_color?: string | null
+  product_sort?: 'created_at' | 'sold_qty' | 'manual'
+}
+
+interface ShopCategory {
+  id: string
+  name: string
+  sort_order: number
+  is_visible: boolean
+}
+
 interface OrderItem {
   id: string
   product_id: string
@@ -143,6 +158,10 @@ export default function ShopPage() {
   const [orders, setOrders] = useState<OrderItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // 商城外觀設定
+  const [shopSettings, setShopSettings] = useState<ShopSettings>({})
+  const [shopCategories, setShopCategories] = useState<ShopCategory[]>([])
 
   // 選購 Modal 狀態
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
@@ -204,6 +223,8 @@ export default function ShopPage() {
 
       setTenant(data.tenant)
       setProducts(data.products || [])
+      setShopSettings(data.shop_settings || {})
+      setShopCategories((data.categories || []).filter((c: ShopCategory) => c.is_visible))
     } catch (err) {
       console.error('Load shop error:', err)
       setError('載入失敗')
@@ -610,13 +631,28 @@ export default function ShopPage() {
     return 'preorder'
   }
 
+  const accentColor = shopSettings.accent_color || ''
+
   return (
     <div className="min-h-screen pb-20">
+      {/* Banner */}
+      {shopSettings.banner_url && (
+        <div className="aspect-[3/1] relative bg-muted">
+          <Image
+            src={shopSettings.banner_url}
+            alt="Banner"
+            fill
+            className="object-cover"
+            sizes="100vw"
+          />
+        </div>
+      )}
+
       {/* Header */}
       <header className="sticky top-0 z-40 bg-background/95 backdrop-blur border-b">
         <div className="px-4 py-3">
           <div className="flex items-center gap-2">
-            <Store className="w-5 h-5 text-primary" />
+            <Store className="w-5 h-5" style={accentColor ? { color: accentColor } : undefined} />
             <h1 className="text-lg font-bold truncate">{tenant.name}</h1>
             {isStaff && (
               <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 text-xs">
@@ -637,6 +673,24 @@ export default function ShopPage() {
         </div>
       </header>
 
+      {/* Announcement */}
+      {shopSettings.announcement && (
+        <div
+          className="mx-2 mt-2 px-3 py-2 rounded-lg text-xs"
+          style={accentColor ? {
+            backgroundColor: `${accentColor}10`,
+            color: accentColor,
+            border: `1px solid ${accentColor}20`,
+          } : {
+            backgroundColor: 'hsl(var(--primary) / 0.05)',
+            border: '1px solid hsl(var(--primary) / 0.1)',
+          }}
+        >
+          <Megaphone className="w-3 h-3 inline mr-1" />
+          {shopSettings.announcement}
+        </div>
+      )}
+
       {/* 管理員：操作列 */}
       {isStaff && (
         <div className="px-4 py-2 border-b bg-purple-50 dark:bg-purple-950/20 flex gap-2">
@@ -654,28 +708,40 @@ export default function ShopPage() {
 
       {/* 分類標籤篩選 */}
       {(() => {
-        const categories = [...new Set(products.map(p => p.category).filter(Boolean))] as string[]
-        if (categories.length === 0) return null
+        // 優先使用後台設定的分類（有排序），fallback 到商品動態分類
+        const orderedCategories = shopCategories.length > 0
+          ? shopCategories.map(c => c.name)
+          : [...new Set(products.map(p => p.category).filter(Boolean))] as string[]
+        if (orderedCategories.length === 0) return null
         return (
           <div className="px-2 pt-2 pb-0 flex gap-1.5 overflow-x-auto scrollbar-hide">
             <button
-              className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                selectedCategory === null
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground'
-              }`}
+              className="shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors text-white"
+              style={{
+                backgroundColor: selectedCategory === null
+                  ? (accentColor || 'hsl(var(--primary))')
+                  : 'transparent',
+                color: selectedCategory === null
+                  ? 'white'
+                  : 'hsl(var(--muted-foreground))',
+                ...(selectedCategory !== null ? { backgroundColor: 'hsl(var(--muted))' } : {}),
+              }}
               onClick={() => setSelectedCategory(null)}
             >
               全部
             </button>
-            {categories.map(cat => (
+            {orderedCategories.map(cat => (
               <button
                 key={cat}
-                className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                  selectedCategory === cat
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-muted-foreground'
-                }`}
+                className="shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors"
+                style={{
+                  backgroundColor: selectedCategory === cat
+                    ? (accentColor || 'hsl(var(--primary))')
+                    : 'hsl(var(--muted))',
+                  color: selectedCategory === cat
+                    ? 'white'
+                    : 'hsl(var(--muted-foreground))',
+                }}
                 onClick={() => setSelectedCategory(selectedCategory === cat ? null : cat)}
               >
                 #{cat}
@@ -778,7 +844,7 @@ export default function ShopPage() {
                 <div className="p-2">
                   <p className="text-xs truncate">{product.name}</p>
                   <div className="flex items-center gap-1">
-                    <p className="text-sm font-bold text-primary">${product.price}</p>
+                    <p className="text-sm font-bold" style={accentColor ? { color: accentColor } : undefined}>${product.price}</p>
                     {mode === 'stock' && product.stock !== null && (
                       <span className="text-xs text-muted-foreground">
                         剩{product.stock}

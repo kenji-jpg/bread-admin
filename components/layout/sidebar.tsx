@@ -22,6 +22,7 @@ import {
     ChevronRight,
     AlertTriangle,
     Store,
+    ShoppingBag,
 } from 'lucide-react'
 
 interface NavItem {
@@ -46,6 +47,11 @@ export function Sidebar() {
                 title: '儀表板',
                 href: `/admin/t/${tenantSlug}`,
                 icon: <LayoutDashboard className="h-5 w-5" />,
+            },
+            {
+                title: '商城',
+                href: `/admin/t/${tenantSlug}/shop`,
+                icon: <ShoppingBag className="h-5 w-5" />,
             },
             {
                 title: '代購場次',
