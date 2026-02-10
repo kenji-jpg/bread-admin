@@ -65,9 +65,10 @@ export function LiffProvider({ children }: LiffProviderProps) {
 
         // 外部瀏覽器：在 LIFF SDK redirect 到 LINE Login 前，
         // 先存住當前路徑，登入後回到 /s 時可以 redirect 回來
-        const currentPath = window.location.pathname
-        if (currentPath.startsWith('/s/') && !window.location.search.includes('code=')) {
-          sessionStorage.setItem('liff_return_path', currentPath)
+        const currentPath = window.location.pathname + window.location.search
+        const pathOnly = window.location.pathname
+        if (pathOnly.startsWith('/s/') && !window.location.search.includes('code=')) {
+          sessionStorage.setItem('liff_return_path', pathOnly)
         }
 
         // withLoginOnExternalBrowser: true
