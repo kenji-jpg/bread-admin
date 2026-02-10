@@ -48,6 +48,8 @@ import {
     AlertTriangle,
     Loader2,
     FileText,
+    ArrowUpCircle,
+    ArrowDownCircle,
 } from 'lucide-react'
 
 export default function TenantsPage() {
@@ -144,6 +146,29 @@ export default function TenantsPage() {
             )
         )
         toast.success(data.message || '狀態已更新')
+    }
+
+    // 切換租戶方案
+    const handleTogglePlan = async (tenant: Tenant) => {
+        const newPlan = tenant.plan === 'pro' ? 'basic' : 'pro'
+
+        const { data, error } = await supabase.rpc('update_tenant_plan_v1', {
+            p_tenant_id: tenant.id,
+            p_new_plan: newPlan,
+        }) as { data: { success: boolean; old_plan?: string; new_plan?: string; tenant_name?: string; error?: string } | null; error: Error | null }
+
+        if (error || !data?.success) {
+            toast.error(data?.error || '方案更新失敗')
+            return
+        }
+
+        // 更新本地狀態
+        setTenants((prev) =>
+            prev.map((t) =>
+                t.id === tenant.id ? { ...t, plan: newPlan as Tenant['plan'] } : t
+            )
+        )
+        toast.success(`${data.tenant_name} 已${newPlan === 'pro' ? '升級為 Pro' : '降級為 Basic'}`)
     }
 
     // 開啟刪除確認 Modal
@@ -447,6 +472,19 @@ export default function TenantsPage() {
                                                                 <Settings className="mr-2 h-4 w-4" />
                                                                 設定
                                                             </Link>
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem onClick={() => handleTogglePlan(tenant)}>
+                                                            {tenant.plan === 'pro' ? (
+                                                                <>
+                                                                    <ArrowDownCircle className="mr-2 h-4 w-4" />
+                                                                    降級為 Basic
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <ArrowUpCircle className="mr-2 h-4 w-4 text-primary" />
+                                                                    升級為 Pro
+                                                                </>
+                                                            )}
                                                         </DropdownMenuItem>
                                                         <DropdownMenuItem onClick={() => handleToggleStatus(tenant)}>
                                                             {tenant.subscription_status === 'active' ? (

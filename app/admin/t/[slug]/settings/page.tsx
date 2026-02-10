@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
 import { useTenant } from '@/hooks/use-tenant'
+import { usePermission } from '@/hooks/use-permission'
 import { updateTenantSettings } from '@/hooks/use-secure-mutations'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -71,6 +72,7 @@ import {
     Link2,
     Link2Off,
     QrCode,
+    Lock,
 } from 'lucide-react'
 
 type AssignableRole = 'admin' | 'staff' | 'viewer'
@@ -91,6 +93,7 @@ const roleIcons: Record<string, React.ReactNode> = {
 
 export default function SettingsPage() {
     const { tenant, isLoading: tenantLoading, refetch, isCrossTenantAccess } = useTenant()
+    const { canUseMyshipEmail } = usePermission()
     const [formData, setFormData] = useState<Partial<Tenant>>({})
     const [isSaving, setIsSaving] = useState(false)
     const [showToken, setShowToken] = useState(false)
@@ -768,6 +771,27 @@ export default function SettingsPage() {
                                         <span className="text-sm text-muted-foreground">Slug</span>
                                         <code className="text-xs bg-muted px-2 py-1 rounded">{tenant.slug}</code>
                                     </div>
+                                    <div className="space-y-1">
+                                        <div className="flex items-center gap-1.5">
+                                            <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+                                            <span className="text-sm text-muted-foreground">賣貨便通知信箱</span>
+                                            {!canUseMyshipEmail && (
+                                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-primary/30 text-primary">
+                                                    <Lock className="h-2.5 w-2.5 mr-0.5" />
+                                                    Pro
+                                                </Badge>
+                                            )}
+                                        </div>
+                                        <code className="text-xs bg-muted px-2 py-1 rounded block">
+                                            {tenant.slug}@plushub.cc
+                                        </code>
+                                        <p className="text-[11px] text-muted-foreground">
+                                            {canUseMyshipEmail
+                                                ? '請在賣貨便賣家中心填入此信箱，訂單狀態將自動更新'
+                                                : '升級 Pro 方案後自動啟用，訂單狀態將自動更新'
+                                            }
+                                        </p>
+                                    </div>
                                     <div className="flex items-center justify-between">
                                         <span className="text-sm text-muted-foreground">建立時間</span>
                                         <span className="text-sm">
@@ -980,29 +1004,6 @@ export default function SettingsPage() {
                                         ? '基於安全考量，已儲存的 Secret 不會顯示。如需更新請輸入新值。'
                                         : '請從 LINE Developers Console 取得 Channel Secret'}
                                 </p>
-                            </div>
-                            <Separator />
-                            <div className="space-y-2">
-                                <Label className="flex items-center gap-2">
-                                    <Mail className="h-4 w-4" />
-                                    賣貨便通知 Email
-                                </Label>
-                                <Input
-                                    type="email"
-                                    value={formData.myship_notify_email || ''}
-                                    onChange={(e) => setFormData({ ...formData, myship_notify_email: e.target.value })}
-                                    placeholder="如 store1@yourdomain.com"
-                                    className="rounded-xl"
-                                    disabled={isCrossTenantAccess}
-                                />
-                                <p className="text-xs text-muted-foreground">
-                                    設定此 Email 後，賣貨便的訂單通知會自動更新結帳單出貨狀態。請在賣貨便賣家中心填入此 Email 作為通知信箱。
-                                </p>
-                                {formData.myship_notify_email && (
-                                    <Badge variant="outline" className="text-xs">
-                                        {formData.myship_notify_email}
-                                    </Badge>
-                                )}
                             </div>
                             <div className="pt-4">
                                 <Button

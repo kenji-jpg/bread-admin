@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { useTenant } from '@/hooks/use-tenant'
+import { usePermission } from '@/hooks/use-permission'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -39,8 +40,10 @@ import {
     ShoppingCart,
     Shield,
     ExternalLink,
+    Lock,
 } from 'lucide-react'
 import Image from 'next/image'
+import Link from 'next/link'
 
 // 壓縮圖片
 async function compressImage(file: File, maxWidth = 1200, quality = 0.85): Promise<Blob> {
@@ -107,6 +110,7 @@ const ACCENT_COLORS = [
 
 export default function ShopManagePage() {
     const { tenant, isLoading: tenantLoading } = useTenant()
+    const { canAccessShop } = usePermission()
     const supabaseRef = useRef(createClient())
     const supabase = supabaseRef.current
 
@@ -310,6 +314,30 @@ export default function ShopManagePage() {
 
     // Get display banner URL
     const displayBannerUrl = bannerPreview || settings.banner_url
+
+    // Plan guard: Basic 方案不可存取商城
+    if (!tenantLoading && !canAccessShop) {
+        return (
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4"
+            >
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 mb-4">
+                    <Lock className="h-8 w-8 text-primary" />
+                </div>
+                <h2 className="text-xl font-bold mb-2">商城功能為 Pro 方案專屬</h2>
+                <p className="text-muted-foreground mb-6 max-w-md">
+                    升級至 Pro 方案即可使用 LIFF 商城、自訂外觀、分類管理等功能。請聯繫平台管理員升級方案。
+                </p>
+                <Link href={`/admin/t/${tenant?.slug}`}>
+                    <Button variant="outline" className="rounded-xl">
+                        返回儀表板
+                    </Button>
+                </Link>
+            </motion.div>
+        )
+    }
 
     if (tenantLoading || isLoading) {
         return (

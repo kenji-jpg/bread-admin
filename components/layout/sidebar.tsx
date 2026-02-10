@@ -9,6 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { useTenant } from '@/hooks/use-tenant'
 import { useAuth } from '@/hooks/use-auth'
 import { useSidebar } from '@/hooks/use-sidebar'
+import { usePermission } from '@/hooks/use-permission'
 import { Badge } from '@/components/ui/badge'
 import {
     LayoutDashboard,
@@ -22,12 +23,14 @@ import {
     ChevronRight,
     AlertTriangle,
     ShoppingBag,
+    Lock,
 } from 'lucide-react'
 
 interface NavItem {
     title: string
     href: string
     icon: React.ReactNode
+    locked?: boolean  // Pro 專屬功能鎖定
 }
 
 export function Sidebar() {
@@ -35,6 +38,7 @@ export function Sidebar() {
     const pathname = usePathname()
     const { tenant, actualIsActive, isSuperAdminUser } = useTenant()
     const { isSuperAdmin } = useAuth()
+    const { canAccessShop } = usePermission()
 
     const tenantSlug = tenant?.slug
     // 顯示已停用標籤：超管存取已停用的租戶時
@@ -51,6 +55,7 @@ export function Sidebar() {
                 title: '商城',
                 href: `/admin/t/${tenantSlug}/shop`,
                 icon: <ShoppingBag className="h-5 w-5" />,
+                locked: !canAccessShop,
             },
             {
                 title: '商品管理',
@@ -204,6 +209,7 @@ export function Sidebar() {
                                     item={item}
                                     isActive={isActive(item.href)}
                                     collapsed={collapsed}
+                                    locked={item.locked}
                                 />
                             ))}
                         </div>
@@ -218,9 +224,52 @@ interface NavLinkProps {
     item: NavItem
     isActive: boolean
     collapsed: boolean
+    locked?: boolean
 }
 
-function NavLink({ item, isActive, collapsed }: NavLinkProps) {
+function NavLink({ item, isActive, collapsed, locked }: NavLinkProps) {
+    // 鎖定的選單項目：不可點擊，灰色顯示
+    if (locked) {
+        return (
+            <div
+                className={cn(
+                    'flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all duration-200',
+                    'opacity-50 cursor-not-allowed',
+                    collapsed && 'justify-center px-2'
+                )}
+                title="此功能為 Pro 方案專屬"
+            >
+                <span className="flex-shrink-0 text-muted-foreground">
+                    {item.icon}
+                </span>
+                <AnimatePresence mode="wait">
+                    {!collapsed && (
+                        <motion.span
+                            initial={{ opacity: 0, width: 0 }}
+                            animate={{ opacity: 1, width: 'auto' }}
+                            exit={{ opacity: 0, width: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="text-sm font-medium truncate text-muted-foreground"
+                        >
+                            {item.title}
+                        </motion.span>
+                    )}
+                </AnimatePresence>
+                {!collapsed && (
+                    <Badge variant="outline" className="ml-auto text-[10px] px-1.5 py-0 h-5 border-primary/30 text-primary">
+                        <Lock className="h-2.5 w-2.5 mr-0.5" />
+                        Pro
+                    </Badge>
+                )}
+                {collapsed && (
+                    <div className="absolute -top-1 -right-1">
+                        <Lock className="h-2.5 w-2.5 text-primary" />
+                    </div>
+                )}
+            </div>
+        )
+    }
+
     return (
         <Link href={item.href}>
             <motion.div

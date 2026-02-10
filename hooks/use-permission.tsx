@@ -24,6 +24,11 @@ interface Permissions {
     canManageSettings: boolean      // 店家設定
     canManageAdmins: boolean        // 管理員管理
     canDeleteTenant: boolean        // 刪除店家
+
+    // 方案權限（Pro 專屬）
+    canAccessShop: boolean          // 商城功能
+    canUseMyshipEmail: boolean      // 賣貨便自動狀態更新
+    canUseChromeExtension: boolean  // Chrome 插件（預留）
 }
 
 export function usePermission(): Permissions {
@@ -62,6 +67,9 @@ export function usePermission(): Permissions {
                 canManageSettings: true,
                 canManageAdmins: true,
                 canDeleteTenant: true,
+                canAccessShop: true,
+                canUseMyshipEmail: true,
+                canUseChromeExtension: true,
             }
         }
 
@@ -70,6 +78,9 @@ export function usePermission(): Permissions {
         const isAdmin = role === 'owner' || role === 'admin'
         const isStaff = role === 'owner' || role === 'admin' || role === 'staff'
         const isViewer = role !== null
+
+        // 方案檢查
+        const isPro = activeTenant?.plan === 'pro'
 
         return {
             role,
@@ -88,6 +99,11 @@ export function usePermission(): Permissions {
             canManageSettings: isOwner,           // owner only
             canManageAdmins: isOwner,             // owner only
             canDeleteTenant: isOwner,             // owner only
+
+            // 方案權限（Pro 專屬）
+            canAccessShop: isPro,
+            canUseMyshipEmail: isPro,
+            canUseChromeExtension: isPro,
         }
     }, [tenants, currentTenant, tenant, tenantUserRole, isSuperAdmin])
 
