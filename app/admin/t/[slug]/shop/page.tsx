@@ -292,10 +292,10 @@ export default function ShopManagePage() {
         ))
     }
 
-    // Copy LIFF URL
+    // Copy LIFF URL（優先使用租戶專屬 LIFF ID）
     const copyLiffUrl = () => {
         if (!tenant?.slug) return
-        const liffId = process.env.NEXT_PUBLIC_LIFF_ID || ''
+        const liffId = tenant.liff_id || process.env.NEXT_PUBLIC_LIFF_ID || ''
         const url = liffId
             ? `https://liff.line.me/${liffId}/s/shop/${tenant.slug}`
             : `${window.location.origin}/s/shop/${tenant.slug}`

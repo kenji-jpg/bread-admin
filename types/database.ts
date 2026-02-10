@@ -71,6 +71,8 @@ export interface Tenant {
   user_role?: 'owner' | 'admin' | 'staff' | 'viewer' | 'super_admin'
   // 賣貨便通知 email（Cloudflare Email Routing 用）
   myship_notify_email?: string | null
+  // 租戶專屬 LIFF ID（用於產生獨立的商城連結）
+  liff_id?: string | null
 }
 
 export interface Product {

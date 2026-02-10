@@ -28,19 +28,21 @@ const LIFF_ID = process.env.NEXT_PUBLIC_LIFF_ID || ''
  * 從 LINE 社群打開 LIFF URL → 自動授權，零跳轉
  * 從外部瀏覽器打開 → 會跳轉一次到 LINE Login
  */
-export function getLiffShareUrl(path: string): string {
-  if (!LIFF_ID) return path
+export function getLiffShareUrl(path: string, customLiffId?: string): string {
+  const liffId = customLiffId || LIFF_ID
+  if (!liffId) return path
   // path 例如 /s/abc123 → https://liff.line.me/{liffId}/s/abc123
   const cleanPath = path.startsWith('/') ? path : `/${path}`
-  return `https://liff.line.me/${LIFF_ID}${cleanPath}`
+  return `https://liff.line.me/${liffId}${cleanPath}`
 }
 
 /**
  * 產生商城 LIFF 分享連結
  * 例如 → https://liff.line.me/{LIFF_ID}/s/shop/{tenantSlug}
+ * 可傳入 customLiffId 使用租戶專屬的 LIFF ID
  */
-export function getShopShareUrl(tenantSlug: string): string {
-  return getLiffShareUrl(`/s/shop/${tenantSlug}`)
+export function getShopShareUrl(tenantSlug: string, customLiffId?: string): string {
+  return getLiffShareUrl(`/s/shop/${tenantSlug}`, customLiffId)
 }
 
 interface LiffProviderProps {

@@ -39,7 +39,7 @@
 | payment_info | text | | | |
 | paid_at | timestamptz | | | |
 | shipping_method | text | | myship | |
-| shipping_status | text | | pending | 出貨狀態：pending/ready/exported/shipped |
+| shipping_status | text | | pending | 出貨狀態：pending/url_sent/ordered/shipped/completed |
 | shipping_fee | integer | | | 運費金額，賣貨便預設 60 元 |
 | shipping_address | text | | | |
 | shipping_details | jsonb | | | 物流詳細資訊 JSONB |
@@ -176,16 +176,18 @@ LINE 群組對應表
 | tenant_id | uuid | | | FK → tenants.id |
 | name | text | ✓ | | |
 | sku | text | ✓ | | |
-| price | integer | ✓ | | |
+| price | integer | ✓ | 0 | |
 | cost | integer | | | |
-| stock | integer | ✓ | | 當前可出貨庫存（可為負數，負數代表預購欠貨）|
-| sold_qty | integer | | | |
-| is_limited | boolean | | | 是否限量銷售 |
+| stock | integer | ✓ | 0 | 當前可出貨庫存（可為負數，負數代表預購欠貨）|
+| sold_qty | integer | | 0 | |
+| is_limited | boolean | | false | 是否限量銷售 |
 | limit_qty | integer | | | 限量總數 |
 | status | text | | active | |
 | category | text | | | |
 | description | text | | | |
 | image_url | text | | | |
+| show_in_shop | boolean | ✓ | false | 是否顯示在 LIFF 商城（Pro 功能） |
+| session_id | uuid | | | FK → purchase_sessions.id（已棄用） |
 | end_time | timestamptz | | | |
 | arrived_at | timestamptz | | | |
 | created_at | timestamptz | | now() | |
@@ -254,6 +256,26 @@ LINE 群組對應表
 
 ---
 
+### tenant_create_requests
+租戶建立申請表
+| 欄位 | 類型 | 必填 | 預設值 | 說明 |
+|------|------|------|--------|------|
+| id | uuid | ✓ | gen_random_uuid() | 主鍵 |
+| requester_user_id | uuid | ✓ | | FK → auth.users.id |
+| tenant_name | text | ✓ | | 申請的店家名稱 |
+| tenant_slug | text | ✓ | | 申請的網址代號 |
+| plan_code | text | ✓ | basic | 方案：basic \| pro |
+| message | text | | | 申請留言 |
+| status | text | ✓ | pending | pending/approved/rejected |
+| reviewed_by | uuid | | | 審核者 FK → auth.users.id |
+| reviewed_at | timestamptz | | | |
+| reject_reason | text | | | 拒絕原因 |
+| created_tenant_id | uuid | | | 核准後建立的租戶 FK → tenants.id |
+| created_at | timestamptz | | now() | |
+| updated_at | timestamptz | | now() | |
+
+---
+
 ### tenant_join_requests
 租戶加入申請表
 | 欄位 | 類型 | 必填 | 預設值 | 說明 |
@@ -300,7 +322,8 @@ LINE 群組對應表
 | owner_email | text | | | |
 | shop_description | text | | | |
 | is_active | boolean | ✓ | true | |
-| plan_id | uuid | | | FK → subscription_plans.id |
+| plan | text | ✓ | basic | 方案：basic \| pro（CHECK constraint） |
+| plan_id | uuid | | | FK → subscription_plans.id（舊欄位） |
 | plan_expires_at | timestamptz | | | |
 | subscription_status | text | | active | |
 | subscription_expires_at | timestamptz | | | |
@@ -310,11 +333,12 @@ LINE 群組對應表
 | line_channel_access_token | text | | | |
 | admin_line_ids | text[] | | | |
 | default_shipping_method | text | | myship | 預設結帳模式: myship \| delivery \| pickup |
-| payment_info | jsonb | | | |
-| settings | jsonb | | | |
+| myship_notify_email | text | | | 賣貨便通知信箱（如 bread-lady@plushub.cc） |
+| payment_info | jsonb | | {} | |
+| settings | jsonb | | {} | |
 | business_hours | jsonb | | | |
-| monthly_orders | integer | | | |
-| monthly_messages | integer | | | |
+| monthly_orders | integer | | 0 | |
+| monthly_messages | integer | | 0 | |
 | created_at | timestamptz | | now() | |
 | updated_at | timestamptz | | now() | |
 
@@ -538,6 +562,34 @@ p_store_name*: string
 標記結帳單已匯出
 ```
 p_checkout_ids*: array
+```
+
+#### process_myship_order_email
+處理賣貨便訂單成立通知 email（Cloudflare Worker 呼叫）
+```
+p_store_name*: text       -- 賣場名稱（比對 myship_store_name）
+p_myship_order_no*: text  -- CM 訂單編號
+p_recipient_email: text   -- 收件 email（反查 tenant）
+```
+狀態變更：`url_sent` → `ordered`
+
+#### process_myship_completed_email
+處理賣貨便買家取貨通知 email（Cloudflare Worker 呼叫）
+```
+p_myship_order_no*: text  -- CM 訂單編號
+p_recipient_email: text   -- 收件 email（反查 tenant）
+```
+狀態變更：`ordered`/`shipped` → `completed`，同時確認付款
+
+---
+
+### 方案管理
+
+#### update_tenant_plan_v1
+超管升降級租戶方案
+```
+p_tenant_id*: uuid
+p_new_plan*: text   -- 'basic' 或 'pro'
 ```
 
 ---

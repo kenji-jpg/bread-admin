@@ -1,7 +1,7 @@
 # 🗄️ Supabase RPC 函數 API 文檔
 
-> **最後更新：** 2026-02-02
-> **版本：** v3.0（完整版）
+> **最後更新：** 2026-02-11
+> **版本：** v3.1（含方案系統 + 賣貨便 Email 自動化）
 
 ---
 
@@ -100,12 +100,21 @@ const { data } = await supabase.rpc('get_tenant_by_slug_v1', { p_slug: 'my-shop'
 
 | 用途 | 函數 | 參數 |
 |------|------|------|
-| 設定賣貨便連結 | `update_myship_store_url(p_tenant_id, p_checkout_id, p_store_url)` | tenant_id, checkout_id, store_url |
+| Chrome 插件設定連結 | `set_myship_url_v1(p_tenant_id, p_checkout_id, p_store_url, p_myship_store_name)` | tenant_id, checkout_id, store_url, store_name |
+| 設定賣貨便連結（舊） | `update_myship_store_url(p_tenant_id, p_checkout_id, p_store_url)` | tenant_id, checkout_id, store_url |
 | 確認客人下單 | `update_myship_order_confirmed(p_tenant_id, p_checkout_id, p_myship_order_no)` | tenant_id, checkout_id, order_no |
 | 標記已寄出 | `update_myship_shipped(p_tenant_id, p_checkout_id)` | tenant_id, checkout_id |
 | 標記已完成 | `update_myship_completed(p_tenant_id, p_checkout_id)` | tenant_id, checkout_id |
 | 匯出資料 | `get_myship_export_data()` | 無 |
 | 標記已匯出 | `mark_checkouts_exported(p_checkout_ids[])` | checkout_ids[] |
+| 📧 Email 訂單成立 | `process_myship_order_email(p_store_name, p_myship_order_no, p_recipient_email)` | store_name, order_no, email |
+| 📧 Email 買家取貨 | `process_myship_completed_email(p_myship_order_no, p_recipient_email)` | order_no, email |
+
+### 🔧 方案管理
+
+| 用途 | 函數 | 參數 |
+|------|------|------|
+| 升降級租戶方案 | `update_tenant_plan_v1(p_tenant_id, p_new_plan)` | tenant_id, plan (basic/pro) |
 
 ### 🏷️ 競標訂單
 
@@ -756,6 +765,87 @@ const { data, error } = await supabase.rpc('get_myship_export_data')
 ```typescript
 const { data, error } = await supabase.rpc('mark_checkouts_exported', {
   p_checkout_ids: ['uuid1', 'uuid2', 'uuid3']
+})
+```
+
+---
+
+#### set_myship_url_v1
+Chrome 插件設定賣貨便連結（含賣場名稱）
+
+```typescript
+const { data, error } = await supabase.rpc('set_myship_url_v1', {
+  p_tenant_id: 'uuid',
+  p_checkout_id: 'uuid',
+  p_store_url: 'https://myship.7-11.com.tw/...',
+  p_myship_store_name: '260206-3869_亮菁菁'  // 選填，用於 email 自動比對
+})
+```
+
+狀態變更：`pending` → `url_sent`
+
+---
+
+#### process_myship_order_email
+處理賣貨便「訂單成立通知」email（由 Cloudflare Worker 呼叫，service_role 權限）
+
+```typescript
+// Worker 呼叫方式（fetch API + service_role key）
+const result = await fetch(`${SUPABASE_URL}/rest/v1/rpc/process_myship_order_email`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'apikey': SERVICE_ROLE_KEY,
+    'Authorization': `Bearer ${SERVICE_ROLE_KEY}`,
+  },
+  body: JSON.stringify({
+    p_store_name: '260206-3869_亮菁菁',      // 賣場名稱，比對 myship_store_name
+    p_myship_order_no: 'CM2602101607192',    // CM 訂單編號
+    p_recipient_email: 'bread-lady@plushub.cc' // 收件 email，反查 tenant
+  })
+})
+```
+
+狀態變更：`url_sent` → `ordered`（同時記錄 myship_order_no）
+
+**回傳範例：**
+```json
+{ "success": true, "checkout_id": "uuid", "checkout_no": "CO-xxx", "tenant_id": "uuid" }
+```
+
+---
+
+#### process_myship_completed_email
+處理賣貨便「買家完成取貨」email（由 Cloudflare Worker 呼叫，service_role 權限）
+
+```typescript
+const result = await fetch(`${SUPABASE_URL}/rest/v1/rpc/process_myship_completed_email`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'apikey': SERVICE_ROLE_KEY,
+    'Authorization': `Bearer ${SERVICE_ROLE_KEY}`,
+  },
+  body: JSON.stringify({
+    p_myship_order_no: 'CM2602101607192',      // CM 訂單編號
+    p_recipient_email: 'bread-lady@plushub.cc'  // 收件 email
+  })
+})
+```
+
+狀態變更：`ordered`/`shipped` → `completed`（同時設定 payment_status = confirmed）
+
+---
+
+### 🔧 方案管理
+
+#### update_tenant_plan_v1
+超管升降級租戶方案
+
+```typescript
+const { data, error } = await supabase.rpc('update_tenant_plan_v1', {
+  p_tenant_id: 'uuid',
+  p_new_plan: 'pro'  // 'basic' 或 'pro'
 })
 ```
 

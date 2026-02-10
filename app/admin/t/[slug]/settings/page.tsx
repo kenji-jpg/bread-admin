@@ -93,7 +93,7 @@ const roleIcons: Record<string, React.ReactNode> = {
 
 export default function SettingsPage() {
     const { tenant, isLoading: tenantLoading, refetch, isCrossTenantAccess } = useTenant()
-    const { canUseMyshipEmail } = usePermission()
+    const { canUseMyshipEmail, canAccessShop } = usePermission()
     const [formData, setFormData] = useState<Partial<Tenant>>({})
     const [isSaving, setIsSaving] = useState(false)
     const [showToken, setShowToken] = useState(false)
@@ -144,6 +144,7 @@ export default function SettingsPage() {
                 line_channel_token: '',
                 line_channel_secret: '',
                 line_oa_id: tenant.line_oa_id,
+                liff_id: tenant.liff_id || '',
                 admin_line_ids: adminLineIds as string[],
                 myship_notify_email: tenant.myship_notify_email || '',
             })
@@ -324,6 +325,7 @@ export default function SettingsPage() {
                 business_hours: formData.business_hours as { start: string; end: string } | null,
                 payment_info: isMasked(formData.payment_info) ? undefined : formData.payment_info,
                 line_oa_id: formData.line_oa_id,
+                liff_id: formData.liff_id || null,
                 admin_line_ids: isMasked(formData.admin_line_ids) ? undefined : formData.admin_line_ids,
                 myship_notify_email: formData.myship_notify_email || null,
             }
@@ -929,6 +931,29 @@ export default function SettingsPage() {
                                         className="rounded-xl"
                                         disabled={isCrossTenantAccess}
                                     />
+                                </div>
+                                <div className="space-y-2">
+                                    <div className="flex items-center gap-1.5">
+                                        <Label>LIFF ID</Label>
+                                        {!canAccessShop && (
+                                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-primary/30 text-primary">
+                                                <Lock className="h-2.5 w-2.5 mr-0.5" />
+                                                Pro
+                                            </Badge>
+                                        )}
+                                    </div>
+                                    <Input
+                                        value={formData.liff_id || ''}
+                                        onChange={(e) => setFormData({ ...formData, liff_id: e.target.value })}
+                                        placeholder={canAccessShop ? '請輸入 LIFF ID（如 1234567890-xxxxxxxx）' : '升級 Pro 方案後可設定'}
+                                        className="rounded-xl"
+                                        disabled={isCrossTenantAccess || !canAccessShop}
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                        {canAccessShop
+                                            ? '設定後商城分享連結將使用此 LIFF ID，實現 LINE userId 隔離'
+                                            : '升級 Pro 方案後可設定專屬 LIFF ID'}
+                                    </p>
                                 </div>
                             </div>
                             <div className="space-y-2">

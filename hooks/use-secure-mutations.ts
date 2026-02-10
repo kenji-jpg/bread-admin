@@ -63,6 +63,7 @@ export interface TenantSettingsData {
   line_oa_id?: string | null
   admin_line_ids?: string[] | null
   myship_notify_email?: string | null
+  liff_id?: string | null
 }
 
 // ============================

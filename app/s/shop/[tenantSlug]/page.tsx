@@ -95,6 +95,7 @@ interface Tenant {
   id: string
   name: string
   slug: string
+  liff_id?: string | null
 }
 
 interface ShopSettings {

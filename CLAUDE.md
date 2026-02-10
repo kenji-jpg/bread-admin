@@ -12,7 +12,8 @@
 - **表單**: React Hook Form + Zod 驗證
 - **部署**: Vercel (專案: bread-admin-6k1p)
 - **域名**: `plushub.cc`（www.plushub.cc）
-- **自動化**: n8n (mrsanpanman.zeabur.app)
+- **Email**: Cloudflare Email Routing（`*@plushub.cc` → Worker / Gmail 轉發）
+- **自動化**: n8n (mrsanpanman.zeabur.app) + Cloudflare Workers（賣貨便 email 自動化）
 - **語言**: 繁體中文 (zh-TW)
 
 ## 常用指令
@@ -73,6 +74,11 @@ lib/supabase/
 ├── server.ts    # 伺服器端 Supabase client
 types/
 └── database.ts  # 完整資料庫型別定義
+workers/
+└── myship-email/ # Cloudflare Worker（賣貨便 email 自動化）
+    ├── src/index.ts    # Worker 主程式
+    ├── wrangler.toml   # Cloudflare 部署設定
+    └── package.json
 ```
 
 ## 資料庫架構（Supabase）
@@ -83,10 +89,10 @@ Supabase 專案 ID: `kashgsxlrdyuirijocld`
 
 | 資料表 | 用途 | 備註 |
 |--------|------|------|
-| tenants | 店家（多租戶） | `settings` JSONB 含 shop 設定 |
+| tenants | 店家（多租戶） | `settings` JSONB 含 shop 設定，`plan` 欄位控制方案（basic/pro），`myship_notify_email` 賣貨便通知信箱 |
 | tenant_users | 店家管理員（角色綁定） | |
 | members | LINE 會員（顧客） | |
-| products | 商品 | `show_in_shop` 控制商城顯示 |
+| products | 商品 | `show_in_shop` 控制商城顯示（Pro 功能） |
 | product_variants | 商品規格 | 尚未使用 |
 | order_items | 訂單品項 | |
 | checkouts | 結帳單 | |
@@ -179,6 +185,13 @@ Supabase 專案 ID: `kashgsxlrdyuirijocld`
 - `check_staff_by_line_id_v1` — LIFF 判斷是否為 staff
 - `restock_session_product_v1` — LIFF staff 補貨
 
+**賣貨便 Email 自動化**（Cloudflare Worker 呼叫，service_role 權限）
+- `process_myship_order_email` — 訂單成立通知：用賣場名稱比對結帳單，記錄 CM 訂單編號，狀態 `url_sent` → `ordered`
+- `process_myship_completed_email` — 買家取貨通知：用 CM 訂單編號比對結帳單，狀態 `ordered`/`shipped` → `completed`
+
+**方案管理**
+- `update_tenant_plan_v1` — 超管升降級租戶方案（basic/pro）
+
 ### RLS 重要規則
 
 - `products_select` 允許匿名讀取：`session_id IS NOT NULL AND status = 'active'` 或 `show_in_shop = true AND status = 'active'`
@@ -187,6 +200,18 @@ Supabase 專案 ID: `kashgsxlrdyuirijocld`
 ### Edge Functions
 - `line-webhook` — 接收 LINE Bot 訊息，處理下單、查詢等
 - `notify-myship-url` — 發送賣貨便取貨通知給客戶
+
+### Cloudflare Workers
+- `myship-email-worker` — 接收賣貨便 email 通知（`no-reply@sp88.com`），自動更新結帳單出貨狀態
+  - 部署 URL: `https://myship-email-worker.l0953578860.workers.dev`
+  - 觸發方式: Cloudflare Email Routing（`*@plushub.cc` catch-all → Worker）
+  - 環境變數: `SUPABASE_URL`（vars）、`SUPABASE_SERVICE_ROLE_KEY`（secret）
+  - 代碼位置: `workers/myship-email/src/index.ts`
+
+### Cloudflare Email Routing（plushub.cc）
+- `admin@plushub.cc` → 轉發到管理員 Gmail
+- `*@plushub.cc`（catch-all） → `myship-email-worker`（處理賣貨便通知）
+- 各租戶的 `myship_notify_email`（如 `bread-lady@plushub.cc`）用於接收賣貨便通知
 
 ## LIFF 商城架構
 
@@ -209,7 +234,7 @@ Supabase 專案 ID: `kashgsxlrdyuirijocld`
 ## 權限系統（RBAC）
 
 ```
-super_admin  → 全平台存取，審核租戶申請
+super_admin  → 全平台存取，審核租戶申請，方案升降級
 owner        → 店家設定、團隊管理、刪除租戶
 admin        → 會員管理、資料匯出
 staff        → 商品、訂單、結帳、匯入操作
@@ -220,6 +245,19 @@ viewer       → 唯讀存取
 - super_admin 跨租戶存取時，敏感欄位會被 mask（付款資訊、LINE 金鑰）
 - 後台 RPC 使用 `auth.uid()` 驗證，LIFF 端使用 `p_line_user_id` 驗證
 
+## 方案系統（Plan Gating）
+
+| 方案 | 代碼 | 功能 |
+|------|------|------|
+| 基本版 | `basic` | 商品、訂單、結帳、會員管理（核心功能） |
+| 專業版 | `pro` | 基本版 + LIFF 商城、賣貨便 Email 自動化、Chrome 插件 |
+
+- `tenants.plan` 欄位：`'basic'`（預設）或 `'pro'`
+- 前端判斷：`hooks/use-permission.tsx` 的 `canAccessShop`、`canUseMyshipEmail`、`canUseChromeExtension`
+- `isPro = activeTenant?.plan === 'pro'`，super_admin 始終擁有所有權限
+- 後台 sidebar 對 Basic 租戶鎖定 Pro 功能頁面，顯示🔒 + Pro Badge
+- 升降級：超管透過 `update_tenant_plan_v1` RPC 操作
+
 ## 出貨方式
 
 | 代碼 | 說明 |
@@ -227,6 +265,20 @@ viewer       → 唯讀存取
 | myship | 7-11 賣貨便（預設，運費 60 元） |
 | delivery | 宅配 |
 | pickup | 自取 |
+
+### 賣貨便出貨流程（shipping_status）
+
+```
+pending → url_sent → ordered → shipped → completed
+```
+
+| 狀態 | 觸發方式 | 說明 |
+|------|----------|------|
+| `pending` | 結帳單建立時 | 待處理 |
+| `url_sent` | Chrome 插件開賣場 | 已設定 `store_url` + `myship_store_name`，自動通知客人 |
+| `ordered` | 賣貨便 Email（訂單成立通知） | Worker 自動處理，記錄 `myship_order_no`（CM 開頭） |
+| `shipped` | 手動標記 | 賣場已寄出 |
+| `completed` | 賣貨便 Email（買家取貨通知） | Worker 自動處理，同時確認付款 |
 
 ## 開發慣例
 
@@ -267,8 +319,16 @@ viewer       → 唯讀存取
 - `notifications` 表尚未使用
 - `is_shipped`（checkouts）已棄用，改用 `shipping_status`
 
+## 已完成功能
+
+- **【完成】方案系統（Basic/Pro）**：`tenants.plan` 欄位、前端 permission hook、sidebar 鎖定、超管升降級 RPC
+- **【完成】賣貨便 Email 自動化**：Cloudflare Worker + Email Routing，自動處理訂單成立 / 買家取貨通知
+- **【完成】租戶建立審核機制**：`tenant_create_requests` 表 + 審核 RPC + 超管審核頁面
+- **【完成】Cloudflare Email Routing**：`admin@plushub.cc` → Gmail 轉發，`*@plushub.cc` catch-all → Worker
+
 ## 參考文件
 
 - `docs/supabase-schema.md` — 資料庫 schema 文件
-- `docs/supabase_functions_api_doc.md` — RPC 函數完整文件（v3.0）
-- `docs/backend_ticket_tenant_review.md` — 租戶審核工作流文件
+- `docs/supabase_functions_api_doc.md` — RPC 函數完整文件（v3.1）
+- `docs/backend_ticket_tenant_review.md` — 租戶審核工作流文件（已完成）
+- `workers/myship-email/` — Cloudflare Worker 原始碼（賣貨便 email 自動化）

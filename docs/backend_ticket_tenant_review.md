@@ -1,8 +1,8 @@
 # 🎫 後端工單：租戶建立審核機制
 
 > **建立日期：** 2026-02-05
-> **優先級：** 高
-> **前端狀態：** 等待後端完成後開始實作審核頁面
+> **完成日期：** 2026-02-11
+> **狀態：** ✅ 已完成（前後端均已實作）
 
 ---
 
@@ -462,37 +462,42 @@ GRANT EXECUTE ON FUNCTION get_my_create_request() TO authenticated;
 
 ## ✅ 驗收清單
 
-- [ ] Part 1：方案修改
-  - [ ] tenants.plan 預設值改為 'basic'
-  - [ ] 現有 free 資料更新為 basic
-  - [ ] register_tenant_with_plan 預設值確認
+- [x] Part 1：方案修改
+  - [x] tenants.plan 預設值改為 'basic'
+  - [x] 現有 free 資料更新為 basic
+  - [x] register_tenant_with_plan 預設值確認
+  - [x] tenants.plan 欄位新增 CHECK constraint (basic/pro)
 
-- [ ] Part 2：審核機制
-  - [ ] tenant_create_requests 表建立
-  - [ ] RLS 政策設定
-  - [ ] request_create_tenant 函數
-  - [ ] get_pending_create_requests 函數
-  - [ ] review_create_request 函數
-  - [ ] get_my_create_request 函數
+- [x] Part 2：審核機制
+  - [x] tenant_create_requests 表建立
+  - [x] RLS 政策設定
+  - [x] request_create_tenant 函數
+  - [x] get_pending_create_requests 函數
+  - [x] review_create_request 函數
+  - [x] get_my_create_request 函數
 
-- [ ] 測試
-  - [ ] 用戶提交申請
-  - [ ] 重複申請被阻擋
-  - [ ] 超管查看申請列表
-  - [ ] 核准申請 → 租戶建立成功
-  - [ ] 拒絕申請 → 記錄拒絕原因
+- [x] 測試
+  - [x] 用戶提交申請
+  - [x] 重複申請被阻擋
+  - [x] 超管查看申請列表
+  - [x] 核准申請 → 租戶建立成功
+  - [x] 拒絕申請 → 記錄拒絕原因
 
 ---
 
 ## 💬 備註
 
-前端已完成以下修改：
-- `/app/create-tenant/new/page.tsx`：移除方案選擇 UI
+### 已完成的前端修改：
+- `/app/create-tenant/new/page.tsx`：移除方案選擇 UI，改呼叫 `request_create_tenant`
 - `/app/admin/tenants/new/page.tsx`：free → basic
-- `/app/admin/tenants/page.tsx`：getPlanBadge default 改 Basic
+- `/app/admin/tenants/page.tsx`：getPlanBadge default 改 Basic，新增審核頁面入口
 - `/app/admin/t/[slug]/settings/page.tsx`：getPlanBadge default 改 Basic
 - `/types/database.ts`：移除 'free' 類型
+- 超管審核頁面 `/admin/tenants`：已整合申請審核功能
 
-前端等待後端完成後，將實作：
-- 修改申請頁面改為呼叫 `request_create_tenant`
-- 新增超管審核頁面 `/admin/tenants/requests`
+### 額外完成的相關功能：
+- Plan Gating 系統（Basic/Pro 方案功能限制）
+- `update_tenant_plan_v1` RPC（超管升降級方案）
+- `hooks/use-permission.tsx`：`canAccessShop`、`canUseMyshipEmail`、`canUseChromeExtension`
+- Sidebar Pro 功能鎖定 + Badge 顯示
+- `get_dashboard_init_v1` RPC 回傳 `plan` 欄位
