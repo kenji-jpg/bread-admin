@@ -16,71 +16,118 @@ const LoadingSkeleton = () => (
 )
 
 /**
+ * 從 URL 字串中提取 /s/ 開頭的路徑
+ * 支援完整 URL 和純路徑
+ */
+function extractPathFromUrl(urlStr: string): string | null {
+  // 嘗試 decode（處理 double encode 的情況）
+  let decoded = urlStr
+  try {
+    // 如果是 encode 過的，decode 一次
+    if (decoded.includes('%')) {
+      decoded = decodeURIComponent(decoded)
+    }
+    // 如果還是 encode 的（double encode），再 decode
+    if (decoded.includes('%')) {
+      decoded = decodeURIComponent(decoded)
+    }
+  } catch {
+    // decode 失敗就用原值
+  }
+
+  // 嘗試作為完整 URL 解析
+  try {
+    const url = new URL(decoded)
+    if (url.pathname.startsWith('/s/')) {
+      return url.pathname
+    }
+  } catch {
+    // 不是完整 URL
+  }
+
+  // 嘗試直接作為路徑
+  if (decoded.startsWith('/s/')) {
+    return decoded
+  }
+
+  return null
+}
+
+/**
  * LIFF 回調中繼頁面
- *
- * 當 LIFF Endpoint URL 設為 .../s 時，LINE Login 完成後會 redirect 到：
- *   /s?liff.state=%2Fs%2F{sessionId}
- *
- * 這個頁面讀取 liff.state 參數，提取真正的路徑，然後 redirect 過去。
  *
  * Fallback 順序：
  * 1. liff.state 參數（LINE 內瀏覽器）
  * 2. sessionStorage 存的路徑（外部瀏覽器 OAuth 回來）
  * 3. liffRedirectUri 參數中解析路徑（外部瀏覽器 fallback）
- * 4. 3 秒後顯示錯誤訊息（全部失敗時）
+ * 4. 從完整 URL 字串中暴力搜尋 /s/ 路徑
+ * 5. 3 秒後顯示錯誤訊息
  */
 function LiffRedirectHandler() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const [showError, setShowError] = useState(false)
 
-  // 在 render 時立即快照 URL 參數
-  // 因為 liff.init() 可能會用 replaceState 清除 URL 中的 code/state 等參數
-  const [initialParams] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return new URLSearchParams(window.location.search)
-    }
-    return new URLSearchParams()
-  })
-
   useEffect(() => {
-    const rawParams = initialParams
+    // 直接用 window.location 讀原始 URL（不依賴 React state）
+    // 因為 liff.init() 可能在任何時候用 replaceState 清掉參數
+    const fullUrl = window.location.href
+    const rawSearch = window.location.search
+    const rawParams = new URLSearchParams(rawSearch)
 
-    // === 1. liff.state 參數（LINE 內瀏覽器 / LIFF to LIFF redirect）===
-    const liffState = searchParams.get('liff.state') || rawParams.get('liff.state')
+    console.log('[LiffRedirect] fullUrl:', fullUrl)
+    console.log('[LiffRedirect] rawSearch:', rawSearch)
+
+    // === 1. liff.state 參數 ===
+    const liffState = rawParams.get('liff.state') || searchParams.get('liff.state')
     if (liffState) {
       const targetPath = decodeURIComponent(liffState)
+      console.log('[LiffRedirect] Found liff.state:', targetPath)
       sessionStorage.removeItem('liff_return_path')
       router.replace(targetPath)
       return
     }
 
-    // === 2. sessionStorage 存的路徑（外部瀏覽器 OAuth 回來）===
+    // === 2. sessionStorage ===
     const savedPath = sessionStorage.getItem('liff_return_path')
     if (savedPath) {
+      console.log('[LiffRedirect] Found sessionStorage:', savedPath)
       sessionStorage.removeItem('liff_return_path')
       router.replace(savedPath)
       return
     }
 
-    // === 3. 從 liffRedirectUri 解析路徑 ===
-    // 外部瀏覽器 OAuth 回來時 URL 通常是：
-    // /s?code=xxx&liffRedirectUri=https://domain.com/s/shop/bread-shop
-    const liffRedirectUri = searchParams.get('liffRedirectUri') || rawParams.get('liffRedirectUri')
+    // === 3. liffRedirectUri 參數 ===
+    const liffRedirectUri = rawParams.get('liffRedirectUri') || searchParams.get('liffRedirectUri')
     if (liffRedirectUri) {
-      try {
-        const url = new URL(liffRedirectUri)
-        const targetPath = url.pathname
-        if (targetPath && targetPath.startsWith('/s/')) {
-          router.replace(targetPath)
-          return
-        }
-      } catch {
-        // URL 解析失敗，繼續到 fallback
+      console.log('[LiffRedirect] Found liffRedirectUri:', liffRedirectUri)
+      const path = extractPathFromUrl(liffRedirectUri)
+      if (path) {
+        console.log('[LiffRedirect] Extracted path:', path)
+        router.replace(path)
+        return
       }
     }
 
-    // === 4. 超時 fallback ===
+    // === 4. 暴力搜尋：從完整 URL 中找 /s/shop/ 或 /s/ 路徑 ===
+    // 因為 URL 可能被 encode，先 decode 整個 URL
+    let decodedUrl = fullUrl
+    try { decodedUrl = decodeURIComponent(decodedUrl) } catch {}
+    try { decodedUrl = decodeURIComponent(decodedUrl) } catch {}
+
+    const shopMatch = decodedUrl.match(/\/s\/shop\/[\w-]+/)
+    const sessionMatch = decodedUrl.match(/\/s\/[\w-]{8,}/)
+    const bruteForceMatch = shopMatch?.[0] || sessionMatch?.[0]
+
+    if (bruteForceMatch) {
+      console.log('[LiffRedirect] Brute force match:', bruteForceMatch)
+      router.replace(bruteForceMatch)
+      return
+    }
+
+    console.log('[LiffRedirect] No match found, showing error')
+
+    // === 5. 超時 fallback ===
     const timer = setTimeout(() => {
       setShowError(true)
     }, 3000)
