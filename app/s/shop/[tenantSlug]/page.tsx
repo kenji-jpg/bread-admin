@@ -80,6 +80,7 @@ interface Product {
   sold_qty: number
   image_url: string | null
   description: string | null
+  category: string | null
   end_time: string | null
   is_limited: boolean
   limit_qty: number | null
@@ -150,6 +151,9 @@ export default function ShopPage() {
 
   // 購物車 Drawer 狀態
   const [isCartOpen, setIsCartOpen] = useState(false)
+
+  // 分類篩選
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
 
   // ========== 管理員模式 ==========
   const [isStaff, setIsStaff] = useState(false)
@@ -648,10 +652,43 @@ export default function ShopPage() {
         </div>
       )}
 
+      {/* 分類標籤篩選 */}
+      {(() => {
+        const categories = [...new Set(products.map(p => p.category).filter(Boolean))] as string[]
+        if (categories.length === 0) return null
+        return (
+          <div className="px-2 pt-2 pb-0 flex gap-1.5 overflow-x-auto scrollbar-hide">
+            <button
+              className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                selectedCategory === null
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground'
+              }`}
+              onClick={() => setSelectedCategory(null)}
+            >
+              全部
+            </button>
+            {categories.map(cat => (
+              <button
+                key={cat}
+                className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                  selectedCategory === cat
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground'
+                }`}
+                onClick={() => setSelectedCategory(selectedCategory === cat ? null : cat)}
+              >
+                #{cat}
+              </button>
+            ))}
+          </div>
+        )
+      })()}
+
       {/* 商品列表 */}
       <main className="p-2">
         <div className="grid grid-cols-3 gap-2">
-          {products.map((product, index) => {
+          {(selectedCategory ? products.filter(p => p.category === selectedCategory) : products).map((product, index) => {
             const isExpired = product.end_time
               ? new Date(product.end_time).getTime() < Date.now()
               : product.is_expired

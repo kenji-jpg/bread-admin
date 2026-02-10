@@ -72,6 +72,7 @@ import {
     Check,
     Clock,
     Hash,
+    Store,
 } from 'lucide-react'
 import { CopyOrderButton } from './copy-order-button'
 
@@ -90,6 +91,7 @@ interface ProductGroup {
     is_limited: boolean;
     limit_qty: number | null;
     end_time: string | null;
+    show_in_shop: boolean;
     totalStock: number;
     totalSold: number;
     variants: ProductVariant[];
@@ -123,6 +125,7 @@ const groupProducts = (products: Product[]): ProductGroup[] => {
                 is_limited: product.is_limited,
                 limit_qty: product.limit_qty,
                 end_time: product.end_time,
+                show_in_shop: product.show_in_shop,
                 totalStock: 0,
                 totalSold: 0,
                 variants: [],
@@ -314,6 +317,13 @@ const ProductRow = ({
                         </Badge>
                     )}
                 </TableCell>
+                <TableCell className="text-center" onClick={handleRowClick}>
+                    {group.show_in_shop ? (
+                        <Store className="h-4 w-4 text-primary mx-auto" />
+                    ) : (
+                        <span className="text-muted-foreground text-xs">-</span>
+                    )}
+                </TableCell>
                 <TableCell className="text-center">
                     {displayProductForCopy && (
                         <CopyOrderButton
@@ -383,6 +393,7 @@ const ProductRow = ({
                             {variant.status === 'active' ? '上架中' : '已下架'}
                         </span>
                     </TableCell>
+                    <TableCell></TableCell>
                     <TableCell className="text-center">
                         <CopyOrderButton
                             product={variant}
@@ -870,6 +881,7 @@ export default function ProductsPage() {
                                         <TableHead className="w-[60px] text-right">已售</TableHead>
                                         <TableHead className="w-[100px]">限購</TableHead>
                                         <TableHead className="w-[80px]">狀態</TableHead>
+                                        <TableHead className="w-[50px] text-center">商城</TableHead>
                                         <TableHead className="w-[70px] text-center">社群訊息</TableHead>
                                     </TableRow>
                                 </TableHeader>

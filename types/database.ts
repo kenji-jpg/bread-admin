@@ -90,6 +90,7 @@ export interface Product {
   end_time: string | null
   sold_qty: number
   arrived_at: string | null
+  show_in_shop: boolean
   created_at: string
   updated_at: string
 }

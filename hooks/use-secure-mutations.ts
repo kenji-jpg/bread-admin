@@ -32,6 +32,7 @@ export interface ProductUpdateData {
   limit_qty?: number | null
   end_time?: string | null
   status?: string
+  show_in_shop?: boolean
 }
 
 export interface LinkOrderItemsResult {

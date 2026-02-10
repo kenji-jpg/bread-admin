@@ -14,7 +14,7 @@ import { Switch } from '@/components/ui/switch'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
-import { ArrowLeft, Upload, X, Loader2 } from 'lucide-react'
+import { ArrowLeft, Upload, X, Loader2, Store } from 'lucide-react'
 import Link from 'next/link'
 import type { Product } from '@/types/database'
 
@@ -81,6 +81,7 @@ export default function EditProductPage({ params }: { params: Promise<{ productI
     const [isLimited, setIsLimited] = useState(false)
     const [limitQty, setLimitQty] = useState('')
     const [endTime, setEndTime] = useState('')
+    const [showInShop, setShowInShop] = useState(false)
 
     // Read-only state
     const [stock, setStock] = useState(0)
@@ -124,6 +125,7 @@ export default function EditProductPage({ params }: { params: Promise<{ productI
                 setIsLimited(data.is_limited)
                 setLimitQty(data.limit_qty ? data.limit_qty.toString() : '')
                 setEndTime(data.end_time ? new Date(data.end_time).toISOString().slice(0, 16) : '')
+                setShowInShop(data.show_in_shop ?? false)
                 setImagePreview(data.image_url)
 
                 // Read-only fields
@@ -234,6 +236,7 @@ export default function EditProductPage({ params }: { params: Promise<{ productI
                 limit_qty: isLimited && limitQty ? parseInt(limitQty) : null,
                 end_time: endTime || null,
                 image_url: imageUrl,
+                show_in_shop: showInShop,
             })
 
             if (!result.success) {
@@ -390,6 +393,22 @@ export default function EditProductPage({ params }: { params: Promise<{ productI
                                     <Switch
                                         checked={status}
                                         onCheckedChange={setStatus}
+                                    />
+                                </div>
+
+                                <div className="flex items-center justify-between p-3 rounded-xl bg-primary/5 border border-primary/20">
+                                    <div className="flex items-center gap-3">
+                                        <Store className="h-5 w-5 text-primary" />
+                                        <div className="space-y-0.5">
+                                            <Label>顯示在商城</Label>
+                                            <p className="text-xs text-muted-foreground">
+                                                開啟後此商品會出現在 LIFF 商城頁面
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <Switch
+                                        checked={showInShop}
+                                        onCheckedChange={setShowInShop}
                                     />
                                 </div>
 

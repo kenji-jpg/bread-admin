@@ -13,7 +13,7 @@ import { Switch } from '@/components/ui/switch'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
-import { ArrowLeft, Upload, Image as ImageIcon, X, Loader2, Trash2, Plus } from 'lucide-react'
+import { ArrowLeft, Upload, Image as ImageIcon, X, Loader2, Trash2, Plus, Store } from 'lucide-react'
 import Link from 'next/link'
 
 // 壓縮圖片至最大寬度並輸出為 WebP
@@ -101,6 +101,7 @@ export default function NewProductPage() {
     const [isLimited, setIsLimited] = useState(false)
     const [limitQty, setLimitQty] = useState('')
     const [endTime, setEndTime] = useState('')
+    const [showInShop, setShowInShop] = useState(false)
 
     // SKU 驗證：僅允許英數字、連字號、底線，最多 50 字
     const isValidSku = (value: string): boolean => {
@@ -296,6 +297,7 @@ export default function NewProductPage() {
                     p_cost: cost ? parseFloat(cost) : null,
                     p_category: category.trim() || null,
                     p_limit_qty: isLimited && limitQty ? parseInt(limitQty) : null,
+                    p_show_in_shop: showInShop,
                     p_variants: variants.map(v => ({
                         name: v.name.trim(),
                         price: parseFloat(price), // 規格價格預設與主商品相同
@@ -318,6 +320,7 @@ export default function NewProductPage() {
                     p_cost: cost ? parseFloat(cost) : null,
                     p_category: category.trim() || null,
                     p_limit_qty: isLimited && limitQty ? parseInt(limitQty) : null,
+                    p_show_in_shop: showInShop,
                     p_variants: null // 無規格商品
                 })
 
@@ -594,9 +597,25 @@ export default function NewProductPage() {
                         <Card className="border-border/50">
                             <CardHeader>
                                 <CardTitle>銷售限制</CardTitle>
-                                <CardDescription>設定限購與團購截止時間</CardDescription>
+                                <CardDescription>設定商城顯示、限購與截止時間</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-4">
+                                <div className="flex items-center justify-between p-3 rounded-xl bg-primary/5 border border-primary/20">
+                                    <div className="flex items-center gap-3">
+                                        <Store className="h-5 w-5 text-primary" />
+                                        <div className="space-y-0.5">
+                                            <Label>顯示在商城</Label>
+                                            <p className="text-xs text-muted-foreground">
+                                                開啟後此商品會出現在 LIFF 商城頁面
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <Switch
+                                        checked={showInShop}
+                                        onCheckedChange={setShowInShop}
+                                    />
+                                </div>
+
                                 <div className="flex items-center justify-between">
                                     <div className="space-y-0.5">
                                         <Label>限購商品</Label>
