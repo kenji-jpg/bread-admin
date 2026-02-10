@@ -137,6 +137,7 @@ export default function CheckoutsPage() {
     const [totalCount, setTotalCount] = useState(0)
     const [isLoading, setIsLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState('')
+    const [debouncedSearch, setDebouncedSearch] = useState('')
     const [shippingFilter, setShippingFilter] = useState<string>('all')
     const [paymentFilter, setPaymentFilter] = useState<string>('all')
     const [methodFilter, setMethodFilter] = useState<string>('all')  // 物流方式篩選
@@ -184,7 +185,9 @@ export default function CheckoutsPage() {
                 shippingFilter === 'all' ? undefined : shippingFilter,
                 paymentFilter === 'all' ? undefined : paymentFilter,
                 pageSize,
-                (currentPage - 1) * pageSize
+                (currentPage - 1) * pageSize,
+                debouncedSearch || undefined,
+                methodFilter === 'all' ? undefined : methodFilter
             )
 
             if (result.success) {
@@ -203,7 +206,7 @@ export default function CheckoutsPage() {
         } finally {
             setIsLoading(false)
         }
-    }, [tenant?.id, shippingFilter, paymentFilter, pageSize, currentPage])
+    }, [tenant?.id, shippingFilter, paymentFilter, methodFilter, pageSize, currentPage, debouncedSearch])
 
     // 載入結帳單詳情
     const fetchCheckoutDetail = useCallback(async (checkoutId: string) => {
@@ -239,35 +242,21 @@ export default function CheckoutsPage() {
         }
     }, [viewDetailsCheckout?.id, fetchCheckoutDetail])
 
+    // 搜尋防抖：輸入 300ms 後才觸發查詢
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearch(searchQuery)
+        }, 300)
+        return () => clearTimeout(timer)
+    }, [searchQuery])
+
     // 當篩選條件改變時，重置到第一頁
     useEffect(() => {
         setCurrentPage(1)
-    }, [shippingFilter, paymentFilter, methodFilter, pageSize])
+    }, [shippingFilter, paymentFilter, methodFilter, pageSize, debouncedSearch])
 
-    // 前端搜尋篩選（含結帳模式篩選）
-    const filteredCheckouts = useMemo(() => {
-        let result = checkouts
-
-        // 結帳模式篩選（null 視為 myship）
-        if (methodFilter !== 'all') {
-            result = result.filter((c) => {
-                const method = c.shipping_method || 'myship'
-                return method === methodFilter
-            })
-        }
-
-        // 文字搜尋
-        if (searchQuery) {
-            result = result.filter((c) =>
-                c.checkout_no.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                c.customer_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                c.member_display_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                c.member_nickname?.toLowerCase().includes(searchQuery.toLowerCase())
-            )
-        }
-
-        return result
-    }, [checkouts, searchQuery, methodFilter])
+    // 所有篩選（含搜尋、狀態、結帳模式）已由 RPC 伺服端處理
+    const filteredCheckouts = checkouts
 
     // 統計數據
     const stats = useMemo(() => ({
@@ -791,40 +780,42 @@ export default function CheckoutsPage() {
                 </CardContent>
             </Card>
 
-            {/* 批量操作工具列 */}
+            {/* 批量操作工具列（sticky 固定在底部） */}
             {selectedCheckouts.size > 0 && (
-                <Card className="border-border/50 bg-muted/50">
-                    <CardContent className="py-3">
-                        <div className="flex items-center gap-4">
-                            <span className="text-sm">
-                                已選擇 <span className="font-bold">{selectedCheckouts.size}</span> 筆
-                                {deletableCount < selectedCheckouts.size && (
-                                    <span className="text-muted-foreground">
-                                        （{deletableCount} 筆可刪除）
-                                    </span>
-                                )}
-                            </span>
-                            <Button
-                                variant="destructive"
-                                size="sm"
-                                onClick={handleBatchDelete}
-                                disabled={deletableCount === 0}
-                                className="rounded-xl"
-                            >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                刪除選取
-                            </Button>
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setSelectedCheckouts(new Set())}
-                                className="rounded-xl"
-                            >
-                                取消選取
-                            </Button>
-                        </div>
-                    </CardContent>
-                </Card>
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+                    <Card className="border-border/50 bg-background/95 backdrop-blur-sm shadow-lg">
+                        <CardContent className="py-3 px-5">
+                            <div className="flex items-center gap-4">
+                                <span className="text-sm">
+                                    已選擇 <span className="font-bold">{selectedCheckouts.size}</span> 筆
+                                    {deletableCount < selectedCheckouts.size && (
+                                        <span className="text-muted-foreground">
+                                            （{deletableCount} 筆可刪除）
+                                        </span>
+                                    )}
+                                </span>
+                                <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    onClick={handleBatchDelete}
+                                    disabled={deletableCount === 0}
+                                    className="rounded-xl"
+                                >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    刪除選取
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setSelectedCheckouts(new Set())}
+                                    className="rounded-xl"
+                                >
+                                    取消選取
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
             )}
 
             {/* Checkouts Table */}

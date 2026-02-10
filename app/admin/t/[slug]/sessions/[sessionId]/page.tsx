@@ -30,6 +30,7 @@ import {
   Loader2,
   AlertTriangle,
   ShoppingCart,
+  Archive,
 } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -50,7 +51,7 @@ interface SessionDetail {
   id: string
   title: string
   description: string | null
-  status: 'open' | 'closed' | 'completed'
+  status: 'open' | 'closed' | 'completed' | 'archived'
   created_at: string
   closed_at: string | null
   completed_at: string | null
@@ -88,6 +89,10 @@ export default function SessionDetailPage() {
   // 結算 Modal
   const [showCompleteDialog, setShowCompleteDialog] = useState(false)
   const [isCompleting, setIsCompleting] = useState(false)
+
+  // 封存
+  const [showArchiveDialog, setShowArchiveDialog] = useState(false)
+  const [isArchiving, setIsArchiving] = useState(false)
 
   const loadSession = useCallback(async () => {
     if (!tenant) return
@@ -253,6 +258,32 @@ export default function SessionDetailPage() {
     }
   }
 
+  // 封存場次
+  const handleArchive = async () => {
+    setIsArchiving(true)
+
+    try {
+      const { data, error } = await supabase.rpc('archive_purchase_session_v1', {
+        p_session_id: sessionId,
+      })
+
+      if (error) throw error
+
+      if (data.success) {
+        toast.success('場次已封存')
+        setShowArchiveDialog(false)
+        router.push(`/admin/t/${tenant!.slug}/sessions`)
+      } else {
+        toast.error(data.error)
+      }
+    } catch (err) {
+      console.error('Archive session error:', err)
+      toast.error('封存失敗')
+    } finally {
+      setIsArchiving(false)
+    }
+  }
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'open':
@@ -274,6 +305,13 @@ export default function SessionDetailPage() {
           <Badge className="bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">
             <CheckCircle className="w-3 h-3 mr-1" />
             已結算
+          </Badge>
+        )
+      case 'archived':
+        return (
+          <Badge className="bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500">
+            <Archive className="w-3 h-3 mr-1" />
+            已封存
           </Badge>
         )
       default:
@@ -402,7 +440,7 @@ export default function SessionDetailPage() {
       </div>
 
       {/* 操作按鈕 */}
-      {session.status !== 'completed' && (
+      {session.status !== 'archived' && (
         <Card>
           <CardContent className="pt-4">
             <div className="flex gap-2 flex-wrap">
@@ -433,6 +471,16 @@ export default function SessionDetailPage() {
                 >
                   <CheckCircle className="w-4 h-4 mr-2" />
                   結算場次
+                </Button>
+              )}
+              {session.status === 'completed' && (
+                <Button
+                  variant="outline"
+                  className="rounded-xl text-muted-foreground"
+                  onClick={() => setShowArchiveDialog(true)}
+                >
+                  <Archive className="w-4 h-4 mr-2" />
+                  封存場次
                 </Button>
               )}
             </div>
@@ -510,8 +558,8 @@ export default function SessionDetailPage() {
                       </span>
                     </div>
 
-                    {/* 補貨按鈕 */}
-                    {session.status === 'closed' && productPending > 0 && (
+                    {/* 補貨按鈕：商品已截止 OR 場次已關閉 */}
+                    {(isExpired || session.status === 'closed') && productPending > 0 && (
                       <Button
                         size="sm"
                         className="w-full mt-2 rounded-lg"
@@ -645,6 +693,40 @@ export default function SessionDetailPage() {
                 </>
               ) : (
                 '確認結算'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 封存確認 Dialog */}
+      <Dialog open={showArchiveDialog} onOpenChange={setShowArchiveDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Archive className="w-5 h-5 text-muted-foreground" />
+              確認封存場次？
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            封存後場次將從列表中隱藏，已分配的訂單不受影響。
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowArchiveDialog(false)}>
+              取消
+            </Button>
+            <Button
+              onClick={handleArchive}
+              disabled={isArchiving}
+              variant="outline"
+            >
+              {isArchiving ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  處理中...
+                </>
+              ) : (
+                '確認封存'
               )}
             </Button>
           </DialogFooter>

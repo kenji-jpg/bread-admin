@@ -162,7 +162,7 @@ export interface BatchDeleteCheckoutsResult {
 interface UseCheckoutReturn {
     loading: boolean
     error: string | null
-    listCheckouts: (shippingStatus?: string, paymentStatus?: string, limit?: number, offset?: number) => Promise<ListCheckoutsResult>
+    listCheckouts: (shippingStatus?: string, paymentStatus?: string, limit?: number, offset?: number, search?: string, shippingMethod?: string) => Promise<ListCheckoutsResult>
     getDetail: (checkoutId: string) => Promise<CheckoutDetailResult>
     setUrl: (checkoutId: string, url: string, checkoutNo: string, customerName: string) => Promise<NotifyMyshipResult>
     markOrdered: (checkoutId: string, orderNo?: string, note?: string) => Promise<UpdateStatusResult>
@@ -199,14 +199,18 @@ export const useCheckout = (tenantId: string): UseCheckoutReturn => {
         shippingStatus?: string,
         paymentStatus?: string,
         limit = 50,
-        offset = 0
+        offset = 0,
+        search?: string,
+        shippingMethod?: string
     ): Promise<ListCheckoutsResult> => {
         return callRpc<ListCheckoutsResult>('list_checkouts_v1', {
             p_tenant_id: tenantId,
             p_shipping_status: shippingStatus || null,
             p_payment_status: paymentStatus || null,
             p_limit: limit,
-            p_offset: offset
+            p_offset: offset,
+            p_search: search || null,
+            p_shipping_method: shippingMethod || null
         })
     }, [tenantId, callRpc])
 

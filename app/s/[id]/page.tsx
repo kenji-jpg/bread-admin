@@ -24,6 +24,8 @@ import {
   XCircle,
   Users,
   Camera,
+  TimerOff,
+  TimerReset,
 } from 'lucide-react'
 import Image from 'next/image'
 
@@ -180,6 +182,13 @@ export default function SessionShopPage() {
   const [isUploading, setIsUploading] = useState(false)
   const addProductFileRef = useRef<HTMLInputElement>(null)
 
+  // 倒數計時器 tick（每 30 秒更新畫面）
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    const interval = setInterval(() => setTick((t) => t + 1), 30000)
+    return () => clearInterval(interval)
+  }, [])
+
   // 載入場次資料
   const loadSession = useCallback(async () => {
     try {
@@ -314,7 +323,12 @@ export default function SessionShopPage() {
           setProducts((prev) =>
             prev.map((p) =>
               p.id === payload.new.id
-                ? { ...p, sold_qty: payload.new.sold_qty, stock: payload.new.stock }
+                ? {
+                    ...p,
+                    sold_qty: payload.new.sold_qty,
+                    stock: payload.new.stock,
+                    end_time: payload.new.end_time,
+                  }
                 : p
             )
           )
@@ -504,6 +518,28 @@ export default function SessionShopPage() {
     }
   }
 
+  // 管理員：調整商品截止時間
+  const handleUpdateEndTime = async (productId: string, endTime: Date) => {
+    if (!profile) return
+    try {
+      const { data, error } = await supabase.rpc('update_product_end_time_v1', {
+        p_product_id: productId,
+        p_line_user_id: profile.userId,
+        p_end_time: endTime.toISOString(),
+      })
+      if (error) throw error
+      if (!data.success) {
+        toast.error(data.error)
+        return
+      }
+      toast.success(endTime > new Date() ? '已延長截止時間' : '已截止')
+      loadSession()
+    } catch (err) {
+      console.error('Update end time error:', err)
+      toast.error('操作失敗')
+    }
+  }
+
   // 計算倒數時間
   const getTimeRemaining = (endTime: string) => {
     const diff = new Date(endTime).getTime() - Date.now()
@@ -625,7 +661,10 @@ export default function SessionShopPage() {
       <main className="p-2">
         <div className="grid grid-cols-3 gap-2">
           {products.map((product, index) => {
-            const isExpired = product.is_expired
+            // 用 client-side 計算 isExpired（搭配 tick 每 30 秒更新）
+            const isExpired = product.end_time
+              ? new Date(product.end_time).getTime() < Date.now()
+              : product.is_expired
             const isHot = product.sold_qty >= 5
             const timeRemaining = product.end_time
               ? getTimeRemaining(product.end_time)
@@ -712,7 +751,7 @@ export default function SessionShopPage() {
                     </p>
                   )}
 
-                  {/* 管理員：顯示分配狀態 + 補貨按鈕 */}
+                  {/* 管理員：顯示分配狀態 + 操作按鈕 */}
                   {isStaff && pStats && (
                     <div className="mt-1 space-y-1">
                       <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -721,19 +760,48 @@ export default function SessionShopPage() {
                           <span className="text-orange-600">{pStats.pending}待</span>
                         )}
                       </div>
-                      {session.status === 'closed' && pStats.pending > 0 && (
-                        <button
-                          className="w-full h-6 text-xs bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 rounded flex items-center justify-center gap-0.5"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setRestockProduct(product)
-                            setRestockQty('')
-                          }}
-                        >
-                          <PackagePlus className="w-3 h-3" />
-                          補貨
-                        </button>
-                      )}
+                      <div className="flex gap-1">
+                        {/* 未截止：顯示「截止」 */}
+                        {!isExpired && (
+                          <button
+                            className="flex-1 h-6 text-xs bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded flex items-center justify-center gap-0.5"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleUpdateEndTime(product.id, new Date())
+                            }}
+                          >
+                            <TimerOff className="w-3 h-3" />
+                            截止
+                          </button>
+                        )}
+                        {/* 已截止：顯示「延長」 */}
+                        {isExpired && (
+                          <button
+                            className="flex-1 h-6 text-xs bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded flex items-center justify-center gap-0.5"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleUpdateEndTime(product.id, new Date(Date.now() + 60 * 60 * 1000))
+                            }}
+                          >
+                            <TimerReset className="w-3 h-3" />
+                            延長
+                          </button>
+                        )}
+                        {/* 已截止且有待分配：顯示「補貨」 */}
+                        {(isExpired || session.status === 'closed') && pStats.pending > 0 && (
+                          <button
+                            className="flex-1 h-6 text-xs bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 rounded flex items-center justify-center gap-0.5"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setRestockProduct(product)
+                              setRestockQty('')
+                            }}
+                          >
+                            <PackagePlus className="w-3 h-3" />
+                            補貨
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
