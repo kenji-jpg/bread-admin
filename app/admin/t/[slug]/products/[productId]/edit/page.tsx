@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
 import { useTenant } from '@/hooks/use-tenant'
+import { usePermission } from '@/hooks/use-permission'
 import { updateProduct } from '@/hooks/use-secure-mutations'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,7 +15,8 @@ import { Switch } from '@/components/ui/switch'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
-import { ArrowLeft, Upload, X, Loader2, Store } from 'lucide-react'
+import { ArrowLeft, Upload, X, Loader2, Store, Lock } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import type { Product } from '@/types/database'
 
@@ -63,6 +65,7 @@ export default function EditProductPage({ params }: { params: Promise<{ productI
     const { productId } = use(params)
     const router = useRouter()
     const { tenant, isLoading: tenantLoading } = useTenant()
+    const { canAccessShop } = usePermission()
     const supabase = createClient()
     const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -396,19 +399,28 @@ export default function EditProductPage({ params }: { params: Promise<{ productI
                                     />
                                 </div>
 
-                                <div className="flex items-center justify-between p-3 rounded-xl bg-primary/5 border border-primary/20">
+                                <div className={`flex items-center justify-between p-3 rounded-xl ${canAccessShop ? 'bg-primary/5 border border-primary/20' : 'bg-muted/50 border border-border/50'}`}>
                                     <div className="flex items-center gap-3">
-                                        <Store className="h-5 w-5 text-primary" />
+                                        <Store className={`h-5 w-5 ${canAccessShop ? 'text-primary' : 'text-muted-foreground'}`} />
                                         <div className="space-y-0.5">
-                                            <Label>顯示在商城</Label>
+                                            <div className="flex items-center gap-2">
+                                                <Label className={!canAccessShop ? 'text-muted-foreground' : ''}>顯示在商城</Label>
+                                                {!canAccessShop && (
+                                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 border-primary/30 text-primary">
+                                                        <Lock className="h-2.5 w-2.5 mr-0.5" />
+                                                        Pro
+                                                    </Badge>
+                                                )}
+                                            </div>
                                             <p className="text-xs text-muted-foreground">
-                                                開啟後此商品會出現在 LIFF 商城頁面
+                                                {canAccessShop ? '開啟後此商品會出現在 LIFF 商城頁面' : '升級 Pro 方案後可使用商城功能'}
                                             </p>
                                         </div>
                                     </div>
                                     <Switch
                                         checked={showInShop}
                                         onCheckedChange={setShowInShop}
+                                        disabled={!canAccessShop}
                                     />
                                 </div>
                                 {showInShop && !status && (

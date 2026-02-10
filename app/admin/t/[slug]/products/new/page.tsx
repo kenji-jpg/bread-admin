@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
 import { useTenant } from '@/hooks/use-tenant'
+import { usePermission } from '@/hooks/use-permission'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -13,7 +14,8 @@ import { Switch } from '@/components/ui/switch'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
-import { ArrowLeft, Upload, Image as ImageIcon, X, Loader2, Trash2, Plus, Store } from 'lucide-react'
+import { ArrowLeft, Upload, Image as ImageIcon, X, Loader2, Trash2, Plus, Store, Lock } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 
 // 壓縮圖片至最大寬度並輸出為 WebP
@@ -87,6 +89,7 @@ const DEFAULT_VARIANTS: Record<string, string[]> = {
 export default function NewProductPage() {
     const router = useRouter()
     const { tenant, isLoading: tenantLoading } = useTenant()
+    const { canAccessShop } = usePermission()
     const supabase = createClient()
     const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -600,19 +603,28 @@ export default function NewProductPage() {
                                 <CardDescription>設定商城顯示、限購與截止時間</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-4">
-                                <div className="flex items-center justify-between p-3 rounded-xl bg-primary/5 border border-primary/20">
+                                <div className={`flex items-center justify-between p-3 rounded-xl ${canAccessShop ? 'bg-primary/5 border border-primary/20' : 'bg-muted/50 border border-border/50'}`}>
                                     <div className="flex items-center gap-3">
-                                        <Store className="h-5 w-5 text-primary" />
+                                        <Store className={`h-5 w-5 ${canAccessShop ? 'text-primary' : 'text-muted-foreground'}`} />
                                         <div className="space-y-0.5">
-                                            <Label>顯示在商城</Label>
+                                            <div className="flex items-center gap-2">
+                                                <Label className={!canAccessShop ? 'text-muted-foreground' : ''}>顯示在商城</Label>
+                                                {!canAccessShop && (
+                                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 border-primary/30 text-primary">
+                                                        <Lock className="h-2.5 w-2.5 mr-0.5" />
+                                                        Pro
+                                                    </Badge>
+                                                )}
+                                            </div>
                                             <p className="text-xs text-muted-foreground">
-                                                開啟後此商品會出現在 LIFF 商城頁面
+                                                {canAccessShop ? '開啟後此商品會出現在 LIFF 商城頁面' : '升級 Pro 方案後可使用商城功能'}
                                             </p>
                                         </div>
                                     </div>
                                     <Switch
                                         checked={showInShop}
                                         onCheckedChange={setShowInShop}
+                                        disabled={!canAccessShop}
                                     />
                                 </div>
 
