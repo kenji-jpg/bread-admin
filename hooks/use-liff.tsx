@@ -35,6 +35,14 @@ export function getLiffShareUrl(path: string): string {
   return `https://liff.line.me/${LIFF_ID}${cleanPath}`
 }
 
+/**
+ * 產生商城 LIFF 分享連結
+ * 例如 → https://liff.line.me/{LIFF_ID}/s/shop/{tenantSlug}
+ */
+export function getShopShareUrl(tenantSlug: string): string {
+  return getLiffShareUrl(`/s/shop/${tenantSlug}`)
+}
+
 interface LiffProviderProps {
   children: ReactNode
 }
