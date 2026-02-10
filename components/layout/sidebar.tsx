@@ -21,7 +21,6 @@ import {
     ChevronLeft,
     ChevronRight,
     AlertTriangle,
-    Store,
     ShoppingBag,
 } from 'lucide-react'
 
@@ -52,11 +51,6 @@ export function Sidebar() {
                 title: '商城',
                 href: `/admin/t/${tenantSlug}/shop`,
                 icon: <ShoppingBag className="h-5 w-5" />,
-            },
-            {
-                title: '代購場次',
-                href: `/admin/t/${tenantSlug}/sessions`,
-                icon: <Store className="h-5 w-5" />,
             },
             {
                 title: '商品管理',

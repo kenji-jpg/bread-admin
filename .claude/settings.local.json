@@ -30,7 +30,14 @@
       "Bash(git diff:*)",
       "Bash(npm run dev:*)",
       "Bash(npm install:*)",
-      "Bash(npx vercel:*)"
+      "Bash(npx vercel:*)",
+      "Bash(git -C /Users/liuyixin/Desktop/nascent-oort show 40af998 --stat)",
+      "Bash(vercel:*)",
+      "Bash(cat:*)",
+      "Bash(wc:*)",
+      "mcp__c2ff53ca-7c7a-41b2-bfcc-7ff7498863e1__list_deployments",
+      "mcp__c2ff53ca-7c7a-41b2-bfcc-7ff7498863e1__get_deployment",
+      "Bash(git status:*)"
     ]
   }
 }

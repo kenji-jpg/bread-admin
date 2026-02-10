@@ -411,6 +411,11 @@ export default function EditProductPage({ params }: { params: Promise<{ productI
                                         onCheckedChange={setShowInShop}
                                     />
                                 </div>
+                                {showInShop && !status && (
+                                    <p className="text-xs text-amber-600 mt-1 ml-1">
+                                        ⚠️ 商品目前為下架狀態，即使開啟也不會顯示在商城
+                                    </p>
+                                )}
 
                                 <div className="flex items-center justify-between mt-4">
                                     <div className="space-y-0.5">

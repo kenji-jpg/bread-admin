@@ -60,7 +60,7 @@ function extractPathFromUrl(urlStr: string): string | null {
  * 1. liff.state 參數（LINE 內瀏覽器）
  * 2. sessionStorage 存的路徑（外部瀏覽器 OAuth 回來）
  * 3. liffRedirectUri 參數中解析路徑（外部瀏覽器 fallback）
- * 4. 從完整 URL 字串中暴力搜尋 /s/ 路徑
+ * 4. 從完整 URL 字串中暴力搜尋 /s/shop/ 路徑
  * 5. 3 秒後顯示錯誤訊息
  */
 function LiffRedirectHandler() {
@@ -109,19 +109,17 @@ function LiffRedirectHandler() {
       }
     }
 
-    // === 4. 暴力搜尋：從完整 URL 中找 /s/shop/ 或 /s/ 路徑 ===
+    // === 4. 暴力搜尋：從完整 URL 中找 /s/shop/ 路徑 ===
     // 因為 URL 可能被 encode，先 decode 整個 URL
     let decodedUrl = fullUrl
     try { decodedUrl = decodeURIComponent(decodedUrl) } catch {}
     try { decodedUrl = decodeURIComponent(decodedUrl) } catch {}
 
     const shopMatch = decodedUrl.match(/\/s\/shop\/[\w-]+/)
-    const sessionMatch = decodedUrl.match(/\/s\/[\w-]{8,}/)
-    const bruteForceMatch = shopMatch?.[0] || sessionMatch?.[0]
 
-    if (bruteForceMatch) {
-      console.log('[LiffRedirect] Brute force match:', bruteForceMatch)
-      router.replace(bruteForceMatch)
+    if (shopMatch?.[0]) {
+      console.log('[LiffRedirect] Brute force match:', shopMatch[0])
+      router.replace(shopMatch[0])
       return
     }
 
