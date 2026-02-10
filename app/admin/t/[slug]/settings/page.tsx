@@ -948,6 +948,7 @@ export default function SettingsPage() {
                                         placeholder={canAccessShop ? '請輸入 LIFF ID（如 1234567890-xxxxxxxx）' : '升級 Pro 方案後可設定'}
                                         className="rounded-xl"
                                         disabled={isCrossTenantAccess || !canAccessShop}
+                                        autoComplete="off"
                                     />
                                     <p className="text-xs text-muted-foreground">
                                         {canAccessShop
@@ -973,6 +974,7 @@ export default function SettingsPage() {
                                         placeholder={tenant.has_line_channel_token ? '輸入新的 Token 以更新' : '請輸入 Token'}
                                         className="rounded-xl pr-10"
                                         disabled={isCrossTenantAccess}
+                                        autoComplete="off"
                                     />
                                     <Button
                                         type="button"
@@ -1010,6 +1012,7 @@ export default function SettingsPage() {
                                         placeholder={tenant.has_line_channel_secret ? '輸入新的 Secret 以更新' : '請輸入 Secret'}
                                         className="rounded-xl pr-10"
                                         disabled={isCrossTenantAccess}
+                                        autoComplete="off"
                                     />
                                     <Button
                                         type="button"
