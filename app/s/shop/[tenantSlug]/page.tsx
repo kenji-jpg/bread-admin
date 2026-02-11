@@ -352,7 +352,7 @@ export default function ShopPage() {
     }
   }, [isStaff, tenant, loadAllOrders])
 
-  // Realtime 訂閱 - 商品更新
+  // Realtime 訂閱 - 商品即時同步（UPDATE / INSERT / DELETE）
   useEffect(() => {
     if (!tenant?.id) return
 
@@ -367,21 +367,32 @@ export default function ShopPage() {
           filter: `tenant_id=eq.${tenant.id}`,
         },
         (payload) => {
-          // 只處理 standalone 商品（session_id IS NULL）
           if (payload.new.session_id !== null) return
           const newData = payload.new
+
+          // 商品被下架、停用、或移出商城 → 從列表移除
+          if (newData.status !== 'active' || newData.show_in_shop === false) {
+            setProducts((prev) => prev.filter((p) => p.id !== newData.id))
+            return
+          }
+
           setProducts((prev) =>
             prev.map((p) =>
               p.id === newData.id
                 ? {
                   ...p,
+                  name: newData.name,
+                  price: newData.price,
                   sold_qty: newData.sold_qty,
                   stock: newData.stock,
                   end_time: newData.end_time,
                   status: newData.status,
-                  // 即時更新完銷狀態（雙模式：僅 is_limited=true 時 stock<=0 才完銷）
-                  is_sold_out: newData.is_limited && newData.stock != null && newData.stock <= 0,
+                  category: newData.category,
+                  image_url: newData.image_url,
+                  limit_qty: newData.limit_qty,
                   is_limited: newData.is_limited,
+                  is_sold_out: newData.is_limited && newData.stock != null && newData.stock <= 0,
+                  is_expired: newData.end_time ? new Date(newData.end_time) < new Date() : false,
                 }
                 : p
             )
@@ -398,7 +409,22 @@ export default function ShopPage() {
         },
         (payload) => {
           if (payload.new.session_id !== null) return
-          loadShop()
+          if (payload.new.show_in_shop && payload.new.status === 'active') {
+            loadShop()
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'products',
+          filter: `tenant_id=eq.${tenant.id}`,
+        },
+        (payload) => {
+          // 商品被刪除 → 立即從列表移除
+          setProducts((prev) => prev.filter((p) => p.id !== payload.old.id))
         }
       )
       .subscribe()
