@@ -745,25 +745,26 @@ export default function ShopPage() {
 
   return (
     <div className="min-h-screen pb-20">
-      {/* Banner */}
-      {shopSettings.banner_url && (
-        <div className="aspect-[3/1] relative bg-muted">
-          <Image
-            src={shopSettings.banner_url}
-            alt="Banner"
-            fill
-            className="object-cover"
-            sizes="100vw"
-          />
-        </div>
-      )}
-
-      {/* Header */}
-      <header className="sticky top-0 z-40 bg-background/95 backdrop-blur border-b">
-        <div className="px-4 py-3">
+      {/* Header（含背景圖） */}
+      <header className="sticky top-0 z-40 border-b relative overflow-hidden">
+        {shopSettings.banner_url ? (
+          <>
+            <Image
+              src={shopSettings.banner_url}
+              alt="Banner"
+              fill
+              className="object-cover"
+              sizes="100vw"
+            />
+            <div className="absolute inset-0 bg-black/50" />
+          </>
+        ) : (
+          <div className="absolute inset-0 bg-background/95 backdrop-blur" />
+        )}
+        <div className="px-4 py-3 relative z-10">
           <div className="flex items-center gap-2">
-            <Store className="w-5 h-5" style={accentColor ? { color: accentColor } : undefined} />
-            <h1 className="text-lg font-bold truncate">{tenant.name}</h1>
+            <Store className="w-5 h-5" style={accentColor && !shopSettings.banner_url ? { color: accentColor } : shopSettings.banner_url ? { color: 'white' } : undefined} />
+            <h1 className={`text-lg font-bold truncate ${shopSettings.banner_url ? 'text-white' : ''}`}>{tenant.name}</h1>
             {isStaff && (
               <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 text-xs">
                 <Shield className="w-3 h-3 mr-0.5" />
@@ -772,9 +773,9 @@ export default function ShopPage() {
             )}
           </div>
           <div className="flex items-center gap-2">
-            <p className="text-xs text-green-600">營業中</p>
+            <p className={`text-xs ${shopSettings.banner_url ? 'text-green-400' : 'text-green-600'}`}>營業中</p>
             {isStaff && staffStats && (
-              <p className="text-xs text-muted-foreground">
+              <p className={`text-xs ${shopSettings.banner_url ? 'text-white/70' : 'text-muted-foreground'}`}>
                 · 訂單 {staffStats.total_orders - staffStats.cancelled_count} · $
                 {staffStats.total_sales.toLocaleString()}
               </p>
