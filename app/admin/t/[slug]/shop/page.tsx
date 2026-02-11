@@ -41,6 +41,7 @@ import {
     Shield,
     ExternalLink,
     Lock,
+    ScrollText,
 } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -86,6 +87,7 @@ async function compressImage(file: File, maxWidth = 1200, quality = 0.85): Promi
 interface ShopSettings {
     banner_url?: string | null
     announcement?: string | null
+    shopping_notice?: string | null
     accent_color?: string | null
     product_sort?: 'created_at' | 'sold_qty' | 'manual'
 }
@@ -222,6 +224,7 @@ export default function ShopManagePage() {
                 p_settings: {
                     banner_url: bannerUrl,
                     announcement: settings.announcement || null,
+                    shopping_notice: settings.shopping_notice || null,
                     accent_color: settings.accent_color || null,
                     product_sort: settings.product_sort || 'created_at',
                 },
@@ -519,6 +522,34 @@ export default function ShopManagePage() {
                                 </CardContent>
                             </Card>
 
+                            {/* Shopping Notice */}
+                            <Card className="border-border/50">
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2">
+                                        <ScrollText className="h-5 w-5" />
+                                        購物須知
+                                    </CardTitle>
+                                    <CardDescription>
+                                        首次進入商城的顧客需同意此須知才能購物，不同意則關閉商城
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <Textarea
+                                        placeholder={`範例：
+1. 本商城為代購/連線直播商品，下單後請耐心等候到貨通知
+2. 商品圖片皆為現場實拍，可能因光線色差略有不同
+3. 下單後如需取消，請於截止前透過 LINE 聯繫客服`}
+                                        value={settings.shopping_notice || ''}
+                                        onChange={(e) => setSettings(prev => ({ ...prev, shopping_notice: e.target.value }))}
+                                        className="rounded-xl resize-none"
+                                        rows={6}
+                                    />
+                                    <p className="text-xs text-muted-foreground mt-1.5">
+                                        留空則不顯示購物須知彈窗
+                                    </p>
+                                </CardContent>
+                            </Card>
+
                             {/* Accent Color */}
                             <Card className="border-border/50">
                                 <CardHeader>
@@ -535,11 +566,10 @@ export default function ShopManagePage() {
                                         {ACCENT_COLORS.map((color) => (
                                             <button
                                                 key={color.value}
-                                                className={`flex items-center gap-2 px-3 py-2 rounded-xl border transition-all ${
-                                                    (settings.accent_color || '') === color.value
+                                                className={`flex items-center gap-2 px-3 py-2 rounded-xl border transition-all ${(settings.accent_color || '') === color.value
                                                         ? 'border-primary ring-2 ring-primary/20'
                                                         : 'border-border hover:border-primary/50'
-                                                }`}
+                                                    }`}
                                                 onClick={() => setSettings(prev => ({ ...prev, accent_color: color.value }))}
                                             >
                                                 <div
@@ -575,11 +605,10 @@ export default function ShopManagePage() {
                                         ].map(opt => (
                                             <button
                                                 key={opt.value}
-                                                className={`p-3 rounded-xl border text-left transition-all ${
-                                                    (settings.product_sort || 'created_at') === opt.value
+                                                className={`p-3 rounded-xl border text-left transition-all ${(settings.product_sort || 'created_at') === opt.value
                                                         ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
                                                         : 'border-border hover:border-primary/50'
-                                                }`}
+                                                    }`}
                                                 onClick={() => setSettings(prev => ({
                                                     ...prev,
                                                     product_sort: opt.value as ShopSettings['product_sort'],
@@ -644,9 +673,8 @@ export default function ShopManagePage() {
                                             {categories.map((cat, index) => (
                                                 <div
                                                     key={`${cat.name}-${index}`}
-                                                    className={`flex items-center gap-2 p-3 rounded-xl border transition-colors ${
-                                                        cat.is_visible ? 'bg-card' : 'bg-muted/50 opacity-60'
-                                                    }`}
+                                                    className={`flex items-center gap-2 p-3 rounded-xl border transition-colors ${cat.is_visible ? 'bg-card' : 'bg-muted/50 opacity-60'
+                                                        }`}
                                                 >
                                                     <GripVertical className="h-4 w-4 text-muted-foreground shrink-0 cursor-grab" />
                                                     <div className="flex-1 min-w-0">
@@ -848,9 +876,8 @@ function ShopPreview({
                                     {/* Sold badge */}
                                     {product.sold > 0 && (
                                         <div
-                                            className={`absolute top-0.5 left-0.5 z-10 px-1 py-0.5 rounded-full text-[8px] font-bold text-white ${
-                                                isHot ? 'bg-red-500' : 'bg-black/60'
-                                            }`}
+                                            className={`absolute top-0.5 left-0.5 z-10 px-1 py-0.5 rounded-full text-[8px] font-bold text-white ${isHot ? 'bg-red-500' : 'bg-black/60'
+                                                }`}
                                         >
                                             +{product.sold}
                                             {isHot && <Flame className="inline w-2 h-2 ml-0.5" />}

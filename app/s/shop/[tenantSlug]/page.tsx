@@ -5,6 +5,7 @@ import { useParams, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
 import { useLiff } from '@/hooks/use-liff'
+import liff from '@line/liff'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -101,6 +102,7 @@ interface Tenant {
 interface ShopSettings {
   banner_url?: string | null
   announcement?: string | null
+  shopping_notice?: string | null
   accent_color?: string | null
   product_sort?: 'created_at' | 'sold_qty' | 'manual'
 }
@@ -222,6 +224,16 @@ export default function ShopPage() {
     const interval = setInterval(() => setTick((t) => t + 1), 30000)
     return () => clearInterval(interval)
   }, [])
+
+  // 購物須知
+  const [showShoppingNotice, setShowShoppingNotice] = useState(false)
+  useEffect(() => {
+    if (!tenant?.id || !shopSettings.shopping_notice || isStaff) return
+    const key = `shopping_notice_agreed_${tenant.id}`
+    if (!localStorage.getItem(key)) {
+      setShowShoppingNotice(true)
+    }
+  }, [tenant?.id, shopSettings.shopping_notice, isStaff])
 
   // 載入商城資料
   const loadShop = useCallback(async () => {
@@ -745,6 +757,62 @@ export default function ShopPage() {
 
   return (
     <div className="min-h-screen pb-20">
+      {/* 購物須知 Modal */}
+      <AnimatePresence>
+        {showShoppingNotice && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm px-6"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-background rounded-2xl w-full max-w-sm max-h-[80vh] flex flex-col overflow-hidden shadow-2xl"
+            >
+              <div className="px-5 pt-5 pb-3 border-b">
+                <h2 className="text-base font-bold flex items-center gap-2">
+                  📋 購物須知
+                </h2>
+              </div>
+              <div className="px-5 py-4 overflow-y-auto flex-1">
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                  {shopSettings.shopping_notice}
+                </p>
+              </div>
+              <div className="px-5 py-4 border-t flex gap-3">
+                <Button
+                  variant="outline"
+                  className="flex-1 rounded-xl"
+                  onClick={() => {
+                    try {
+                      liff.closeWindow()
+                    } catch {
+                      window.close()
+                    }
+                  }}
+                >
+                  不同意
+                </Button>
+                <Button
+                  className="flex-1 rounded-xl"
+                  onClick={() => {
+                    if (tenant?.id) {
+                      localStorage.setItem(`shopping_notice_agreed_${tenant.id}`, 'true')
+                    }
+                    setShowShoppingNotice(false)
+                  }}
+                >
+                  同意
+                </Button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Header（含背景圖） */}
       <header className="sticky top-0 z-40 border-b relative overflow-hidden">
         {shopSettings.banner_url ? (
