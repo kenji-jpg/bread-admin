@@ -37,7 +37,15 @@
       "Bash(wc:*)",
       "mcp__c2ff53ca-7c7a-41b2-bfcc-7ff7498863e1__list_deployments",
       "mcp__c2ff53ca-7c7a-41b2-bfcc-7ff7498863e1__get_deployment",
-      "Bash(git status:*)"
+      "Bash(git status:*)",
+      "WebFetch(domain:www.namecheap.com)",
+      "Bash(pip3 install:*)",
+      "Bash(npx wrangler secret put:*)",
+      "Bash(npx wrangler secret:*)",
+      "Bash(npx wrangler dns list:*)",
+      "Bash(dig:*)",
+      "Bash(npx wrangler:*)",
+      "Bash(lsof:*)"
     ]
   }
 }

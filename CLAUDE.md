@@ -184,6 +184,10 @@ Supabase 專案 ID: `kashgsxlrdyuirijocld`
 - `get_member_preorders_v1` — LIFF 顧客查看自己的訂單
 - `check_staff_by_line_id_v1` — LIFF 判斷是否為 staff
 - `restock_session_product_v1` — LIFF staff 補貨
+- `add_shop_product_v1` — LIFF staff 上架商品（含 `p_is_limited`, `p_category`, `p_end_time`，自動設 `show_in_shop=true`）
+- `toggle_shop_product_v1` — LIFF staff 下架/重新上架商品
+- `update_product_end_time_v1` — LIFF staff 設定/延長截止時間（支援獨立商品 + 場次商品）
+- `get_shop_all_orders_v1` — LIFF staff 查看所有訂單
 
 **賣貨便 Email 自動化**（Cloudflare Worker 呼叫，service_role 權限）
 - `process_myship_order_email` — 訂單成立通知：用賣場名稱比對結帳單，記錄 CM 訂單編號，狀態 `url_sent` → `ordered`
@@ -224,8 +228,38 @@ Supabase 專案 ID: `kashgsxlrdyuirijocld`
 - 即時動態：Supabase Realtime 監聽 products 表，商品被購買時顯示 +N 動畫
 - 熱門標記：sold_qty >= 5 顯示🔥標籤
 - 顧客下單（喊單）+ 查看自己訂單
-- Staff 模式：上架商品、補貨、關閉收單
+- Staff 模式：上架商品、補貨、關閉收單、截止/延長時限
 - 商城外觀由後台 `/admin/t/[slug]/shop` 控制（banner、公告、主題色、分類排序）
+
+### Dev 模式 Staff Override
+- URL 加 `?staff=1` 可在 localhost 強制開啟管理員模式（owner 角色）
+- 僅 `NODE_ENV === 'development'` 生效，production 不受影響
+- 範例：`http://localhost:3000/s/shop/bread-lady?staff=1`
+
+### 商品雙模式（預購/現貨）
+
+以 `products.is_limited` 欄位判斷模式，前端 `getProductMode()` 及相關邏輯皆以此為準：
+
+| | 預購模式 (`is_limited=false`) | 現貨模式 (`is_limited=true`) |
+|--|-------------------------------|------------------------------|
+| 庫存可為負數 | ✅ | ❌（不得低於 0） |
+| 完銷判斷 | 永不完銷 | `stock <= 0` 顯示完銷 |
+| 購買數量限制 | 無限制 | 受 `stock` + `limit_qty` 限制 |
+| 商品卡 badge | 藍色「預購」 | 綠色「現貨」+「剩N」 |
+| Realtime 完銷同步 | 不觸發 | `is_limited && stock <= 0` |
+
+### 商品卡 Badge 佈局
+- **左上**：已售數量（+N），熱門商品顯示🔥
+- **右上第一排**：預購/現貨（永遠顯示）
+- **右上第二排**：倒數時間（有限時才顯示）
+
+### LIFF Staff 上架 Modal
+從 LIFF 管理員模式上架商品時可設定：
+- 商品名稱、價格、圖片
+- 預購/現貨切換（`is_limited`），現貨模式可設庫存
+- 分類標籤（從 `shopCategories` 取得選項）
+- 收單時限：不限時 / 30分 / 1hr / 2hr
+- 上架後自動 `show_in_shop = true`，直接進入商城
 
 ### LIFF 分享連結
 - `getShopShareUrl(tenantSlug)` → `https://liff.line.me/{LIFF_ID}/s/shop/{tenantSlug}`
@@ -325,6 +359,8 @@ pending → url_sent → ordered → shipped → completed
 - **【完成】賣貨便 Email 自動化**：Cloudflare Worker + Email Routing，自動處理訂單成立 / 買家取貨通知
 - **【完成】租戶建立審核機制**：`tenant_create_requests` 表 + 審核 RPC + 超管審核頁面
 - **【完成】Cloudflare Email Routing**：`admin@plushub.cc` → Gmail 轉發，`*@plushub.cc` catch-all → Worker
+- **【完成】商品雙模式（預購/現貨）**：LIFF 商城以 `is_limited` 判斷模式，預購不限購、不完銷；現貨受庫存限制、可完銷。影響範圍：`getProductMode()`、完銷判斷、Realtime 同步、選購 Modal 數量上限、購物車 +/- 上限、商品卡 badge
+- **【完成】LIFF 管理員模式改善**：修復 `update_product_end_time_v1` 截止功能（移除 `session_id IS NOT NULL`）、升級 `add_shop_product_v1`（支援 `is_limited`/`category`/`end_time`、自動 `show_in_shop=true`）、上架 Modal 新增預購/現貨切換、分類標籤、收單時限選擇、商品卡 Badge 重新設計、Dev 模式 `?staff=1` override
 
 ## 參考文件
 

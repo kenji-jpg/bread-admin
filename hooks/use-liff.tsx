@@ -23,6 +23,16 @@ const LiffContext = createContext<LiffContextType | undefined>(undefined)
 
 const LIFF_ID = process.env.NEXT_PUBLIC_LIFF_ID || ''
 
+// Dev 模式：localhost 時跳過 LIFF 驗證，用假 profile 直接進商城
+const IS_DEV = typeof window !== 'undefined' && (
+  window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+)
+const DEV_PROFILE: LiffProfile = {
+  userId: 'dev-user-001',
+  displayName: '開發測試',
+  pictureUrl: undefined,
+}
+
 /**
  * 產生 LIFF 分享連結
  * 從 LINE 社群打開 LIFF URL → 自動授權，零跳轉
@@ -58,6 +68,16 @@ export function LiffProvider({ children }: LiffProviderProps) {
 
   useEffect(() => {
     const initLiff = async () => {
+      // Dev 模式：跳過 LIFF，直接用假 profile
+      if (IS_DEV) {
+        console.log('🛠 LIFF Dev Mode: 跳過 LINE 驗證')
+        setProfile(DEV_PROFILE)
+        setIsLoggedIn(true)
+        setIsInClient(false)
+        setIsReady(true)
+        return
+      }
+
       try {
         if (!LIFF_ID) {
           setError('LIFF ID 未設定')

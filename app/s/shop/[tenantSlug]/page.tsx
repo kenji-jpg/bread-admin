@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
 import { useLiff } from '@/hooks/use-liff'
@@ -112,6 +112,11 @@ interface ShopCategory {
   is_visible: boolean
 }
 
+interface CartItem {
+  product: Product
+  quantity: number
+}
+
 interface OrderItem {
   id: string
   product_id: string
@@ -148,10 +153,14 @@ interface StaffStats {
 
 export default function ShopPage() {
   const params = useParams()
+  const searchParams = useSearchParams()
   const tenantSlug = params.tenantSlug as string
   const supabaseRef = useRef(createClient())
   const supabase = supabaseRef.current
   const { isReady, isLoggedIn, profile, login } = useLiff()
+
+  // Dev mode: ?staff=1 強制開啟管理員模式（僅 localhost）
+  const isDevStaff = process.env.NODE_ENV === 'development' && searchParams.get('staff') === '1'
 
   // 狀態
   const [tenant, setTenant] = useState<Tenant | null>(null)
@@ -167,10 +176,13 @@ export default function ShopPage() {
   // 選購 Modal 狀態
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [quantity, setQuantity] = useState(1)
-  const [isOrdering, setIsOrdering] = useState(false)
-
-  // 購物車 Drawer 狀態
+  // 購物車狀態
+  const [cart, setCart] = useState<CartItem[]>([])
   const [isCartOpen, setIsCartOpen] = useState(false)
+  const [isSubmittingCart, setIsSubmittingCart] = useState(false)
+
+  // 我的訂單 Drawer 狀態
+  const [isOrderDrawerOpen, setIsOrderDrawerOpen] = useState(false)
 
   // 分類篩選
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
@@ -193,6 +205,9 @@ export default function ShopPage() {
   const [newProductName, setNewProductName] = useState('')
   const [newProductPrice, setNewProductPrice] = useState('')
   const [newProductStock, setNewProductStock] = useState('')
+  const [newProductIsLimited, setNewProductIsLimited] = useState(false)
+  const [newProductCategory, setNewProductCategory] = useState('')
+  const [newProductEndTime, setNewProductEndTime] = useState<number | null>(null) // null=不限時, 30/60/120=分鐘
   const [newProductImage, setNewProductImage] = useState<File | null>(null)
   const [newProductPreview, setNewProductPreview] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
@@ -287,8 +302,19 @@ export default function ShopPage() {
     }
   }, [isLoggedIn, profile, tenant, loadMyOrders])
 
+  // Dev mode：強制開啟管理員模式
+  useEffect(() => {
+    if (isDevStaff && tenant && !staffCheckDone) {
+      console.log('[Shop] Dev mode: forcing staff role')
+      setIsStaff(true)
+      setStaffRole('owner')
+      setStaffCheckDone(true)
+    }
+  }, [isDevStaff, tenant, staffCheckDone])
+
   // 獨立 effect：檢查管理員身份
   useEffect(() => {
+    if (isDevStaff) return // Dev mode 跳過 RPC 檢查
     if (!isLoggedIn || !profile?.userId || !tenant?.id || staffCheckDone) return
 
     setStaffCheckDone(true)
@@ -296,28 +322,28 @@ export default function ShopPage() {
     const lineUserId = profile.userId
     console.log('[Shop] Checking staff role for:', lineUserId, 'tenant:', tenantId)
 
-    ;(async () => {
-      try {
-        const { data, error } = await supabase.rpc('check_staff_by_line_id_v1', {
-          p_line_user_id: lineUserId,
-          p_tenant_id: tenantId,
-        })
-        if (error) {
-          console.error('[Shop] Check staff RPC error:', error)
+      ; (async () => {
+        try {
+          const { data, error } = await supabase.rpc('check_staff_by_line_id_v1', {
+            p_line_user_id: lineUserId,
+            p_tenant_id: tenantId,
+          })
+          if (error) {
+            console.error('[Shop] Check staff RPC error:', error)
+            setStaffCheckDone(false)
+            return
+          }
+          console.log('[Shop] Staff check result:', JSON.stringify(data))
+          if (data?.success && data.is_staff) {
+            setIsStaff(true)
+            setStaffRole(data.role)
+          }
+        } catch (err) {
+          console.error('[Shop] Check staff error:', err)
           setStaffCheckDone(false)
-          return
         }
-        console.log('[Shop] Staff check result:', JSON.stringify(data))
-        if (data?.success && data.is_staff) {
-          setIsStaff(true)
-          setStaffRole(data.role)
-        }
-      } catch (err) {
-        console.error('[Shop] Check staff error:', err)
-        setStaffCheckDone(false)
-      }
-    })()
-  }, [isLoggedIn, profile?.userId, tenant?.id, staffCheckDone, supabase])
+      })()
+  }, [isDevStaff, isLoggedIn, profile?.userId, tenant?.id, staffCheckDone, supabase])
 
   // 管理員身份確認後，載入全部訂單
   useEffect(() => {
@@ -343,16 +369,20 @@ export default function ShopPage() {
         (payload) => {
           // 只處理 standalone 商品（session_id IS NULL）
           if (payload.new.session_id !== null) return
+          const newData = payload.new
           setProducts((prev) =>
             prev.map((p) =>
-              p.id === payload.new.id
+              p.id === newData.id
                 ? {
-                    ...p,
-                    sold_qty: payload.new.sold_qty,
-                    stock: payload.new.stock,
-                    end_time: payload.new.end_time,
-                    status: payload.new.status,
-                  }
+                  ...p,
+                  sold_qty: newData.sold_qty,
+                  stock: newData.stock,
+                  end_time: newData.end_time,
+                  status: newData.status,
+                  // 即時更新完銷狀態（雙模式：僅 is_limited=true 時 stock<=0 才完銷）
+                  is_sold_out: newData.is_limited && newData.stock != null && newData.stock <= 0,
+                  is_limited: newData.is_limited,
+                }
                 : p
             )
           )
@@ -378,40 +408,77 @@ export default function ShopPage() {
     }
   }, [tenant?.id, supabase, loadShop])
 
-  // 下單
-  const handleOrder = async () => {
-    if (!selectedProduct || !profile || !tenant) return
+  // 加入購物車
+  const handleAddToCart = () => {
+    if (!selectedProduct) return
 
-    setIsOrdering(true)
-    try {
-      const { data, error } = await supabase.rpc('create_shop_order_v1', {
-        p_tenant_id: tenant.id,
-        p_product_id: selectedProduct.id,
-        p_line_user_id: profile.userId,
-        p_quantity: quantity,
-        p_display_name: profile.displayName,
-        p_picture_url: profile.pictureUrl,
-      })
-
-      if (error) throw error
-
-      if (!data.success) {
-        toast.error(data.error)
-        return
+    setCart((prev) => {
+      // 同商品累加數量
+      const existing = prev.find((item) => item.product.id === selectedProduct.id)
+      if (existing) {
+        return prev.map((item) =>
+          item.product.id === selectedProduct.id
+            ? { ...item, quantity: item.quantity + quantity }
+            : item
+        )
       }
+      return [...prev, { product: selectedProduct, quantity }]
+    })
 
-      const modeLabel = data.mode === 'stock' ? '現貨購買' : '預購下單'
-      toast.success(`${modeLabel} ${selectedProduct.name} x${quantity}`)
-      setSelectedProduct(null)
-      setQuantity(1)
-      loadMyOrders()
-      if (isStaff) loadAllOrders()
-    } catch (err) {
-      console.error('Order error:', err)
-      toast.error('下單失敗')
-    } finally {
-      setIsOrdering(false)
+    toast.success(`已加入購物車：${selectedProduct.name} x${quantity}`)
+    setSelectedProduct(null)
+    setQuantity(1)
+  }
+
+  // 確認下單（批次送出購物車）
+  const handleSubmitCart = async () => {
+    if (!profile || !tenant || cart.length === 0) return
+
+    setIsSubmittingCart(true)
+    const successIds: string[] = []
+    const failedItems: string[] = []
+
+    for (const item of cart) {
+      try {
+        const { data, error } = await supabase.rpc('create_shop_order_v1', {
+          p_tenant_id: tenant.id,
+          p_product_id: item.product.id,
+          p_line_user_id: profile.userId,
+          p_quantity: item.quantity,
+          p_display_name: profile.displayName,
+          p_picture_url: profile.pictureUrl,
+        })
+
+        if (error) throw error
+
+        if (!data.success) {
+          toast.error(`${item.product.name}：${data.error}`)
+          failedItems.push(item.product.id)
+        } else {
+          successIds.push(item.product.id)
+        }
+      } catch (err) {
+        console.error('Order error:', err)
+        toast.error(`${item.product.name} 下單失敗`)
+        failedItems.push(item.product.id)
+      }
     }
+
+    if (successIds.length > 0) {
+      toast.success(`成功下單 ${successIds.length} 項商品`)
+    }
+
+    // 只清除成功的商品，失敗的留在購物車
+    if (failedItems.length > 0) {
+      setCart((prev) => prev.filter((c) => failedItems.includes(c.product.id)))
+    } else {
+      setCart([])
+      setIsCartOpen(false)
+    }
+
+    loadMyOrders()
+    if (isStaff) loadAllOrders()
+    setIsSubmittingCart(false)
   }
 
   // ========== 管理員操作 ==========
@@ -485,13 +552,20 @@ export default function ShopPage() {
       }
 
       // 呼叫 RPC 建立商品
+      const endTimeValue = newProductEndTime
+        ? new Date(Date.now() + newProductEndTime * 60 * 1000).toISOString()
+        : null
+
       const { data, error } = await supabase.rpc('add_shop_product_v1', {
         p_tenant_id: tenant.id,
         p_line_user_id: profile.userId,
         p_name: newProductName.trim(),
         p_price: parseFloat(newProductPrice),
-        p_stock: newProductStock ? parseInt(newProductStock) : 0,
+        p_stock: newProductIsLimited && newProductStock ? parseInt(newProductStock) : 0,
         p_image_url: imageUrl,
+        p_is_limited: newProductIsLimited,
+        p_category: newProductCategory || null,
+        p_end_time: endTimeValue,
       })
 
       if (error) throw error
@@ -506,6 +580,9 @@ export default function ShopPage() {
       setNewProductName('')
       setNewProductPrice('')
       setNewProductStock('')
+      setNewProductIsLimited(false)
+      setNewProductCategory('')
+      setNewProductEndTime(null)
       setNewProductImage(null)
       setNewProductPreview(null)
       setIsAddProductOpen(false)
@@ -616,7 +693,8 @@ export default function ShopPage() {
     )
   }
 
-  const cartItemCount = orders.filter((o) => o.status !== 'cancelled').length
+  const cartItemCount = cart.reduce((sum, item) => sum + item.quantity, 0)
+  const orderItemCount = orders.filter((o) => o.status !== 'cancelled').length
 
   // 管理員：每個商品的訂單統計
   const getProductStats = (productId: string) => {
@@ -626,9 +704,9 @@ export default function ShopPage() {
     return { pending, allocated, total: productOrders.length }
   }
 
-  // 判斷商品模式
+  // 判斷商品模式：is_limited = true → 現貨模式，否則 → 預購模式
   const getProductMode = (product: Product) => {
-    if (product.stock !== null && product.stock > 0) return 'stock'
+    if (product.is_limited) return 'stock'
     return 'preorder'
   }
 
@@ -759,6 +837,9 @@ export default function ShopPage() {
             const isExpired = product.end_time
               ? new Date(product.end_time).getTime() < Date.now()
               : product.is_expired
+            // 雙模式：is_limited=true 時 stock<=0 才完銷，預購模式永不完銷
+            const isSoldOut = product.is_sold_out || (product.is_limited && product.stock !== null && product.stock <= 0)
+            const isUnavailable = isExpired || isSoldOut
             const isHot = product.sold_qty >= 5
             const timeRemaining = product.end_time ? getTimeRemaining(product.end_time) : null
             const pStats = isStaff ? getProductStats(product.id) : null
@@ -770,10 +851,11 @@ export default function ShopPage() {
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: index * 0.03 }}
-                className={`relative rounded-xl overflow-hidden bg-card border ${
-                  isExpired ? 'opacity-60' : 'cursor-pointer active:scale-95'
-                } transition-transform`}
+                className={`relative rounded-xl overflow-hidden bg-card border ${isUnavailable ? 'opacity-60' : 'cursor-pointer active:scale-95'
+                  } transition-transform`}
                 onClick={() => {
+                  if (isUnavailable && !isStaff) return
+                  if (isSoldOut && !isStaff) return
                   if (isExpired) return
                   if (!isLoggedIn) {
                     login()
@@ -783,39 +865,35 @@ export default function ShopPage() {
                   setQuantity(1)
                 }}
               >
-                {/* 已售數量標籤 */}
+                {/* 左上 badges：已售數量 */}
                 {product.sold_qty > 0 && (
                   <motion.div
                     key={product.sold_qty}
                     initial={{ scale: 1.3 }}
                     animate={{ scale: 1 }}
-                    className={`absolute top-1 left-1 z-10 px-1.5 py-0.5 rounded-full text-xs font-bold text-white ${
-                      isHot ? 'bg-red-500' : 'bg-black/60'
-                    }`}
+                    className={`absolute top-1 left-1 z-10 px-1.5 py-0.5 rounded-full text-xs font-bold text-white ${isHot ? 'bg-red-500' : 'bg-black/60'
+                      }`}
                   >
                     +{product.sold_qty}
                     {isHot && <Flame className="inline w-3 h-3 ml-0.5" />}
                   </motion.div>
                 )}
 
-                {/* 倒數時間 */}
-                {timeRemaining && (
-                  <div className="absolute top-1 right-1 z-10 px-1.5 py-0.5 rounded-full text-xs bg-orange-500 text-white">
-                    <Clock className="inline w-3 h-3 mr-0.5" />
-                    {timeRemaining}
-                  </div>
-                )}
-
-                {/* 現貨/預購 badge */}
-                {!timeRemaining && product.sold_qty === 0 && (
+                {/* 右上 badges：預購/現貨 + 倒數時間 */}
+                <div className="absolute top-1 right-1 z-10 flex flex-col items-end gap-0.5">
                   <div
-                    className={`absolute top-1 right-1 z-10 px-1.5 py-0.5 rounded-full text-xs text-white ${
-                      mode === 'stock' ? 'bg-green-500' : 'bg-blue-500'
-                    }`}
+                    className={`px-1.5 py-0.5 rounded-full text-xs text-white ${mode === 'stock' ? 'bg-green-500' : 'bg-blue-500'
+                      }`}
                   >
                     {mode === 'stock' ? '現貨' : '預購'}
                   </div>
-                )}
+                  {timeRemaining && (
+                    <div className="px-1.5 py-0.5 rounded-full text-xs bg-orange-500 text-white">
+                      <Clock className="inline w-3 h-3 mr-0.5" />
+                      {timeRemaining}
+                    </div>
+                  )}
+                </div>
 
                 {/* 商品圖片 */}
                 <div className="aspect-square relative bg-muted">
@@ -833,10 +911,15 @@ export default function ShopPage() {
                     </div>
                   )}
 
-                  {/* 已截止 遮罩 */}
-                  {isExpired && (
+                  {/* 已截止 / 已完銷 遮罩 */}
+                  {isExpired && !isSoldOut && (
                     <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
                       <span className="text-white text-sm font-bold">已截止</span>
+                    </div>
+                  )}
+                  {isSoldOut && (
+                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                      <span className="text-white text-sm font-bold">已完銷</span>
                     </div>
                   )}
                 </div>
@@ -846,7 +929,7 @@ export default function ShopPage() {
                   <p className="text-xs truncate">{product.name}</p>
                   <div className="flex items-center gap-1">
                     <p className="text-sm font-bold" style={accentColor ? { color: accentColor } : undefined}>${product.price}</p>
-                    {mode === 'stock' && product.stock !== null && (
+                    {mode === 'stock' && product.stock !== null && product.stock > 0 && (
                       <span className="text-xs text-muted-foreground">
                         剩{product.stock}
                       </span>
@@ -1005,12 +1088,30 @@ export default function ShopPage() {
 
             {/* 顧客：購物車按鈕 */}
             {isLoggedIn && (
-              <Button variant="default" className="relative" onClick={() => setIsCartOpen(true)}>
-                <ShoppingCart className="w-4 h-4 mr-2" />
-                我的訂單
+              <Button
+                variant="default"
+                className="relative"
+                onClick={() => setIsCartOpen(true)}
+                style={accentColor ? { backgroundColor: accentColor } : undefined}
+              >
+                <ShoppingCart className="w-4 h-4 mr-1" />
+                購物車
                 {cartItemCount > 0 && (
                   <span className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
                     {cartItemCount}
+                  </span>
+                )}
+              </Button>
+            )}
+
+            {/* 顧客：我的訂單按鈕 */}
+            {isLoggedIn && (
+              <Button variant="outline" size="sm" className="relative" onClick={() => setIsOrderDrawerOpen(true)}>
+                <Package className="w-4 h-4 mr-1" />
+                訂單
+                {orderItemCount > 0 && (
+                  <span className="absolute -top-2 -right-2 w-5 h-5 bg-blue-500 text-white text-xs rounded-full flex items-center justify-center">
+                    {orderItemCount}
                   </span>
                 )}
               </Button>
@@ -1058,11 +1159,10 @@ export default function ShopPage() {
                   <p className="text-2xl font-bold text-primary">${selectedProduct.price}</p>
                   <div className="flex items-center gap-2 mt-1">
                     <span
-                      className={`text-xs px-2 py-0.5 rounded-full ${
-                        getProductMode(selectedProduct) === 'stock'
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-blue-100 text-blue-700'
-                      }`}
+                      className={`text-xs px-2 py-0.5 rounded-full ${getProductMode(selectedProduct) === 'stock'
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-blue-100 text-blue-700'
+                        }`}
                     >
                       {getProductMode(selectedProduct) === 'stock'
                         ? `現貨 (剩 ${selectedProduct.stock})`
@@ -1076,49 +1176,77 @@ export default function ShopPage() {
               </div>
 
               {/* 數量選擇 */}
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-sm">數量</span>
-                <div className="flex items-center gap-3">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-10 w-10 rounded-full"
-                    onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                    disabled={quantity <= 1}
-                  >
-                    <Minus className="w-4 h-4" />
-                  </Button>
-                  <span className="text-xl font-bold w-8 text-center">{quantity}</span>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-10 w-10 rounded-full"
-                    onClick={() => {
-                      const max = selectedProduct.limit_qty || 99
-                      setQuantity(Math.min(max, quantity + 1))
-                    }}
-                  >
-                    <Plus className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
+              {(() => {
+                // 計算此商品已在購物車的數量
+                const inCartQty = cart.find((c) => c.product.id === selectedProduct.id)?.quantity || 0
+                // 可加入的上限：現貨模式限制庫存+限購，預購模式不限（或僅限購）
+                let maxQty = 99
+                if (selectedProduct.is_limited) {
+                  // 現貨模式：受庫存限制
+                  if (selectedProduct.stock !== null) {
+                    maxQty = Math.min(maxQty, selectedProduct.stock - inCartQty)
+                  }
+                  // 限購數量
+                  if (selectedProduct.limit_qty) {
+                    maxQty = Math.min(maxQty, selectedProduct.limit_qty - inCartQty)
+                  }
+                }
+                // 預購模式（is_limited=false）：不限制數量
+                maxQty = Math.max(maxQty, 0)
 
-              {selectedProduct.is_limited && selectedProduct.limit_qty && (
-                <p className="text-sm text-orange-600 mb-4">
-                  此商品限購 {selectedProduct.limit_qty} 個
-                </p>
-              )}
+                return (
+                  <>
+                    <div className="flex items-center justify-between mb-4">
+                      <span className="text-sm">數量</span>
+                      <div className="flex items-center gap-3">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-10 w-10 rounded-full"
+                          onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                          disabled={quantity <= 1}
+                        >
+                          <Minus className="w-4 h-4" />
+                        </Button>
+                        <span className="text-xl font-bold w-8 text-center">{quantity}</span>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-10 w-10 rounded-full"
+                          onClick={() => setQuantity(Math.min(maxQty, quantity + 1))}
+                          disabled={quantity >= maxQty}
+                        >
+                          <Plus className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    {selectedProduct.is_limited && selectedProduct.limit_qty && (
+                      <p className="text-sm text-orange-600 mb-2">
+                        此商品限購 {selectedProduct.limit_qty} 個
+                        {inCartQty > 0 && `（購物車已有 ${inCartQty} 個）`}
+                      </p>
+                    )}
+                    {selectedProduct.is_limited && selectedProduct.stock !== null && inCartQty > 0 && (
+                      <p className="text-sm text-muted-foreground mb-2">
+                        購物車已有 {inCartQty} 個，剩餘可加 {Math.max(0, selectedProduct.stock - inCartQty)} 個
+                      </p>
+                    )}
+                  </>
+                )
+              })()}
 
               <div className="flex gap-2">
                 <Button variant="outline" className="flex-1" onClick={() => setSelectedProduct(null)}>
                   取消
                 </Button>
-                <Button className="flex-1" onClick={handleOrder} disabled={isOrdering}>
-                  {isOrdering ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    `確定下單 $${selectedProduct.price * quantity}`
-                  )}
+                <Button
+                  className="flex-1"
+                  onClick={handleAddToCart}
+                  style={accentColor ? { backgroundColor: accentColor } : undefined}
+                >
+                  <ShoppingCart className="w-4 h-4 mr-1" />
+                  加入購物車 ${selectedProduct.price * quantity}
                 </Button>
               </div>
             </motion.div>
@@ -1126,7 +1254,7 @@ export default function ShopPage() {
         )}
       </AnimatePresence>
 
-      {/* 我的訂單 Drawer */}
+      {/* 購物車 Drawer */}
       <AnimatePresence>
         {isCartOpen && (
           <motion.div
@@ -1135,6 +1263,163 @@ export default function ShopPage() {
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 bg-black/50"
             onClick={() => setIsCartOpen(false)}
+          >
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 25 }}
+              className="absolute bottom-0 left-0 right-0 bg-background rounded-t-2xl max-h-[80vh] flex flex-col safe-bottom"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between p-4 border-b">
+                <h2 className="text-lg font-bold">
+                  購物車
+                  {cart.length > 0 && (
+                    <span className="text-sm font-normal text-muted-foreground ml-2">
+                      {cart.length} 項商品
+                    </span>
+                  )}
+                </h2>
+                <Button variant="ghost" size="icon" onClick={() => setIsCartOpen(false)}>
+                  <X className="w-5 h-5" />
+                </Button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4">
+                {cart.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <ShoppingCart className="w-12 h-12 mx-auto mb-3 opacity-40" />
+                    <p>購物車是空的</p>
+                    <p className="text-xs mt-1">點選商品加入購物車</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {cart.map((item) => (
+                      <div
+                        key={item.product.id}
+                        className="flex gap-3 p-3 rounded-xl border"
+                      >
+                        <div className="w-14 h-14 rounded-lg overflow-hidden bg-muted flex-shrink-0">
+                          {item.product.image_url ? (
+                            <Image
+                              src={item.product.image_url}
+                              alt={item.product.name}
+                              width={56}
+                              height={56}
+                              className="object-cover w-full h-full"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <Package className="w-5 h-5 text-muted-foreground" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-1">
+                            <p className="font-medium truncate text-sm">{item.product.name}</p>
+                            <button
+                              className="text-muted-foreground hover:text-red-500 transition-colors flex-shrink-0 p-0.5"
+                              onClick={() => setCart((prev) => prev.filter((c) => c.product.id !== item.product.id))}
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                          <p className="text-sm font-bold" style={accentColor ? { color: accentColor } : undefined}>
+                            ${item.product.price * item.quantity}
+                          </p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <button
+                              className="w-7 h-7 rounded-full border flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors"
+                              onClick={() => {
+                                if (item.quantity <= 1) {
+                                  setCart((prev) => prev.filter((c) => c.product.id !== item.product.id))
+                                } else {
+                                  setCart((prev) =>
+                                    prev.map((c) =>
+                                      c.product.id === item.product.id
+                                        ? { ...c, quantity: c.quantity - 1 }
+                                        : c
+                                    )
+                                  )
+                                }
+                              }}
+                            >
+                              <Minus className="w-3 h-3" />
+                            </button>
+                            <span className="text-sm font-medium w-6 text-center">{item.quantity}</span>
+                            <button
+                              className="w-7 h-7 rounded-full border flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors"
+                              onClick={() => {
+                                // 現貨模式：受庫存+限購限制；預購模式：不限
+                                let max = 99
+                                if (item.product.is_limited) {
+                                  if (item.product.stock !== null) {
+                                    max = Math.min(max, item.product.stock)
+                                  }
+                                  if (item.product.limit_qty) {
+                                    max = Math.min(max, item.product.limit_qty)
+                                  }
+                                }
+                                if (item.quantity < max) {
+                                  setCart((prev) =>
+                                    prev.map((c) =>
+                                      c.product.id === item.product.id
+                                        ? { ...c, quantity: c.quantity + 1 }
+                                        : c
+                                    )
+                                  )
+                                }
+                              }}
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* 購物車底部：合計 + 確認下單 */}
+              {cart.length > 0 && (
+                <div className="p-4 border-t bg-background">
+                  <div className="flex justify-between text-sm mb-3">
+                    <span>合計</span>
+                    <span className="text-lg font-bold" style={accentColor ? { color: accentColor } : undefined}>
+                      ${cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0)}
+                    </span>
+                  </div>
+                  <Button
+                    className="w-full"
+                    onClick={handleSubmitCart}
+                    disabled={isSubmittingCart}
+                    style={accentColor ? { backgroundColor: accentColor } : undefined}
+                  >
+                    {isSubmittingCart ? (
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    ) : (
+                      <ShoppingCart className="w-4 h-4 mr-2" />
+                    )}
+                    {isSubmittingCart ? '下單中...' : `確認下單（${cart.length} 項）`}
+                  </Button>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 我的訂單 Drawer */}
+      <AnimatePresence>
+        {isOrderDrawerOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/50"
+            onClick={() => setIsOrderDrawerOpen(false)}
           >
             <motion.div
               initial={{ x: '100%' }}
@@ -1146,7 +1431,7 @@ export default function ShopPage() {
             >
               <div className="flex items-center justify-between p-4 border-b">
                 <h2 className="text-lg font-bold">我的訂單</h2>
-                <Button variant="ghost" size="icon" onClick={() => setIsCartOpen(false)}>
+                <Button variant="ghost" size="icon" onClick={() => setIsOrderDrawerOpen(false)}>
                   <X className="w-5 h-5" />
                 </Button>
               </div>
@@ -1159,9 +1444,8 @@ export default function ShopPage() {
                     {orders.map((order) => (
                       <div
                         key={order.id}
-                        className={`flex gap-3 p-3 rounded-xl border ${
-                          order.status === 'cancelled' ? 'opacity-50 bg-muted' : ''
-                        }`}
+                        className={`flex gap-3 p-3 rounded-xl border ${order.status === 'cancelled' ? 'opacity-50 bg-muted' : ''
+                          }`}
                       >
                         <div className="w-16 h-16 rounded-lg overflow-hidden bg-muted flex-shrink-0">
                           {order.product_image ? (
@@ -1185,13 +1469,12 @@ export default function ShopPage() {
                           </p>
                           <div className="flex items-center justify-between mt-1">
                             <span
-                              className={`text-xs px-2 py-0.5 rounded-full ${
-                                order.status === 'allocated'
-                                  ? 'bg-green-100 text-green-700'
-                                  : order.status === 'cancelled'
-                                    ? 'bg-gray-100 text-gray-500'
-                                    : 'bg-yellow-100 text-yellow-700'
-                              }`}
+                              className={`text-xs px-2 py-0.5 rounded-full ${order.status === 'allocated'
+                                ? 'bg-green-100 text-green-700'
+                                : order.status === 'cancelled'
+                                  ? 'bg-gray-100 text-gray-500'
+                                  : 'bg-yellow-100 text-yellow-700'
+                                }`}
                             >
                               {order.status === 'allocated'
                                 ? '已購得'
@@ -1334,13 +1617,12 @@ export default function ShopPage() {
                               </span>
                             </div>
                             <span
-                              className={`text-xs px-1.5 py-0.5 rounded flex-shrink-0 ${
-                                order.status === 'allocated'
-                                  ? 'bg-green-100 text-green-700'
-                                  : order.status === 'partial'
-                                    ? 'bg-blue-100 text-blue-700'
-                                    : 'bg-yellow-100 text-yellow-700'
-                              }`}
+                              className={`text-xs px-1.5 py-0.5 rounded flex-shrink-0 ${order.status === 'allocated'
+                                ? 'bg-green-100 text-green-700'
+                                : order.status === 'partial'
+                                  ? 'bg-blue-100 text-blue-700'
+                                  : 'bg-yellow-100 text-yellow-700'
+                                }`}
                             >
                               {order.status === 'allocated'
                                 ? '已配'
@@ -1428,8 +1710,35 @@ export default function ShopPage() {
                 className="mb-3 rounded-xl"
               />
 
-              {/* 價格 + 庫存 */}
-              <div className="flex gap-2 mb-2">
+              {/* 預購/現貨 切換 */}
+              <div className="flex gap-2 mb-3">
+                <button
+                  type="button"
+                  className={`flex-1 py-2 rounded-xl text-sm font-medium transition-colors ${!newProductIsLimited
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-muted text-muted-foreground'
+                    }`}
+                  onClick={() => {
+                    setNewProductIsLimited(false)
+                    setNewProductStock('')
+                  }}
+                >
+                  預購
+                </button>
+                <button
+                  type="button"
+                  className={`flex-1 py-2 rounded-xl text-sm font-medium transition-colors ${newProductIsLimited
+                    ? 'bg-green-500 text-white'
+                    : 'bg-muted text-muted-foreground'
+                    }`}
+                  onClick={() => setNewProductIsLimited(true)}
+                >
+                  現貨
+                </button>
+              </div>
+
+              {/* 價格 + 庫存（現貨模式才顯示庫存） */}
+              <div className="flex gap-2 mb-3">
                 <Input
                   type="number"
                   min="1"
@@ -1438,17 +1747,84 @@ export default function ShopPage() {
                   onChange={(e) => setNewProductPrice(e.target.value)}
                   className="flex-1 rounded-xl"
                 />
-                <Input
-                  type="number"
-                  min="0"
-                  placeholder="庫存（0=預購）"
-                  value={newProductStock}
-                  onChange={(e) => setNewProductStock(e.target.value)}
-                  className="flex-1 rounded-xl"
-                />
+                {newProductIsLimited && (
+                  <Input
+                    type="number"
+                    min="1"
+                    placeholder="庫存數量"
+                    value={newProductStock}
+                    onChange={(e) => setNewProductStock(e.target.value)}
+                    className="flex-1 rounded-xl"
+                  />
+                )}
               </div>
-              <p className="text-xs text-muted-foreground mb-4">
-                庫存 {'>'} 0 = 現貨（直接扣庫存），庫存 = 0 = 預購（等補貨分配）
+
+              {/* 分類標籤 */}
+              {shopCategories.length > 0 && (
+                <div className="mb-3">
+                  <p className="text-xs text-muted-foreground mb-1.5">分類標籤</p>
+                  <div className="flex gap-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${!newProductCategory
+                        ? 'bg-purple-500 text-white'
+                        : 'bg-muted text-muted-foreground'
+                        }`}
+                      onClick={() => setNewProductCategory('')}
+                    >
+                      無
+                    </button>
+                    {shopCategories.map((cat) => (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${newProductCategory === cat.name
+                          ? 'bg-purple-500 text-white'
+                          : 'bg-muted text-muted-foreground'
+                          }`}
+                        onClick={() => setNewProductCategory(cat.name)}
+                      >
+                        #{cat.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 限時設定 */}
+              <div className="mb-3">
+                <p className="text-xs text-muted-foreground mb-1.5">收單時限</p>
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    className={`flex-1 py-1.5 rounded-xl text-xs font-medium transition-colors ${newProductEndTime === null
+                      ? 'bg-gray-700 text-white'
+                      : 'bg-muted text-muted-foreground'
+                      }`}
+                    onClick={() => setNewProductEndTime(null)}
+                  >
+                    不限時
+                  </button>
+                  {[30, 60, 120].map((mins) => (
+                    <button
+                      key={mins}
+                      type="button"
+                      className={`flex-1 py-1.5 rounded-xl text-xs font-medium transition-colors ${newProductEndTime === mins
+                        ? 'bg-orange-500 text-white'
+                        : 'bg-muted text-muted-foreground'
+                        }`}
+                      onClick={() => setNewProductEndTime(mins)}
+                    >
+                      {mins >= 60 ? `${mins / 60}hr` : `${mins}分`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <p className="text-xs text-muted-foreground mb-3">
+                {newProductIsLimited
+                  ? '現貨模式：庫存售完即完銷'
+                  : '預購模式：不限數量，到貨後補貨分配'}
               </p>
 
               <div className="flex gap-2">
@@ -1460,6 +1836,9 @@ export default function ShopPage() {
                     setNewProductName('')
                     setNewProductPrice('')
                     setNewProductStock('')
+                    setNewProductIsLimited(false)
+                    setNewProductCategory('')
+                    setNewProductEndTime(null)
                     setNewProductImage(null)
                     setNewProductPreview(null)
                   }}
