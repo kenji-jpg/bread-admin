@@ -376,8 +376,16 @@ export default function ShopPage() {
             return
           }
 
-          setProducts((prev) =>
-            prev.map((p) =>
+          setProducts((prev) => {
+            const exists = prev.some((p) => p.id === newData.id)
+
+            // 商品不在列表中但現在符合條件 → 重新載入商城
+            if (!exists) {
+              loadShop()
+              return prev
+            }
+
+            return prev.map((p) =>
               p.id === newData.id
                 ? {
                   ...p,
@@ -396,7 +404,7 @@ export default function ShopPage() {
                 }
                 : p
             )
-          )
+          })
         }
       )
       .on(
