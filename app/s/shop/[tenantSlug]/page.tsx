@@ -867,192 +867,201 @@ export default function ShopPage() {
       {/* 商品列表 */}
       <main className="p-2">
         <div className="grid grid-cols-3 gap-2">
-          {(selectedCategory ? products.filter(p => p.category === selectedCategory) : products).map((product, index) => {
-            const isExpired = product.end_time
-              ? new Date(product.end_time).getTime() < Date.now()
-              : product.is_expired
-            // 雙模式：is_limited=true 時 stock<=0 才完銷，預購模式永不完銷
-            const isSoldOut = product.is_sold_out || (product.is_limited && product.stock !== null && product.stock <= 0)
-            const isUnavailable = isExpired || isSoldOut
-            const isHot = product.sold_qty >= 5
-            const timeRemaining = product.end_time ? getTimeRemaining(product.end_time) : null
-            const pStats = isStaff ? getProductStats(product.id) : null
-            const mode = getProductMode(product)
+          {(selectedCategory ? products.filter(p => p.category === selectedCategory) : products)
+            .slice()
+            .sort((a, b) => {
+              const aUnavailable = a.is_expired || a.is_sold_out || (a.end_time && new Date(a.end_time).getTime() < Date.now()) || (a.is_limited && a.stock !== null && a.stock <= 0)
+              const bUnavailable = b.is_expired || b.is_sold_out || (b.end_time && new Date(b.end_time).getTime() < Date.now()) || (b.is_limited && b.stock !== null && b.stock <= 0)
+              if (aUnavailable && !bUnavailable) return 1
+              if (!aUnavailable && bUnavailable) return -1
+              return 0
+            })
+            .map((product, index) => {
+              const isExpired = product.end_time
+                ? new Date(product.end_time).getTime() < Date.now()
+                : product.is_expired
+              // 雙模式：is_limited=true 時 stock<=0 才完銷，預購模式永不完銷
+              const isSoldOut = product.is_sold_out || (product.is_limited && product.stock !== null && product.stock <= 0)
+              const isUnavailable = isExpired || isSoldOut
+              const isHot = product.sold_qty >= 5
+              const timeRemaining = product.end_time ? getTimeRemaining(product.end_time) : null
+              const pStats = isStaff ? getProductStats(product.id) : null
+              const mode = getProductMode(product)
 
-            return (
-              <motion.div
-                key={product.id}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: index * 0.03 }}
-                className={`relative rounded-xl overflow-hidden bg-card border ${isUnavailable ? 'opacity-60' : 'cursor-pointer active:scale-95'
-                  } transition-transform`}
-                onClick={() => {
-                  if (isUnavailable && !isStaff) return
-                  if (isSoldOut && !isStaff) return
-                  if (isExpired) return
-                  if (!isLoggedIn) {
-                    login()
-                    return
-                  }
-                  setSelectedProduct(product)
-                  setQuantity(1)
-                }}
-              >
-                {/* 左上 badges：已售數量 */}
-                {product.sold_qty > 0 && (
-                  <motion.div
-                    key={product.sold_qty}
-                    initial={{ scale: 1.3 }}
-                    animate={{ scale: 1 }}
-                    className={`absolute top-1 left-1 z-10 px-1.5 py-0.5 rounded-full text-xs font-bold text-white ${isHot ? 'bg-red-500' : 'bg-black/60'
-                      }`}
-                  >
-                    +{product.sold_qty}
-                    {isHot && <Flame className="inline w-3 h-3 ml-0.5" />}
-                  </motion.div>
-                )}
-
-                {/* 右上 badges：預購/現貨 + 倒數時間 */}
-                <div className="absolute top-1 right-1 z-10 flex flex-col items-end gap-0.5">
-                  <div
-                    className={`px-1.5 py-0.5 rounded-full text-xs text-white ${mode === 'stock' ? 'bg-green-500' : 'bg-blue-500'
-                      }`}
-                  >
-                    {mode === 'stock' ? '現貨' : '預購'}
-                  </div>
-                  {timeRemaining && (
-                    <div className="px-1.5 py-0.5 rounded-full text-xs bg-orange-500 text-white">
-                      <Clock className="inline w-3 h-3 mr-0.5" />
-                      {timeRemaining}
-                    </div>
-                  )}
-                </div>
-
-                {/* 商品圖片 */}
-                <div className="aspect-square relative bg-muted">
-                  {product.image_url ? (
-                    <Image
-                      src={product.image_url}
-                      alt={product.name}
-                      fill
-                      className="object-cover"
-                      sizes="(max-width: 768px) 33vw, 200px"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <Package className="w-8 h-8 text-muted-foreground" />
-                    </div>
+              return (
+                <motion.div
+                  key={product.id}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: index * 0.03 }}
+                  className={`relative rounded-xl overflow-hidden bg-card border ${isUnavailable ? 'opacity-60' : 'cursor-pointer active:scale-95'
+                    } transition-transform`}
+                  onClick={() => {
+                    if (isUnavailable && !isStaff) return
+                    if (isSoldOut && !isStaff) return
+                    if (isExpired) return
+                    if (!isLoggedIn) {
+                      login()
+                      return
+                    }
+                    setSelectedProduct(product)
+                    setQuantity(1)
+                  }}
+                >
+                  {/* 左上 badges：已售數量 */}
+                  {product.sold_qty > 0 && (
+                    <motion.div
+                      key={product.sold_qty}
+                      initial={{ scale: 1.3 }}
+                      animate={{ scale: 1 }}
+                      className={`absolute top-1 left-1 z-10 px-1.5 py-0.5 rounded-full text-xs font-bold text-white ${isHot ? 'bg-red-500' : 'bg-black/60'
+                        }`}
+                    >
+                      +{product.sold_qty}
+                      {isHot && <Flame className="inline w-3 h-3 ml-0.5" />}
+                    </motion.div>
                   )}
 
-                  {/* 已截止 / 已完銷 遮罩 */}
-                  {isExpired && !isSoldOut && (
-                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                      <span className="text-white text-sm font-bold">已截止</span>
+                  {/* 右上 badges：預購/現貨 + 倒數時間 */}
+                  <div className="absolute top-1 right-1 z-10 flex flex-col items-end gap-0.5">
+                    <div
+                      className={`px-1.5 py-0.5 rounded-full text-xs text-white ${mode === 'stock' ? 'bg-green-500' : 'bg-blue-500'
+                        }`}
+                    >
+                      {mode === 'stock' ? '現貨' : '預購'}
                     </div>
-                  )}
-                  {isSoldOut && (
-                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                      <span className="text-white text-sm font-bold">已完銷</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* 商品資訊 */}
-                <div className="p-2">
-                  <p className="text-xs truncate">{product.name}</p>
-                  <div className="flex items-center gap-1">
-                    <p className="text-sm font-bold" style={accentColor ? { color: accentColor } : undefined}>${product.price}</p>
-                    {mode === 'stock' && product.stock !== null && product.stock > 0 && (
-                      <span className="text-xs text-muted-foreground">
-                        剩{product.stock}
-                      </span>
+                    {timeRemaining && (
+                      <div className="px-1.5 py-0.5 rounded-full text-xs bg-orange-500 text-white">
+                        <Clock className="inline w-3 h-3 mr-0.5" />
+                        {timeRemaining}
+                      </div>
                     )}
                   </div>
-                  {product.is_limited && product.limit_qty && (
-                    <p className="text-xs text-orange-600">限購 {product.limit_qty}</p>
-                  )}
 
-                  {/* 管理員：顯示分配狀態 + 操作按鈕 */}
-                  {isStaff && pStats && (
-                    <div className="mt-1 space-y-1">
-                      <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <span>
-                          {pStats.allocated}/{pStats.total}
+                  {/* 商品圖片 */}
+                  <div className="aspect-square relative bg-muted">
+                    {product.image_url ? (
+                      <Image
+                        src={product.image_url}
+                        alt={product.name}
+                        fill
+                        className="object-cover"
+                        sizes="(max-width: 768px) 33vw, 200px"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Package className="w-8 h-8 text-muted-foreground" />
+                      </div>
+                    )}
+
+                    {/* 已截止 / 已完銷 遮罩 */}
+                    {isExpired && !isSoldOut && (
+                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                        <span className="text-white text-sm font-bold">已截止</span>
+                      </div>
+                    )}
+                    {isSoldOut && (
+                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                        <span className="text-white text-sm font-bold">已完銷</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 商品資訊 */}
+                  <div className="p-2">
+                    <p className="text-xs truncate">{product.name}</p>
+                    <div className="flex items-center gap-1">
+                      <p className="text-sm font-bold" style={accentColor ? { color: accentColor } : undefined}>${product.price}</p>
+                      {mode === 'stock' && product.stock !== null && product.stock > 0 && (
+                        <span className="text-xs text-muted-foreground">
+                          剩{product.stock}
                         </span>
-                        {pStats.pending > 0 && (
-                          <span className="text-orange-600">{pStats.pending}待</span>
-                        )}
-                      </div>
-                      <div className="flex gap-1 flex-wrap">
-                        {/* 未截止：顯示「截止」 */}
-                        {!isExpired && (
-                          <button
-                            className="flex-1 h-6 text-xs bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded flex items-center justify-center gap-0.5"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleUpdateEndTime(product.id, new Date())
-                            }}
-                          >
-                            <TimerOff className="w-3 h-3" />
-                            截止
-                          </button>
-                        )}
-                        {/* 已截止：顯示「延長」 */}
-                        {isExpired && (
-                          <button
-                            className="flex-1 h-6 text-xs bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded flex items-center justify-center gap-0.5"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleUpdateEndTime(
-                                product.id,
-                                new Date(Date.now() + 60 * 60 * 1000)
-                              )
-                            }}
-                          >
-                            <TimerReset className="w-3 h-3" />
-                            延長
-                          </button>
-                        )}
-                        {/* 已截止且有待分配：顯示「補貨」 */}
-                        {isExpired && pStats.pending > 0 && (
-                          <button
-                            className="flex-1 h-6 text-xs bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 rounded flex items-center justify-center gap-0.5"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setRestockProduct(product)
-                              setRestockQty('')
-                            }}
-                          >
-                            <PackagePlus className="w-3 h-3" />
-                            補貨
-                          </button>
-                        )}
-                        {/* 下架按鈕 */}
-                        <button
-                          className="flex-1 h-6 text-xs bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400 rounded flex items-center justify-center gap-0.5"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleToggleProduct(product.id, 'deactivate')
-                          }}
-                          disabled={isToggling === product.id}
-                        >
-                          {isToggling === product.id ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                          ) : (
-                            <>
-                              <EyeOff className="w-3 h-3" />
-                              下架
-                            </>
-                          )}
-                        </button>
-                      </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              </motion.div>
-            )
-          })}
+                    {product.is_limited && product.limit_qty && (
+                      <p className="text-xs text-orange-600">限購 {product.limit_qty}</p>
+                    )}
+
+                    {/* 管理員：顯示分配狀態 + 操作按鈕 */}
+                    {isStaff && pStats && (
+                      <div className="mt-1 space-y-1">
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span>
+                            {pStats.allocated}/{pStats.total}
+                          </span>
+                          {pStats.pending > 0 && (
+                            <span className="text-orange-600">{pStats.pending}待</span>
+                          )}
+                        </div>
+                        <div className="flex gap-1 flex-wrap">
+                          {/* 未截止：顯示「截止」 */}
+                          {!isExpired && (
+                            <button
+                              className="flex-1 h-6 text-xs bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded flex items-center justify-center gap-0.5"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleUpdateEndTime(product.id, new Date())
+                              }}
+                            >
+                              <TimerOff className="w-3 h-3" />
+                              截止
+                            </button>
+                          )}
+                          {/* 已截止：顯示「延長」 */}
+                          {isExpired && (
+                            <button
+                              className="flex-1 h-6 text-xs bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded flex items-center justify-center gap-0.5"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleUpdateEndTime(
+                                  product.id,
+                                  new Date(Date.now() + 60 * 60 * 1000)
+                                )
+                              }}
+                            >
+                              <TimerReset className="w-3 h-3" />
+                              延長
+                            </button>
+                          )}
+                          {/* 已截止且有待分配：顯示「補貨」 */}
+                          {isExpired && pStats.pending > 0 && (
+                            <button
+                              className="flex-1 h-6 text-xs bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 rounded flex items-center justify-center gap-0.5"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setRestockProduct(product)
+                                setRestockQty('')
+                              }}
+                            >
+                              <PackagePlus className="w-3 h-3" />
+                              補貨
+                            </button>
+                          )}
+                          {/* 下架按鈕 */}
+                          <button
+                            className="flex-1 h-6 text-xs bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400 rounded flex items-center justify-center gap-0.5"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleToggleProduct(product.id, 'deactivate')
+                            }}
+                            disabled={isToggling === product.id}
+                          >
+                            {isToggling === product.id ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <>
+                                <EyeOff className="w-3 h-3" />
+                                下架
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )
+            })}
         </div>
 
         {products.length === 0 && (
