@@ -610,13 +610,10 @@ export default function ShopPage() {
       }
 
       toast.success(`已上架 ${newProductName.trim()}`)
-      // 清空表單
+      // 清空表單（保留分類、模式、時限設定，方便連續上架）
       setNewProductName('')
       setNewProductPrice('')
       setNewProductStock('')
-      setNewProductIsLimited(false)
-      setNewProductCategory('')
-      setNewProductEndTime(null)
       setNewProductImage(null)
       setNewProductPreview(null)
       setIsAddProductOpen(false)
