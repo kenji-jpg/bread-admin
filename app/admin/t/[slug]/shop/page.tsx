@@ -790,40 +790,43 @@ function ShopPreview({
 
                 {/* App content */}
                 <div className="h-[640px] overflow-y-auto bg-background">
-                    {/* Banner */}
-                    {bannerUrl && (
-                        <div className="aspect-[3/1] relative bg-muted">
-                            <Image
-                                src={bannerUrl}
-                                alt="Banner"
-                                fill
-                                className="object-cover"
-                                sizes="375px"
-                            />
+                    {/* Header（含背景圖） */}
+                    <div className="sticky top-0 z-10 border-b px-3 py-2 relative overflow-hidden">
+                        {bannerUrl ? (
+                            <>
+                                <Image
+                                    src={bannerUrl}
+                                    alt="Banner"
+                                    fill
+                                    className="object-cover"
+                                    sizes="375px"
+                                />
+                                <div className="absolute inset-0 bg-black/50" />
+                            </>
+                        ) : (
+                            <div className="absolute inset-0 bg-background/95 backdrop-blur" />
+                        )}
+                        <div className="relative z-10">
+                            <div className="flex items-center gap-1.5">
+                                <Store
+                                    className="w-4 h-4"
+                                    style={bannerUrl ? { color: 'white' } : accentColor ? { color: accentColor } : undefined}
+                                />
+                                <span className={`text-sm font-bold truncate ${bannerUrl ? 'text-white' : ''}`}>{tenantName}</span>
+                                <Badge
+                                    className="text-[10px] px-1 py-0"
+                                    style={accentColor ? {
+                                        backgroundColor: `${accentColor}15`,
+                                        color: accentColor,
+                                        borderColor: `${accentColor}30`,
+                                    } : undefined}
+                                >
+                                    <Shield className="w-2.5 h-2.5 mr-0.5" />
+                                    管理
+                                </Badge>
+                            </div>
+                            <p className={`text-[10px] mt-0.5 ${bannerUrl ? 'text-green-400' : 'text-green-600'}`}>營業中</p>
                         </div>
-                    )}
-
-                    {/* Header */}
-                    <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b px-3 py-2">
-                        <div className="flex items-center gap-1.5">
-                            <Store
-                                className="w-4 h-4"
-                                style={accentColor ? { color: accentColor } : undefined}
-                            />
-                            <span className="text-sm font-bold truncate">{tenantName}</span>
-                            <Badge
-                                className="text-[10px] px-1 py-0"
-                                style={accentColor ? {
-                                    backgroundColor: `${accentColor}15`,
-                                    color: accentColor,
-                                    borderColor: `${accentColor}30`,
-                                } : undefined}
-                            >
-                                <Shield className="w-2.5 h-2.5 mr-0.5" />
-                                管理
-                            </Badge>
-                        </div>
-                        <p className="text-[10px] text-green-600 mt-0.5">營業中</p>
                     </div>
 
                     {/* Announcement */}

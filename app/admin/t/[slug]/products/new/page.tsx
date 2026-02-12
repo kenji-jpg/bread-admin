@@ -102,7 +102,6 @@ export default function NewProductPage() {
     const [description, setDescription] = useState('')
     const [category, setCategory] = useState('')
     const [isLimited, setIsLimited] = useState(false)
-    const [limitQty, setLimitQty] = useState('')
     const [endTime, setEndTime] = useState('')
     const [showInShop, setShowInShop] = useState(false)
 
@@ -299,7 +298,7 @@ export default function NewProductPage() {
                     p_description: description.trim() || null,
                     p_cost: cost ? parseFloat(cost) : null,
                     p_category: category.trim() || null,
-                    p_limit_qty: isLimited && limitQty ? parseInt(limitQty) : null,
+                    p_limit_qty: null,
                     p_show_in_shop: showInShop,
                     p_variants: variants.map(v => ({
                         name: v.name.trim(),
@@ -322,7 +321,7 @@ export default function NewProductPage() {
                     p_description: description.trim() || null,
                     p_cost: cost ? parseFloat(cost) : null,
                     p_category: category.trim() || null,
-                    p_limit_qty: isLimited && limitQty ? parseInt(limitQty) : null,
+                    p_limit_qty: null,
                     p_show_in_shop: showInShop,
                     p_variants: null // 無規格商品
                 })
@@ -630,9 +629,9 @@ export default function NewProductPage() {
 
                                 <div className="flex items-center justify-between">
                                     <div className="space-y-0.5">
-                                        <Label>限購商品</Label>
+                                        <Label>現貨模式</Label>
                                         <p className="text-xs text-muted-foreground">
-                                            單件商品限購數量
+                                            開啟後庫存不得小於 0，售完即停止購買
                                         </p>
                                     </div>
                                     <Switch
@@ -640,21 +639,6 @@ export default function NewProductPage() {
                                         onCheckedChange={setIsLimited}
                                     />
                                 </div>
-
-                                {isLimited && (
-                                    <div className="space-y-2">
-                                        <Label htmlFor="limitQty">限購數量</Label>
-                                        <Input
-                                            id="limitQty"
-                                            type="number"
-                                            min="1"
-                                            placeholder="1"
-                                            value={limitQty}
-                                            onChange={(e) => setLimitQty(e.target.value)}
-                                            className="rounded-xl"
-                                        />
-                                    </div>
-                                )}
 
                                 <div className="space-y-2">
                                     <Label htmlFor="endTime">團購截止時間（選填）</Label>

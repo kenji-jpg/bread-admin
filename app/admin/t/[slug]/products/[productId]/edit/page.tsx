@@ -82,7 +82,6 @@ export default function EditProductPage({ params }: { params: Promise<{ productI
     const [category, setCategory] = useState('')
     const [status, setStatus] = useState<boolean>(true)
     const [isLimited, setIsLimited] = useState(false)
-    const [limitQty, setLimitQty] = useState('')
     const [endTime, setEndTime] = useState('')
     const [showInShop, setShowInShop] = useState(false)
 
@@ -126,7 +125,6 @@ export default function EditProductPage({ params }: { params: Promise<{ productI
                 setCategory(data.category || '')
                 setStatus(data.status === 'active')
                 setIsLimited(data.is_limited)
-                setLimitQty(data.limit_qty ? data.limit_qty.toString() : '')
                 setEndTime(data.end_time ? new Date(data.end_time).toISOString().slice(0, 16) : '')
                 setShowInShop(data.show_in_shop ?? false)
                 setImagePreview(data.image_url)
@@ -236,7 +234,7 @@ export default function EditProductPage({ params }: { params: Promise<{ productI
                 category: category.trim() || null,
                 status: status ? 'active' : 'inactive',
                 is_limited: isLimited,
-                limit_qty: isLimited && limitQty ? parseInt(limitQty) : null,
+                limit_qty: null,
                 end_time: endTime || null,
                 image_url: imageUrl,
                 show_in_shop: showInShop,
@@ -431,9 +429,9 @@ export default function EditProductPage({ params }: { params: Promise<{ productI
 
                                 <div className="flex items-center justify-between mt-4">
                                     <div className="space-y-0.5">
-                                        <Label>限購商品</Label>
+                                        <Label>現貨模式</Label>
                                         <p className="text-xs text-muted-foreground">
-                                            單件商品限購數量
+                                            開啟後庫存不得小於 0，售完即停止購買
                                         </p>
                                     </div>
                                     <Switch
@@ -442,32 +440,18 @@ export default function EditProductPage({ params }: { params: Promise<{ productI
                                     />
                                 </div>
 
-                                {isLimited && (
-                                    <div className="grid gap-4 sm:grid-cols-2 mt-4 animate-in fade-in slide-in-from-top-2">
-                                        <div className="space-y-2">
-                                            <Label htmlFor="limitQty">限購數量</Label>
-                                            <Input
-                                                id="limitQty"
-                                                type="number"
-                                                min="1"
-                                                placeholder="0"
-                                                value={limitQty}
-                                                onChange={(e) => setLimitQty(e.target.value)}
-                                                className="rounded-xl"
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label htmlFor="endTime">收單截止日期</Label>
-                                            <Input
-                                                id="endTime"
-                                                type="datetime-local"
-                                                value={endTime}
-                                                onChange={(e) => setEndTime(e.target.value)}
-                                                className="rounded-xl"
-                                            />
-                                        </div>
+                                <div className="grid gap-4 sm:grid-cols-2 mt-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="endTime">收單截止日期</Label>
+                                        <Input
+                                            id="endTime"
+                                            type="datetime-local"
+                                            value={endTime}
+                                            onChange={(e) => setEndTime(e.target.value)}
+                                            className="rounded-xl"
+                                        />
                                     </div>
-                                )}
+                                </div>
                             </CardContent>
                         </Card>
                     </div>
