@@ -546,15 +546,15 @@ export default function ShopPage() {
 
     setIsRestocking(true)
     try {
-      const { data, error } = await supabase.rpc('restock_session_product_v1', {
+      const { data, error } = await supabase.rpc('restock_product_by_id_v1', {
         p_product_id: restockProduct.id,
-        p_actual_qty: parseInt(restockQty),
+        p_quantity: parseInt(restockQty),
       })
 
       if (error) throw error
 
       if (data.success) {
-        toast.success(`已補貨 ${restockQty} 件，分配 ${data.allocated_count} 筆`)
+        toast.success(data.message || `已補貨 ${restockQty} 件`)
         setRestockProduct(null)
         setRestockQty('')
         loadShop()
@@ -758,9 +758,11 @@ export default function ShopPage() {
     return { pending, allocated, total: productOrders.length }
   }
 
-  // 判斷商品模式：is_limited = true → 現貨模式，否則 → 預購模式
+  // 判斷商品模式：is_limited=true → 現貨模式，is_limited=false 但 stock>0 → 有現貨，否則 → 預購模式
   const getProductMode = (product: Product) => {
     if (product.is_limited) return 'stock'
+    // 預購商品補貨後 stock>0 也顯示為有現貨
+    if (product.stock !== null && product.stock > 0) return 'stock'
     return 'preorder'
   }
 
