@@ -352,7 +352,7 @@ function JoinTenantContent() {
                     transition={{ delay: 0.5 }}
                     className="text-center text-sm text-muted-foreground mt-6"
                 >
-                    © 2026 LINE 團購管理系統
+                    © 2026 PlusHub 選購系統
                 </motion.p>
             </motion.div>
         </div>

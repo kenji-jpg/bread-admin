@@ -97,7 +97,7 @@ export default function LoginPage() {
 
                         <div className="space-y-1">
                             <CardTitle className="text-2xl font-bold tracking-tight">
-                                <span className="gradient-text">LINE 團購管理</span>
+                                <span className="gradient-text">PlusHub 選購系統</span>
                             </CardTitle>
                             <CardDescription className="text-muted-foreground">
                                 登入您的管理後台
@@ -192,7 +192,7 @@ export default function LoginPage() {
                     transition={{ delay: 0.5 }}
                     className="text-center text-sm text-muted-foreground mt-6"
                 >
-                    © 2026 LINE 團購管理系統
+                    © 2026 PlusHub 選購系統
                 </motion.p>
             </motion.div>
         </div>

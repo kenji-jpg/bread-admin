@@ -57,7 +57,7 @@ export default function GetStartedPage() {
     const options = [
         {
             title: '建立我的店家',
-            description: '建立專屬於你的團購電商系統，成為店家管理者',
+            description: '建立專屬於你的選購系統，成為店家管理者',
             icon: Store,
             href: '/create-tenant/new',
             gradient: 'from-violet-500 to-purple-600',
@@ -153,7 +153,7 @@ export default function GetStartedPage() {
                         <Sparkles className="w-8 h-8 text-primary-foreground" />
                     </motion.div>
                     <h1 className="text-3xl font-bold tracking-tight mb-2">
-                        <span className="gradient-text">歡迎使用團購管理系統</span>
+                        <span className="gradient-text">歡迎使用 PlusHub</span>
                     </h1>
                     <p className="text-muted-foreground">
                         請選擇您想要進行的操作
@@ -207,7 +207,7 @@ export default function GetStartedPage() {
                     transition={{ delay: 0.6 }}
                     className="text-center text-sm text-muted-foreground mt-8"
                 >
-                    © 2026 LINE 團購管理系統
+                    © 2026 PlusHub 選購系統
                 </motion.p>
             </div>
         </div>

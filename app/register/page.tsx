@@ -164,7 +164,7 @@ export default function RegisterPage() {
                                 <span className="gradient-text">建立帳號</span>
                             </CardTitle>
                             <CardDescription className="text-muted-foreground">
-                                註冊您的團購管理帳號
+                                註冊您的 PlusHub 帳號
                             </CardDescription>
                         </div>
                     </CardHeader>
@@ -266,7 +266,7 @@ export default function RegisterPage() {
                     transition={{ delay: 0.5 }}
                     className="text-center text-sm text-muted-foreground mt-6"
                 >
-                    © 2026 LINE 團購管理系統
+                    © 2026 PlusHub 選購系統
                 </motion.p>
             </motion.div>
         </div>

@@ -462,7 +462,7 @@ export default function CreateNewTenantPage() {
                                 <Input
                                     id="name"
                                     type="text"
-                                    placeholder="我的團購小舖"
+                                    placeholder="我的選購小舖"
                                     value={name}
                                     onChange={(e) => handleNameChange(e.target.value)}
                                     required
@@ -548,7 +548,7 @@ export default function CreateNewTenantPage() {
                     transition={{ delay: 0.5 }}
                     className="text-center text-sm text-muted-foreground mt-6"
                 >
-                    © 2026 LINE 團購管理系統
+                    © 2026 PlusHub 選購系統
                 </motion.p>
             </motion.div>
         </div>

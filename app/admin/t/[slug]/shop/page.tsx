@@ -483,12 +483,14 @@ export default function ShopManagePage() {
                                                             const startPosX = posX
                                                             const startPosY = posY
                                                             const rect = e.currentTarget.getBoundingClientRect()
-                                                            // Sensitivity scales with zoom: more zoomed = finer control
-                                                            const sensitivity = 100 / (rect.width * (scale - 1 + 0.5))
+                                                            // 拖曳靈敏度：滑鼠移動容器寬度 = position 移動 100%/scale
+                                                            // scale 越大，同樣的滑鼠移動對 position 的影響越小（更精細）
+                                                            const sensitivityX = 100 / (rect.width * Math.max(scale, 1))
+                                                            const sensitivityY = 100 / (rect.height * Math.max(scale, 1))
 
                                                             const handleMouseMove = (ev: MouseEvent) => {
-                                                                const dx = (ev.clientX - startX) * sensitivity * -100
-                                                                const dy = (ev.clientY - startY) * sensitivity * -100
+                                                                const dx = (ev.clientX - startX) * sensitivityX * -1
+                                                                const dy = (ev.clientY - startY) * sensitivityY * -1
                                                                 setSettings(prev => ({
                                                                     ...prev,
                                                                     banner_position_x: Math.max(0, Math.min(100, startPosX + dx)),

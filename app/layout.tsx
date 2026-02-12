@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "LINE 團購管理後台",
-  description: "現代化的 LINE 團購商店管理系統",
+  title: "PlusHub 訂購系統",
+  description: "PlusHub 選購系統",
 };
 
 export default function RootLayout({

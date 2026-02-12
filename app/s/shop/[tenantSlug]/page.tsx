@@ -257,6 +257,11 @@ export default function ShopPage() {
       setProducts(data.products || [])
       setShopSettings(data.shop_settings || {})
       setShopCategories((data.categories || []).filter((c: ShopCategory) => c.is_visible))
+
+      // 動態設定頁面標題為店家名稱
+      if (data.tenant?.name) {
+        document.title = `${data.tenant.name} | PlusHub`
+      }
     } catch (err) {
       console.error('Load shop error:', err)
       setError('載入失敗')

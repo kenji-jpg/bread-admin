@@ -641,7 +641,7 @@ export default function NewProductPage() {
                                 </div>
 
                                 <div className="space-y-2">
-                                    <Label htmlFor="endTime">團購截止時間（選填）</Label>
+                                    <Label htmlFor="endTime">收單截止時間（選填）</Label>
                                     <Input
                                         id="endTime"
                                         type="datetime-local"

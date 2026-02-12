@@ -141,7 +141,7 @@ export function Sidebar() {
                             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-accent">
                                 <Package className="h-5 w-5 text-primary-foreground" />
                             </div>
-                            <span className="font-semibold text-foreground">團購管理</span>
+                            <span className="font-semibold text-foreground">PlusHub</span>
                         </motion.div>
                     )}
                 </AnimatePresence>
