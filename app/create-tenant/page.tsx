@@ -57,7 +57,7 @@ export default function GetStartedPage() {
     const options = [
         {
             title: '建立我的店家',
-            description: '建立專屬於你的選購系統，成為店家管理者',
+            description: '建立專屬於你的接單系統，成為店家管理者',
             icon: Store,
             href: '/create-tenant/new',
             gradient: 'from-violet-500 to-purple-600',
@@ -207,7 +207,7 @@ export default function GetStartedPage() {
                     transition={{ delay: 0.6 }}
                     className="text-center text-sm text-muted-foreground mt-8"
                 >
-                    © 2026 PlusHub 選購系統
+                    © 2026 PlusHub 接單系統
                 </motion.p>
             </div>
         </div>

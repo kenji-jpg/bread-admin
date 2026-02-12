@@ -266,7 +266,7 @@ export default function RegisterPage() {
                     transition={{ delay: 0.5 }}
                     className="text-center text-sm text-muted-foreground mt-6"
                 >
-                    © 2026 PlusHub 選購系統
+                    © 2026 PlusHub 接單系統
                 </motion.p>
             </motion.div>
         </div>

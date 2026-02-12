@@ -149,7 +149,7 @@ export default function NewTenantPage() {
                                 id="name"
                                 value={name}
                                 onChange={(e) => handleNameChange(e.target.value)}
-                                placeholder="例：麵包小姐選購"
+                                placeholder="例：麵包小姐"
                                 className="rounded-xl"
                                 required
                             />
