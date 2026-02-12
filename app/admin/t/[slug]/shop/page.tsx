@@ -86,6 +86,8 @@ async function compressImage(file: File, maxWidth = 1200, quality = 0.85): Promi
 
 interface ShopSettings {
     banner_url?: string | null
+    banner_scale?: number | null
+    banner_position_y?: number | null
     announcement?: string | null
     shopping_notice?: string | null
     accent_color?: string | null
@@ -223,6 +225,8 @@ export default function ShopManagePage() {
                 p_line_user_id: '', // 後台已有認證，此處用空字串
                 p_settings: {
                     banner_url: bannerUrl,
+                    banner_scale: settings.banner_scale || 1,
+                    banner_position_y: settings.banner_position_y ?? 50,
                     announcement: settings.announcement || null,
                     shopping_notice: settings.shopping_notice || null,
                     accent_color: settings.accent_color || null,
@@ -455,33 +459,75 @@ export default function ShopManagePage() {
                                         }}
                                     />
                                     {displayBannerUrl ? (
-                                        <div className="relative group">
-                                            <div className="aspect-[3/1] rounded-xl overflow-hidden bg-muted">
-                                                <Image
-                                                    src={displayBannerUrl}
-                                                    alt="Banner"
-                                                    fill
-                                                    className="object-cover"
-                                                    sizes="(max-width: 768px) 100vw, 600px"
-                                                />
+                                        <div className="space-y-4">
+                                            <div className="relative group">
+                                                <div className="aspect-[3/1] rounded-xl overflow-hidden bg-muted">
+                                                    <Image
+                                                        src={displayBannerUrl}
+                                                        alt="Banner"
+                                                        fill
+                                                        className="object-cover"
+                                                        sizes="(max-width: 768px) 100vw, 600px"
+                                                        style={{
+                                                            transform: `scale(${settings.banner_scale || 1})`,
+                                                            objectPosition: `center ${settings.banner_position_y ?? 50}%`,
+                                                        }}
+                                                    />
+                                                </div>
+                                                <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <Button
+                                                        variant="secondary"
+                                                        size="icon"
+                                                        className="h-8 w-8 rounded-lg bg-background/80 backdrop-blur"
+                                                        onClick={() => bannerInputRef.current?.click()}
+                                                    >
+                                                        <Upload className="h-4 w-4" />
+                                                    </Button>
+                                                    <Button
+                                                        variant="destructive"
+                                                        size="icon"
+                                                        className="h-8 w-8 rounded-lg"
+                                                        onClick={removeBanner}
+                                                    >
+                                                        <X className="h-4 w-4" />
+                                                    </Button>
+                                                </div>
                                             </div>
-                                            <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <Button
-                                                    variant="secondary"
-                                                    size="icon"
-                                                    className="h-8 w-8 rounded-lg bg-background/80 backdrop-blur"
-                                                    onClick={() => bannerInputRef.current?.click()}
-                                                >
-                                                    <Upload className="h-4 w-4" />
-                                                </Button>
-                                                <Button
-                                                    variant="destructive"
-                                                    size="icon"
-                                                    className="h-8 w-8 rounded-lg"
-                                                    onClick={removeBanner}
-                                                >
-                                                    <X className="h-4 w-4" />
-                                                </Button>
+
+                                            {/* 縮放 & 位置控制 */}
+                                            <div className="space-y-3">
+                                                <div className="space-y-1.5">
+                                                    <div className="flex items-center justify-between">
+                                                        <label className="text-sm font-medium">縮放</label>
+                                                        <span className="text-xs text-muted-foreground">{Math.round((settings.banner_scale || 1) * 100)}%</span>
+                                                    </div>
+                                                    <input
+                                                        type="range"
+                                                        min="100"
+                                                        max="200"
+                                                        step="5"
+                                                        value={Math.round((settings.banner_scale || 1) * 100)}
+                                                        onChange={(e) => setSettings(prev => ({ ...prev, banner_scale: parseInt(e.target.value) / 100 }))}
+                                                        className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+                                                    />
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    <div className="flex items-center justify-between">
+                                                        <label className="text-sm font-medium">垂直位置</label>
+                                                        <span className="text-xs text-muted-foreground">
+                                                            {(settings.banner_position_y ?? 50) <= 20 ? '上' : (settings.banner_position_y ?? 50) >= 80 ? '下' : '中'}
+                                                        </span>
+                                                    </div>
+                                                    <input
+                                                        type="range"
+                                                        min="0"
+                                                        max="100"
+                                                        step="5"
+                                                        value={settings.banner_position_y ?? 50}
+                                                        onChange={(e) => setSettings(prev => ({ ...prev, banner_position_y: parseInt(e.target.value) }))}
+                                                        className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+                                                    />
+                                                </div>
                                             </div>
                                         </div>
                                     ) : (
@@ -800,6 +846,10 @@ function ShopPreview({
                                     fill
                                     className="object-cover"
                                     sizes="375px"
+                                    style={{
+                                        transform: `scale(${settings.banner_scale || 1})`,
+                                        objectPosition: `center ${settings.banner_position_y ?? 50}%`,
+                                    }}
                                 />
                                 <div className="absolute inset-0 bg-black/50" />
                             </>

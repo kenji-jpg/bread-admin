@@ -101,6 +101,8 @@ interface Tenant {
 
 interface ShopSettings {
   banner_url?: string | null
+  banner_scale?: number | null
+  banner_position_y?: number | null
   announcement?: string | null
   shopping_notice?: string | null
   accent_color?: string | null
@@ -240,6 +242,7 @@ export default function ShopPage() {
     try {
       const { data, error } = await supabase.rpc('get_shop_products_v1', {
         p_tenant_slug: tenantSlug,
+        p_include_inactive: isStaff,
       })
 
       if (error) throw error
@@ -259,7 +262,7 @@ export default function ShopPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [tenantSlug, supabase])
+  }, [tenantSlug, supabase, isStaff])
 
   // 載入我的訂單
   const loadMyOrders = useCallback(async () => {
@@ -382,9 +385,15 @@ export default function ShopPage() {
           if (payload.new.session_id !== null) return
           const newData = payload.new
 
-          // 商品被下架、停用、或移出商城 → 從列表移除
+          // 商品被下架、停用、或移出商城
           if (newData.status !== 'active' || newData.show_in_shop === false) {
-            setProducts((prev) => prev.filter((p) => p.id !== newData.id))
+            if (isStaff && newData.show_in_shop) {
+              // 管理者：下架的商城商品仍要顯示，重新載入
+              loadShop()
+            } else {
+              // 客人：直接移除
+              setProducts((prev) => prev.filter((p) => p.id !== newData.id))
+            }
             return
           }
 
@@ -429,7 +438,7 @@ export default function ShopPage() {
         },
         (payload) => {
           if (payload.new.session_id !== null) return
-          if (payload.new.show_in_shop && payload.new.status === 'active') {
+          if (payload.new.show_in_shop && (payload.new.status === 'active' || isStaff)) {
             loadShop()
           }
         }
@@ -836,6 +845,10 @@ export default function ShopPage() {
               fill
               className="object-cover"
               sizes="100vw"
+              style={{
+                transform: `scale(${shopSettings.banner_scale || 1})`,
+                objectPosition: `center ${shopSettings.banner_position_y ?? 50}%`,
+              }}
             />
             <div className="absolute inset-0 bg-black/50" />
           </>
@@ -949,8 +962,8 @@ export default function ShopPage() {
           {(selectedCategory ? products.filter(p => p.category === selectedCategory) : products)
             .slice()
             .sort((a, b) => {
-              const aUnavailable = a.is_expired || a.is_sold_out || (a.end_time && new Date(a.end_time).getTime() < Date.now()) || (a.is_limited && a.stock !== null && a.stock <= 0)
-              const bUnavailable = b.is_expired || b.is_sold_out || (b.end_time && new Date(b.end_time).getTime() < Date.now()) || (b.is_limited && b.stock !== null && b.stock <= 0)
+              const aUnavailable = a.status !== 'active' || a.is_expired || a.is_sold_out || (a.end_time && new Date(a.end_time).getTime() < Date.now()) || (a.is_limited && a.stock !== null && a.stock <= 0)
+              const bUnavailable = b.status !== 'active' || b.is_expired || b.is_sold_out || (b.end_time && new Date(b.end_time).getTime() < Date.now()) || (b.is_limited && b.stock !== null && b.stock <= 0)
               if (aUnavailable && !bUnavailable) return 1
               if (!aUnavailable && bUnavailable) return -1
               return 0
@@ -961,7 +974,8 @@ export default function ShopPage() {
                 : product.is_expired
               // 雙模式：is_limited=true 時 stock<=0 才完銷，預購模式永不完銷
               const isSoldOut = product.is_sold_out || (product.is_limited && product.stock !== null && product.stock <= 0)
-              const isUnavailable = isExpired || isSoldOut
+              const isInactive = product.status !== 'active'
+              const isUnavailable = isExpired || isSoldOut || isInactive
               const isHot = product.sold_qty >= 5
               const timeRemaining = product.end_time ? getTimeRemaining(product.end_time) : null
               const pStats = isStaff ? getProductStats(product.id) : null
@@ -973,8 +987,8 @@ export default function ShopPage() {
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ delay: index * 0.03 }}
-                  className={`relative rounded-xl overflow-hidden bg-card border ${isUnavailable ? 'opacity-60' : 'cursor-pointer active:scale-95'
-                    } transition-transform`}
+                  className={`relative rounded-xl overflow-hidden bg-card border ${(isUnavailable && !isStaff) ? 'opacity-60' : 'cursor-pointer active:scale-95'
+                    } transition-transform ${isInactive && isStaff ? 'opacity-50 ring-1 ring-gray-400 dark:ring-gray-600' : ''}`}
                   onClick={() => {
                     if (isStaff) {
                       // 管理者：任何商品都可以點擊管理
@@ -1047,6 +1061,11 @@ export default function ShopPage() {
                     {isSoldOut && (
                       <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
                         <span className="text-white text-sm font-bold">已完銷</span>
+                      </div>
+                    )}
+                    {isInactive && isStaff && !isSoldOut && !isExpired && (
+                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                        <span className="text-white text-sm font-bold">已下架</span>
                       </div>
                     )}
                   </div>
@@ -1312,25 +1331,46 @@ export default function ShopPage() {
                           </Button>
                         )}
 
-                        {/* 下架 */}
-                        <Button
-                          variant="outline"
-                          className="h-12 border-gray-200 text-gray-700 dark:border-gray-700 dark:text-gray-400"
-                          onClick={() => {
-                            handleToggleProduct(selectedProduct.id, 'deactivate')
-                            setSelectedProduct(null)
-                          }}
-                          disabled={isToggling === selectedProduct.id}
-                        >
-                          {isToggling === selectedProduct.id ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <>
-                              <EyeOff className="w-4 h-4 mr-1" />
-                              下架
-                            </>
-                          )}
-                        </Button>
+                        {/* 上架 / 下架 */}
+                        {selectedProduct.status !== 'active' ? (
+                          <Button
+                            variant="outline"
+                            className="h-12 border-green-200 text-green-700 dark:border-green-800 dark:text-green-400"
+                            onClick={() => {
+                              handleToggleProduct(selectedProduct.id, 'activate')
+                              setSelectedProduct(null)
+                            }}
+                            disabled={isToggling === selectedProduct.id}
+                          >
+                            {isToggling === selectedProduct.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <>
+                                <Eye className="w-4 h-4 mr-1" />
+                                上架
+                              </>
+                            )}
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            className="h-12 border-gray-200 text-gray-700 dark:border-gray-700 dark:text-gray-400"
+                            onClick={() => {
+                              handleToggleProduct(selectedProduct.id, 'deactivate')
+                              setSelectedProduct(null)
+                            }}
+                            disabled={isToggling === selectedProduct.id}
+                          >
+                            {isToggling === selectedProduct.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <>
+                                <EyeOff className="w-4 h-4 mr-1" />
+                                下架
+                              </>
+                            )}
+                          </Button>
+                        )}
 
                         {/* 關閉 */}
                         <Button
