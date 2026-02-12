@@ -30,6 +30,9 @@ import {
   Eye,
   EyeOff,
   Megaphone,
+  CheckCircle,
+  Truck,
+  MapPin,
 } from 'lucide-react'
 import Image from 'next/image'
 
@@ -97,6 +100,7 @@ interface Tenant {
   name: string
   slug: string
   liff_id?: string | null
+  payment_info?: { bank?: string; account?: string; name?: string }
 }
 
 interface ShopSettings {
@@ -133,6 +137,19 @@ interface OrderItem {
   subtotal: number
   status: string
   can_modify: boolean
+  is_arrived: boolean
+  checkout_id: string | null
+}
+
+interface CheckoutResult {
+  success: boolean
+  checkout_id?: string
+  checkout_no?: string
+  total_amount?: number
+  item_count?: number
+  shipping_method?: string
+  shipping_fee?: number
+  items?: Array<{ name: string; qty: number; unit_price: number; subtotal: number }>
 }
 
 interface StaffOrderItem {
@@ -188,6 +205,13 @@ export default function ShopPage() {
 
   // 我的訂單 Drawer 狀態
   const [isOrderDrawerOpen, setIsOrderDrawerOpen] = useState(false)
+
+  // 現貨結帳 Modal 狀態
+  const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false)
+  const [checkoutStep, setCheckoutStep] = useState<'method' | 'confirm' | 'success'>('method')
+  const [selectedShipping, setSelectedShipping] = useState<'myship' | 'delivery' | 'pickup' | null>(null)
+  const [isSubmittingCheckout, setIsSubmittingCheckout] = useState(false)
+  const [checkoutResult, setCheckoutResult] = useState<CheckoutResult | null>(null)
 
   // 分類篩選
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
@@ -554,6 +578,56 @@ export default function ShopPage() {
     loadMyOrders()
     if (isStaff) loadAllOrders()
     setIsSubmittingCart(false)
+  }
+
+  // ========== 現貨結帳 ==========
+  const checkoutEligibleOrders = orders.filter(
+    (o) => o.is_arrived && !o.checkout_id && o.status !== 'cancelled'
+  )
+  const checkoutEligibleTotal = checkoutEligibleOrders.reduce(
+    (sum, o) => sum + o.unit_price * o.quantity, 0
+  )
+
+  const handleCheckout = async () => {
+    if (!tenant || !profile?.userId || !selectedShipping) return
+
+    setIsSubmittingCheckout(true)
+    try {
+      const { data, error } = await supabase.rpc('create_checkout_v2', {
+        p_tenant_id: tenant.id,
+        p_line_user_id: profile.userId,
+        p_shipping_method: selectedShipping,
+        p_receiver_name: profile.displayName || null,
+        p_receiver_phone: null,
+        p_receiver_store_id: null,
+      })
+
+      if (error) throw error
+
+      if (data.success) {
+        setCheckoutResult(data)
+        setCheckoutStep('success')
+        loadMyOrders()
+      } else {
+        toast.error(data.message || '結帳失敗')
+        if (data.error === 'no_ready_orders') {
+          closeCheckoutModal()
+          loadMyOrders()
+        }
+      }
+    } catch (err) {
+      console.error('Checkout error:', err)
+      toast.error('結帳失敗，請稍後重試')
+    } finally {
+      setIsSubmittingCheckout(false)
+    }
+  }
+
+  const closeCheckoutModal = () => {
+    setIsCheckoutModalOpen(false)
+    setCheckoutStep('method')
+    setSelectedShipping(null)
+    setCheckoutResult(null)
   }
 
   // ========== 管理員操作 ==========
@@ -1698,20 +1772,24 @@ export default function ShopPage() {
                           </p>
                           <div className="flex items-center justify-between mt-1">
                             <span
-                              className={`text-xs px-2 py-0.5 rounded-full ${order.status === 'allocated'
-                                ? 'bg-green-100 text-green-700'
-                                : order.status === 'cancelled'
-                                  ? 'bg-gray-100 text-gray-500'
-                                  : 'bg-yellow-100 text-yellow-700'
+                              className={`text-xs px-2 py-0.5 rounded-full ${order.checkout_id
+                                ? 'bg-blue-100 text-blue-700'
+                                : order.status === 'allocated'
+                                  ? 'bg-green-100 text-green-700'
+                                  : order.status === 'cancelled'
+                                    ? 'bg-gray-100 text-gray-500'
+                                    : 'bg-yellow-100 text-yellow-700'
                                 }`}
                             >
-                              {order.status === 'allocated'
-                                ? '已購得'
-                                : order.status === 'cancelled'
-                                  ? '已取消'
-                                  : order.status === 'partial'
-                                    ? `部分購得 (${order.arrived_qty}/${order.quantity})`
-                                    : '等待配貨'}
+                              {order.checkout_id
+                                ? '已結帳'
+                                : order.status === 'allocated'
+                                  ? '已購得'
+                                  : order.status === 'cancelled'
+                                    ? '已取消'
+                                    : order.status === 'partial'
+                                      ? `部分購得 (${order.arrived_qty}/${order.quantity})`
+                                      : '等待配貨'}
                             </span>
                           </div>
                         </div>
@@ -1729,21 +1807,355 @@ export default function ShopPage() {
                     <span className="font-bold text-green-600">
                       $
                       {orders
-                        .filter((o) => o.arrived_qty > 0)
+                        .filter((o) => o.arrived_qty > 0 && !o.checkout_id)
                         .reduce((sum, o) => sum + o.arrived_qty * o.unit_price, 0)}
                     </span>
                   </div>
+                  {orders.some((o) => o.checkout_id) && (
+                    <div className="flex justify-between text-sm mb-2">
+                      <span>已結帳</span>
+                      <span className="font-bold text-blue-600">
+                        $
+                        {orders
+                          .filter((o) => o.checkout_id)
+                          .reduce((sum, o) => sum + o.quantity * o.unit_price, 0)}
+                      </span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-sm mb-3">
                     <span>等待中</span>
                     <span className="text-muted-foreground">
                       $
                       {orders
-                        .filter((o) => o.status !== 'cancelled')
+                        .filter((o) => o.status !== 'cancelled' && !o.checkout_id)
                         .reduce(
                           (sum, o) => sum + (o.quantity - o.arrived_qty) * o.unit_price,
                           0
                         )}
                     </span>
+                  </div>
+                  {checkoutEligibleOrders.length > 0 && (
+                    <Button
+                      className="w-full rounded-xl"
+                      onClick={() => {
+                        setIsOrderDrawerOpen(false)
+                        setIsCheckoutModalOpen(true)
+                      }}
+                      style={shopSettings.accent_color ? { backgroundColor: shopSettings.accent_color } : undefined}
+                    >
+                      現貨結帳（{checkoutEligibleOrders.length} 項 · ${checkoutEligibleTotal}）
+                    </Button>
+                  )}
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ========== 現貨結帳 Modal ========== */}
+      <AnimatePresence>
+        {isCheckoutModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/50 flex items-end justify-center"
+            onClick={closeCheckoutModal}
+          >
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="w-full max-w-lg bg-background rounded-t-2xl max-h-[85vh] flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-4 border-b">
+                <h2 className="text-lg font-bold">
+                  {checkoutStep === 'method' && '選擇出貨方式'}
+                  {checkoutStep === 'confirm' && '確認結帳'}
+                  {checkoutStep === 'success' && '結帳成功'}
+                </h2>
+                <button onClick={closeCheckoutModal} className="p-1 rounded-full hover:bg-muted">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Step: method */}
+              {checkoutStep === 'method' && (
+                <div className="flex-1 overflow-y-auto">
+                  {/* 可結帳商品明細 */}
+                  <div className="p-4 space-y-2">
+                    <p className="text-sm font-medium text-muted-foreground mb-2">結帳商品（{checkoutEligibleOrders.length} 項）</p>
+                    {checkoutEligibleOrders.map((order) => (
+                      <div key={order.id} className="flex items-center justify-between py-2 border-b last:border-0">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{order.product_name}</p>
+                          <p className="text-xs text-muted-foreground">${order.unit_price} × {order.quantity}</p>
+                        </div>
+                        <p className="text-sm font-bold ml-2">${order.unit_price * order.quantity}</p>
+                      </div>
+                    ))}
+                    <div className="flex justify-between pt-2 font-bold">
+                      <span>商品小計</span>
+                      <span>${checkoutEligibleTotal}</span>
+                    </div>
+                  </div>
+
+                  {/* 出貨方式選擇 */}
+                  <div className="p-4 pt-0 space-y-3">
+                    <p className="text-sm font-medium text-muted-foreground">選擇出貨方式</p>
+
+                    {/* 賣貨便 */}
+                    <button
+                      onClick={() => setSelectedShipping('myship')}
+                      className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${
+                        selectedShipping === 'myship' ? 'border-primary bg-primary/5' : 'border-muted hover:border-muted-foreground/30'
+                      }`}
+                    >
+                      <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center shrink-0">
+                        <Store className="w-5 h-5 text-green-600" />
+                      </div>
+                      <div className="flex-1 text-left">
+                        <p className="font-medium">賣貨便</p>
+                        <p className="text-xs text-muted-foreground">7-11 取貨 · 運費 $38（另計）</p>
+                      </div>
+                      {selectedShipping === 'myship' && <CheckCircle className="w-5 h-5 text-primary shrink-0" />}
+                    </button>
+
+                    {/* 宅配 */}
+                    <button
+                      onClick={() => setSelectedShipping('delivery')}
+                      className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${
+                        selectedShipping === 'delivery' ? 'border-primary bg-primary/5' : 'border-muted hover:border-muted-foreground/30'
+                      }`}
+                    >
+                      <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
+                        <Truck className="w-5 h-5 text-blue-600" />
+                      </div>
+                      <div className="flex-1 text-left">
+                        <p className="font-medium">宅配</p>
+                        <p className="text-xs text-muted-foreground">宅配到府 · 運費 $80</p>
+                      </div>
+                      {selectedShipping === 'delivery' && <CheckCircle className="w-5 h-5 text-primary shrink-0" />}
+                    </button>
+
+                    {/* 自取 */}
+                    <button
+                      onClick={() => setSelectedShipping('pickup')}
+                      className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${
+                        selectedShipping === 'pickup' ? 'border-primary bg-primary/5' : 'border-muted hover:border-muted-foreground/30'
+                      }`}
+                    >
+                      <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center shrink-0">
+                        <MapPin className="w-5 h-5 text-orange-600" />
+                      </div>
+                      <div className="flex-1 text-left">
+                        <p className="font-medium">自取</p>
+                        <p className="text-xs text-muted-foreground">到店自取 · 免運費</p>
+                      </div>
+                      {selectedShipping === 'pickup' && <CheckCircle className="w-5 h-5 text-primary shrink-0" />}
+                    </button>
+                  </div>
+
+                  {/* 下一步按鈕 */}
+                  <div className="p-4 border-t">
+                    <Button
+                      className="w-full rounded-xl"
+                      disabled={!selectedShipping}
+                      onClick={() => setCheckoutStep('confirm')}
+                      style={shopSettings.accent_color ? { backgroundColor: shopSettings.accent_color } : undefined}
+                    >
+                      下一步
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Step: confirm */}
+              {checkoutStep === 'confirm' && (
+                <div className="flex-1 overflow-y-auto">
+                  <div className="p-4 space-y-4">
+                    {/* 金額明細 */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span>商品小計（{checkoutEligibleOrders.length} 項）</span>
+                        <span>${checkoutEligibleTotal}</span>
+                      </div>
+                      {selectedShipping === 'myship' && (
+                        <div className="flex justify-between text-sm text-muted-foreground">
+                          <span>運費 $38（賣貨便另計，不含在結帳金額）</span>
+                        </div>
+                      )}
+                      {selectedShipping === 'delivery' && (
+                        <div className="flex justify-between text-sm">
+                          <span>運費（宅配）</span>
+                          <span>$80</span>
+                        </div>
+                      )}
+                      {selectedShipping === 'pickup' && (
+                        <div className="flex justify-between text-sm text-muted-foreground">
+                          <span>運費</span>
+                          <span>免運</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between font-bold text-lg pt-2 border-t">
+                        <span>結帳金額</span>
+                        <span>${selectedShipping === 'delivery' ? checkoutEligibleTotal + 80 : checkoutEligibleTotal}</span>
+                      </div>
+                    </div>
+
+                    {/* 匯款資訊（宅配/自取） */}
+                    {(selectedShipping === 'delivery' || selectedShipping === 'pickup') && tenant?.payment_info && (
+                      <div className="bg-muted/50 rounded-xl p-4 space-y-2">
+                        <p className="text-sm font-medium">匯款資訊</p>
+                        {tenant.payment_info.bank && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">銀行</span>
+                            <span>{tenant.payment_info.bank}</span>
+                          </div>
+                        )}
+                        {tenant.payment_info.account && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">帳號</span>
+                            <span>{tenant.payment_info.account}</span>
+                          </div>
+                        )}
+                        {tenant.payment_info.name && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">戶名</span>
+                            <span>{tenant.payment_info.name}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* 出貨方式 */}
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="text-muted-foreground">出貨方式：</span>
+                      <span className="font-medium">
+                        {selectedShipping === 'myship' && '賣貨便（7-11 取貨）'}
+                        {selectedShipping === 'delivery' && '宅配到府'}
+                        {selectedShipping === 'pickup' && '到店自取'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 確認按鈕 */}
+                  <div className="p-4 border-t space-y-2">
+                    <Button
+                      className="w-full rounded-xl"
+                      onClick={handleCheckout}
+                      disabled={isSubmittingCheckout}
+                      style={shopSettings.accent_color ? { backgroundColor: shopSettings.accent_color } : undefined}
+                    >
+                      {isSubmittingCheckout ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                          處理中...
+                        </>
+                      ) : (
+                        '確認結帳'
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="w-full rounded-xl"
+                      onClick={() => setCheckoutStep('method')}
+                      disabled={isSubmittingCheckout}
+                    >
+                      上一步
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Step: success */}
+              {checkoutStep === 'success' && checkoutResult && (
+                <div className="flex-1 overflow-y-auto">
+                  <div className="p-6 text-center space-y-4">
+                    <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto">
+                      <CheckCircle className="w-8 h-8 text-green-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold">結帳成功！</h3>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        結帳單號：{checkoutResult.checkout_no}
+                      </p>
+                    </div>
+
+                    {/* 金額摘要 */}
+                    <div className="bg-muted/50 rounded-xl p-4 text-left space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span>商品數量</span>
+                        <span>{checkoutResult.item_count} 項</span>
+                      </div>
+                      <div className="flex justify-between font-bold">
+                        <span>結帳金額</span>
+                        <span>${checkoutResult.total_amount}</span>
+                      </div>
+                    </div>
+
+                    {/* 出貨方式專屬提示 */}
+                    <div className="bg-blue-50 rounded-xl p-4 text-left">
+                      {checkoutResult.shipping_method === 'myship' && (
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium text-blue-800 flex items-center gap-2">
+                            <Store className="w-4 h-4" /> 賣貨便取貨
+                          </p>
+                          <p className="text-sm text-blue-700">
+                            請等待賣貨便賣場連結回傳，届時會透過 LINE 通知您取貨資訊。
+                          </p>
+                        </div>
+                      )}
+                      {checkoutResult.shipping_method === 'delivery' && (
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium text-blue-800 flex items-center gap-2">
+                            <Truck className="w-4 h-4" /> 宅配到府
+                          </p>
+                          <p className="text-sm text-blue-700">
+                            請依匯款資訊轉帳，匯款完成後等待店家確認出貨。
+                          </p>
+                          {tenant?.payment_info && (
+                            <div className="mt-2 pt-2 border-t border-blue-200 space-y-1 text-sm text-blue-700">
+                              {tenant.payment_info.bank && <p>銀行：{tenant.payment_info.bank}</p>}
+                              {tenant.payment_info.account && <p>帳號：{tenant.payment_info.account}</p>}
+                              {tenant.payment_info.name && <p>戶名：{tenant.payment_info.name}</p>}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {checkoutResult.shipping_method === 'pickup' && (
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium text-blue-800 flex items-center gap-2">
+                            <MapPin className="w-4 h-4" /> 到店自取
+                          </p>
+                          <p className="text-sm text-blue-700">
+                            請依匯款資訊轉帳，店家確認後安排取貨。
+                          </p>
+                          {tenant?.payment_info && (
+                            <div className="mt-2 pt-2 border-t border-blue-200 space-y-1 text-sm text-blue-700">
+                              {tenant.payment_info.bank && <p>銀行：{tenant.payment_info.bank}</p>}
+                              {tenant.payment_info.account && <p>帳號：{tenant.payment_info.account}</p>}
+                              {tenant.payment_info.name && <p>戶名：{tenant.payment_info.name}</p>}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 關閉按鈕 */}
+                  <div className="p-4 border-t">
+                    <Button
+                      className="w-full rounded-xl"
+                      onClick={closeCheckoutModal}
+                      style={shopSettings.accent_color ? { backgroundColor: shopSettings.accent_color } : undefined}
+                    >
+                      關閉
+                    </Button>
                   </div>
                 </div>
               )}
