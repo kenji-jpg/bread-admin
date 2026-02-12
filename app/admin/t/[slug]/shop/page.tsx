@@ -437,10 +437,10 @@ export default function ShopManagePage() {
                                 <CardHeader>
                                     <CardTitle className="flex items-center gap-2">
                                         <ImageIcon className="h-5 w-5" />
-                                        Banner 橫幅
+                                        標題背景圖
                                     </CardTitle>
                                     <CardDescription>
-                                        商城頂部的大圖，建議尺寸 1200×400 px
+                                        顯示在商城標題列的背景，寬度撐滿、高度貼齊標題區
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent>
@@ -490,8 +490,8 @@ export default function ShopManagePage() {
                                             onClick={() => bannerInputRef.current?.click()}
                                         >
                                             <Upload className="h-8 w-8 text-muted-foreground mb-2" />
-                                            <p className="text-sm text-muted-foreground">點擊上傳 Banner 圖片</p>
-                                            <p className="text-xs text-muted-foreground/60 mt-1">建議 1200×400，支援 JPG / PNG / WebP</p>
+                                            <p className="text-sm text-muted-foreground">點擊上傳標題背景圖</p>
+                                            <p className="text-xs text-muted-foreground/60 mt-1">建議寬 1200px，支援 JPG / PNG / WebP</p>
                                         </div>
                                     )}
                                 </CardContent>
@@ -567,8 +567,8 @@ export default function ShopManagePage() {
                                             <button
                                                 key={color.value}
                                                 className={`flex items-center gap-2 px-3 py-2 rounded-xl border transition-all ${(settings.accent_color || '') === color.value
-                                                        ? 'border-primary ring-2 ring-primary/20'
-                                                        : 'border-border hover:border-primary/50'
+                                                    ? 'border-primary ring-2 ring-primary/20'
+                                                    : 'border-border hover:border-primary/50'
                                                     }`}
                                                 onClick={() => setSettings(prev => ({ ...prev, accent_color: color.value }))}
                                             >
@@ -606,8 +606,8 @@ export default function ShopManagePage() {
                                             <button
                                                 key={opt.value}
                                                 className={`p-3 rounded-xl border text-left transition-all ${(settings.product_sort || 'created_at') === opt.value
-                                                        ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
-                                                        : 'border-border hover:border-primary/50'
+                                                    ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
+                                                    : 'border-border hover:border-primary/50'
                                                     }`}
                                                 onClick={() => setSettings(prev => ({
                                                     ...prev,
