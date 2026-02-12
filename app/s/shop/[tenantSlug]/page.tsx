@@ -454,6 +454,17 @@ export default function ShopPage() {
     }
   }, [tenant?.id, supabase, loadShop])
 
+  // 定時輪詢：每 30 秒檢查是否有新商品加入商城
+  useEffect(() => {
+    if (!tenant?.id) return
+
+    const interval = setInterval(() => {
+      loadShop()
+    }, 30000)
+
+    return () => clearInterval(interval)
+  }, [tenant?.id, loadShop])
+
   // 加入購物車
   const handleAddToCart = () => {
     if (!selectedProduct) return
@@ -983,7 +994,7 @@ export default function ShopPage() {
                       className={`absolute top-1 left-1 z-10 px-1.5 py-0.5 rounded-full text-xs font-bold text-white ${isHot ? 'bg-red-500' : 'bg-black/60'
                         }`}
                     >
-                      +{product.sold_qty}
+                      已售 {product.sold_qty}
                       {isHot && <Flame className="inline w-3 h-3 ml-0.5" />}
                     </motion.div>
                   )}
