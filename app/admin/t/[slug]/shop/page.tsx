@@ -944,7 +944,7 @@ function ShopPreview({
                     )}
 
                     {/* Product grid */}
-                    <div className="grid grid-cols-3 gap-1.5 p-2">
+                    <div className="grid grid-cols-2 gap-1.5 p-2">
                         {mockProducts.map((product, i) => {
                             const isHot = product.sold >= 5
                             return (

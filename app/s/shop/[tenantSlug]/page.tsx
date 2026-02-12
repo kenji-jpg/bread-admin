@@ -230,12 +230,15 @@ export default function ShopPage() {
 
   // 購物須知
   const [showShoppingNotice, setShowShoppingNotice] = useState(false)
+  const [noticeDontShowToday, setNoticeDontShowToday] = useState(false)
   useEffect(() => {
     if (!tenant?.id || !shopSettings.shopping_notice || isStaff) return
-    const key = `shopping_notice_agreed_${tenant.id}`
-    if (!localStorage.getItem(key)) {
-      setShowShoppingNotice(true)
-    }
+    // 檢查今日是否已勾選「今日不再出現」
+    const today = new Date().toISOString().slice(0, 10) // YYYY-MM-DD
+    const key = `shopping_notice_dismissed_${tenant.id}`
+    const dismissedDate = localStorage.getItem(key)
+    if (dismissedDate === today) return // 今日已勾選不再顯示
+    setShowShoppingNotice(true)
   }, [tenant?.id, shopSettings.shopping_notice, isStaff])
 
   // 載入商城資料
@@ -732,8 +735,8 @@ export default function ShopPage() {
     return (
       <div className="min-h-screen p-4">
         <Skeleton className="h-12 w-48 mb-4" />
-        <div className="grid grid-cols-3 gap-2">
-          {[...Array(9)].map((_, i) => (
+        <div className="grid grid-cols-2 gap-2">
+          {[...Array(6)].map((_, i) => (
             <Skeleton key={i} className="aspect-square rounded-xl" />
           ))}
         </div>
@@ -810,31 +813,43 @@ export default function ShopPage() {
                   {shopSettings.shopping_notice}
                 </p>
               </div>
-              <div className="px-5 py-4 border-t flex gap-3">
-                <Button
-                  variant="outline"
-                  className="flex-1 rounded-xl"
-                  onClick={() => {
-                    try {
-                      liff.closeWindow()
-                    } catch {
-                      window.close()
-                    }
-                  }}
-                >
-                  不同意
-                </Button>
-                <Button
-                  className="flex-1 rounded-xl"
-                  onClick={() => {
-                    if (tenant?.id) {
-                      localStorage.setItem(`shopping_notice_agreed_${tenant.id}`, 'true')
-                    }
-                    setShowShoppingNotice(false)
-                  }}
-                >
-                  同意
-                </Button>
+              <div className="px-5 py-4 border-t space-y-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={noticeDontShowToday}
+                    onChange={(e) => setNoticeDontShowToday(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300 accent-primary"
+                  />
+                  <span className="text-sm text-muted-foreground">今日不再出現</span>
+                </label>
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    className="flex-1 rounded-xl"
+                    onClick={() => {
+                      try {
+                        liff.closeWindow()
+                      } catch {
+                        window.close()
+                      }
+                    }}
+                  >
+                    不同意
+                  </Button>
+                  <Button
+                    className="flex-1 rounded-xl"
+                    onClick={() => {
+                      if (tenant?.id && noticeDontShowToday) {
+                        const today = new Date().toISOString().slice(0, 10)
+                        localStorage.setItem(`shopping_notice_dismissed_${tenant.id}`, today)
+                      }
+                      setShowShoppingNotice(false)
+                    }}
+                  >
+                    同意
+                  </Button>
+                </div>
               </div>
             </motion.div>
           </motion.div>
@@ -962,7 +977,7 @@ export default function ShopPage() {
 
       {/* 商品列表 */}
       <main className="p-2">
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2">
           {(selectedCategory ? products.filter(p => p.category === selectedCategory) : products)
             .slice()
             .sort((a, b) => {
@@ -1048,7 +1063,7 @@ export default function ShopPage() {
                         alt={product.name}
                         fill
                         className="object-cover"
-                        sizes="(max-width: 768px) 33vw, 200px"
+                        sizes="(max-width: 768px) 50vw, 200px"
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
