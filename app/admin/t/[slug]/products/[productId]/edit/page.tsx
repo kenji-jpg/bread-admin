@@ -443,13 +443,30 @@ export default function EditProductPage({ params }: { params: Promise<{ productI
                                 <div className="grid gap-4 sm:grid-cols-2 mt-4">
                                     <div className="space-y-2">
                                         <Label htmlFor="endTime">收單截止日期</Label>
-                                        <Input
-                                            id="endTime"
-                                            type="datetime-local"
-                                            value={endTime}
-                                            onChange={(e) => setEndTime(e.target.value)}
-                                            className="rounded-xl"
-                                        />
+                                        <div className="flex gap-2">
+                                            <Input
+                                                id="endTime"
+                                                type="datetime-local"
+                                                value={endTime}
+                                                onChange={(e) => setEndTime(e.target.value)}
+                                                className="rounded-xl flex-1"
+                                            />
+                                            {endTime && (
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="icon"
+                                                    className="rounded-xl h-10 w-10 shrink-0"
+                                                    onClick={() => setEndTime('')}
+                                                    title="清除截止日期（改為長期）"
+                                                >
+                                                    <X className="h-4 w-4" />
+                                                </Button>
+                                            )}
+                                        </div>
+                                        <p className="text-xs text-muted-foreground">
+                                            {endTime ? `截止時間：${new Date(endTime).toLocaleString('zh-TW')}` : '未設定截止日期（長期收單）'}
+                                        </p>
                                     </div>
                                 </div>
                             </CardContent>

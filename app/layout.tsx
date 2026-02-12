@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PlusHub 接單系統",
-  description: "PlusHub 接單系統",
+  title: "plushub訂購系統",
+  description: "plushub訂購系統",
 };
 
 export default function RootLayout({

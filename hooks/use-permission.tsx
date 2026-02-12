@@ -50,8 +50,9 @@ export function usePermission(): Permissions {
             role = (matchedTenant?.user_role as Role) || null
         }
 
-        // 超級管理員擁有所有權限
+        // 超級管理員：角色權限全開，但方案權限仍依租戶實際 plan 判斷
         if (isSuperAdmin) {
+            const isPro = activeTenant?.plan === 'pro'
             return {
                 role: 'owner' as Role,
                 isOwner: true,
@@ -67,9 +68,9 @@ export function usePermission(): Permissions {
                 canManageSettings: true,
                 canManageAdmins: true,
                 canDeleteTenant: true,
-                canAccessShop: true,
-                canUseMyshipEmail: true,
-                canUseChromeExtension: true,
+                canAccessShop: isPro,
+                canUseMyshipEmail: isPro,
+                canUseChromeExtension: isPro,
             }
         }
 
