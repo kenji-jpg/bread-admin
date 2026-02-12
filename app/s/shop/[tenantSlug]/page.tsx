@@ -102,6 +102,7 @@ interface Tenant {
 interface ShopSettings {
   banner_url?: string | null
   banner_scale?: number | null
+  banner_position_x?: number | null
   banner_position_y?: number | null
   announcement?: string | null
   shopping_notice?: string | null
@@ -839,15 +840,13 @@ export default function ShopPage() {
       <header className="sticky top-0 z-40 border-b relative overflow-hidden">
         {shopSettings.banner_url ? (
           <>
-            <Image
-              src={shopSettings.banner_url}
-              alt="Banner"
-              fill
-              className="object-cover"
-              sizes="100vw"
+            <div
+              className="absolute inset-0"
               style={{
-                transform: `scale(${shopSettings.banner_scale || 1})`,
-                objectPosition: `center ${shopSettings.banner_position_y ?? 50}%`,
+                backgroundImage: `url(${shopSettings.banner_url})`,
+                backgroundSize: `${(shopSettings.banner_scale || 1) * 100}%`,
+                backgroundPosition: `${shopSettings.banner_position_x ?? 50}% ${shopSettings.banner_position_y ?? 50}%`,
+                backgroundRepeat: 'no-repeat',
               }}
             />
             <div className="absolute inset-0 bg-black/50" />

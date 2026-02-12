@@ -87,6 +87,7 @@ async function compressImage(file: File, maxWidth = 1200, quality = 0.85): Promi
 interface ShopSettings {
     banner_url?: string | null
     banner_scale?: number | null
+    banner_position_x?: number | null
     banner_position_y?: number | null
     announcement?: string | null
     shopping_notice?: string | null
@@ -226,6 +227,7 @@ export default function ShopManagePage() {
                 p_settings: {
                     banner_url: bannerUrl,
                     banner_scale: settings.banner_scale || 1,
+                    banner_position_x: settings.banner_position_x ?? 50,
                     banner_position_y: settings.banner_position_y ?? 50,
                     announcement: settings.announcement || null,
                     shopping_notice: settings.shopping_notice || null,
@@ -458,79 +460,103 @@ export default function ShopManagePage() {
                                             if (file) handleBannerUpload(file)
                                         }}
                                     />
-                                    {displayBannerUrl ? (
-                                        <div className="space-y-4">
-                                            <div className="relative group">
-                                                <div className="aspect-[3/1] rounded-xl overflow-hidden bg-muted">
-                                                    <Image
-                                                        src={displayBannerUrl}
-                                                        alt="Banner"
-                                                        fill
-                                                        className="object-cover"
-                                                        sizes="(max-width: 768px) 100vw, 600px"
+                                    {displayBannerUrl ? (() => {
+                                        const scale = settings.banner_scale || 1
+                                        const posX = settings.banner_position_x ?? 50
+                                        const posY = settings.banner_position_y ?? 50
+
+                                        return (
+                                            <div className="space-y-2">
+                                                <div className="relative group">
+                                                    <div
+                                                        className="aspect-[3/1] rounded-xl overflow-hidden bg-muted cursor-grab active:cursor-grabbing select-none"
                                                         style={{
-                                                            transform: `scale(${settings.banner_scale || 1})`,
-                                                            objectPosition: `center ${settings.banner_position_y ?? 50}%`,
+                                                            backgroundImage: `url(${displayBannerUrl})`,
+                                                            backgroundSize: `${scale * 100}%`,
+                                                            backgroundPosition: `${posX}% ${posY}%`,
+                                                            backgroundRepeat: 'no-repeat',
+                                                        }}
+                                                        onMouseDown={(e) => {
+                                                            e.preventDefault()
+                                                            const startX = e.clientX
+                                                            const startY = e.clientY
+                                                            const startPosX = posX
+                                                            const startPosY = posY
+                                                            const rect = e.currentTarget.getBoundingClientRect()
+                                                            // Sensitivity scales with zoom: more zoomed = finer control
+                                                            const sensitivity = 100 / (rect.width * (scale - 1 + 0.5))
+
+                                                            const handleMouseMove = (ev: MouseEvent) => {
+                                                                const dx = (ev.clientX - startX) * sensitivity * -100
+                                                                const dy = (ev.clientY - startY) * sensitivity * -100
+                                                                setSettings(prev => ({
+                                                                    ...prev,
+                                                                    banner_position_x: Math.max(0, Math.min(100, startPosX + dx)),
+                                                                    banner_position_y: Math.max(0, Math.min(100, startPosY + dy)),
+                                                                }))
+                                                            }
+                                                            const handleMouseUp = () => {
+                                                                window.removeEventListener('mousemove', handleMouseMove)
+                                                                window.removeEventListener('mouseup', handleMouseUp)
+                                                            }
+                                                            window.addEventListener('mousemove', handleMouseMove)
+                                                            window.addEventListener('mouseup', handleMouseUp)
+                                                        }}
+                                                        onWheel={(e) => {
+                                                            e.preventDefault()
+                                                            const delta = e.deltaY > 0 ? -0.05 : 0.05
+                                                            setSettings(prev => ({
+                                                                ...prev,
+                                                                banner_scale: Math.max(1, Math.min(3, (prev.banner_scale || 1) + delta)),
+                                                            }))
                                                         }}
                                                     />
+                                                    <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <Button
+                                                            variant="secondary"
+                                                            size="icon"
+                                                            className="h-8 w-8 rounded-lg bg-background/80 backdrop-blur"
+                                                            onClick={() => bannerInputRef.current?.click()}
+                                                        >
+                                                            <Upload className="h-4 w-4" />
+                                                        </Button>
+                                                        <Button
+                                                            variant="destructive"
+                                                            size="icon"
+                                                            className="h-8 w-8 rounded-lg"
+                                                            onClick={removeBanner}
+                                                        >
+                                                            <X className="h-4 w-4" />
+                                                        </Button>
+                                                    </div>
+                                                    {/* Zoom indicator */}
+                                                    <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-black/60 text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        {Math.round(scale * 100)}%
+                                                    </div>
                                                 </div>
-                                                <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <Button
-                                                        variant="secondary"
-                                                        size="icon"
-                                                        className="h-8 w-8 rounded-lg bg-background/80 backdrop-blur"
-                                                        onClick={() => bannerInputRef.current?.click()}
-                                                    >
-                                                        <Upload className="h-4 w-4" />
-                                                    </Button>
-                                                    <Button
-                                                        variant="destructive"
-                                                        size="icon"
-                                                        className="h-8 w-8 rounded-lg"
-                                                        onClick={removeBanner}
-                                                    >
-                                                        <X className="h-4 w-4" />
-                                                    </Button>
+                                                <div className="flex items-center justify-between">
+                                                    <p className="text-xs text-muted-foreground">
+                                                        滾輪縮放 · 拖曳移動位置
+                                                    </p>
+                                                    {(scale !== 1 || posX !== 50 || posY !== 50) && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="h-6 text-xs px-2"
+                                                            onClick={() => setSettings(prev => ({
+                                                                ...prev,
+                                                                banner_scale: 1,
+                                                                banner_position_x: 50,
+                                                                banner_position_y: 50,
+                                                            }))}
+                                                        >
+                                                            重置
+                                                        </Button>
+                                                    )}
                                                 </div>
                                             </div>
-
-                                            {/* 縮放 & 位置控制 */}
-                                            <div className="space-y-3">
-                                                <div className="space-y-1.5">
-                                                    <div className="flex items-center justify-between">
-                                                        <label className="text-sm font-medium">縮放</label>
-                                                        <span className="text-xs text-muted-foreground">{Math.round((settings.banner_scale || 1) * 100)}%</span>
-                                                    </div>
-                                                    <input
-                                                        type="range"
-                                                        min="100"
-                                                        max="200"
-                                                        step="5"
-                                                        value={Math.round((settings.banner_scale || 1) * 100)}
-                                                        onChange={(e) => setSettings(prev => ({ ...prev, banner_scale: parseInt(e.target.value) / 100 }))}
-                                                        className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
-                                                    />
-                                                </div>
-                                                <div className="space-y-1.5">
-                                                    <div className="flex items-center justify-between">
-                                                        <label className="text-sm font-medium">垂直位置</label>
-                                                        <span className="text-xs text-muted-foreground">
-                                                            {(settings.banner_position_y ?? 50) <= 20 ? '上' : (settings.banner_position_y ?? 50) >= 80 ? '下' : '中'}
-                                                        </span>
-                                                    </div>
-                                                    <input
-                                                        type="range"
-                                                        min="0"
-                                                        max="100"
-                                                        step="5"
-                                                        value={settings.banner_position_y ?? 50}
-                                                        onChange={(e) => setSettings(prev => ({ ...prev, banner_position_y: parseInt(e.target.value) }))}
-                                                        className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
-                                                    />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ) : (
+                                        )
+                                    })() : (
                                         <div
                                             className="aspect-[3/1] rounded-xl border-2 border-dashed border-muted-foreground/30 flex flex-col items-center justify-center cursor-pointer hover:border-primary/50 transition-colors"
                                             onClick={() => bannerInputRef.current?.click()}
@@ -840,15 +866,13 @@ function ShopPreview({
                     <div className="sticky top-0 z-10 border-b px-3 py-2 relative overflow-hidden">
                         {bannerUrl ? (
                             <>
-                                <Image
-                                    src={bannerUrl}
-                                    alt="Banner"
-                                    fill
-                                    className="object-cover"
-                                    sizes="375px"
+                                <div
+                                    className="absolute inset-0"
                                     style={{
-                                        transform: `scale(${settings.banner_scale || 1})`,
-                                        objectPosition: `center ${settings.banner_position_y ?? 50}%`,
+                                        backgroundImage: `url(${bannerUrl})`,
+                                        backgroundSize: `${(settings.banner_scale || 1) * 100}%`,
+                                        backgroundPosition: `${settings.banner_position_x ?? 50}% ${settings.banner_position_y ?? 50}%`,
+                                        backgroundRepeat: 'no-repeat',
                                     }}
                                 />
                                 <div className="absolute inset-0 bg-black/50" />
