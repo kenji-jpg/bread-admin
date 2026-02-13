@@ -501,16 +501,7 @@ export default function ShopPage() {
     }
   }, [tenant?.id, supabase, loadShop])
 
-  // 定時輪詢：每 30 秒檢查是否有新商品加入商城
-  useEffect(() => {
-    if (!tenant?.id) return
-
-    const interval = setInterval(() => {
-      loadShop()
-    }, 30000)
-
-    return () => clearInterval(interval)
-  }, [tenant?.id, loadShop])
+  // 已移除 30 秒輪詢 — Realtime 訂閱已處理商品即時同步
 
   // 加入購物車
   const handleAddToCart = () => {
@@ -809,8 +800,8 @@ export default function ShopPage() {
     return `${minutes}m`
   }
 
-  // Loading 狀態
-  if (!isReady || isLoading) {
+  // Loading 狀態（不等 LIFF init，商品資料到就顯示）
+  if (isLoading) {
     return (
       <div className="min-h-screen p-4">
         <Skeleton className="h-12 w-48 mb-4" />
@@ -1143,6 +1134,8 @@ export default function ShopPage() {
                         fill
                         className="object-cover"
                         sizes="(max-width: 768px) 50vw, 200px"
+                        loading={index < 4 ? 'eager' : 'lazy'}
+                        priority={index < 4}
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
