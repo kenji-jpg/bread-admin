@@ -265,12 +265,15 @@ export default function ShopPage() {
     setShowShoppingNotice(true)
   }, [tenant?.id, shopSettings.shopping_notice, isStaff])
 
-  // 載入商城資料
-  const loadShop = useCallback(async () => {
+  // 載入商城資料（不依賴 isStaff，避免 staff 判定後重複載入）
+  const isStaffRef = useRef(isStaff)
+  isStaffRef.current = isStaff
+
+  const loadShop = useCallback(async (forceIncludeInactive?: boolean) => {
     try {
       const { data, error } = await supabase.rpc('get_shop_products_v1', {
         p_tenant_slug: tenantSlug,
-        p_include_inactive: isStaff,
+        p_include_inactive: forceIncludeInactive ?? isStaffRef.current,
       })
 
       if (error) throw error
@@ -295,7 +298,7 @@ export default function ShopPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [tenantSlug, supabase, isStaff])
+  }, [tenantSlug, supabase])
 
   // 載入我的訂單
   const loadMyOrders = useCallback(async () => {
@@ -357,8 +360,9 @@ export default function ShopPage() {
       setIsStaff(true)
       setStaffRole('owner')
       setStaffCheckDone(true)
+      loadShop(true) // 重載含 inactive 商品
     }
-  }, [isDevStaff, tenant, staffCheckDone])
+  }, [isDevStaff, tenant, staffCheckDone, loadShop])
 
   // 獨立 effect：檢查管理員身份
   useEffect(() => {
@@ -393,9 +397,10 @@ export default function ShopPage() {
       })()
   }, [isDevStaff, isLoggedIn, profile?.userId, tenant?.id, staffCheckDone, supabase])
 
-  // 管理員身份確認後，載入全部訂單
+  // 管理員身份確認後，重載商品（含 inactive）+ 載入全部訂單
   useEffect(() => {
     if (isStaff && tenant) {
+      loadShop(true) // 重載含 inactive 商品
       loadAllOrders()
     }
   }, [isStaff, tenant, loadAllOrders])

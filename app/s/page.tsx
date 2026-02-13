@@ -7,8 +7,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 const LoadingSkeleton = () => (
   <div className="min-h-screen p-4">
     <Skeleton className="h-12 w-48 mb-4" />
-    <div className="grid grid-cols-3 gap-2">
-      {[...Array(9)].map((_, i) => (
+    <div className="grid grid-cols-2 gap-2">
+      {[...Array(6)].map((_, i) => (
         <Skeleton key={i} className="aspect-square rounded-xl" />
       ))}
     </div>
