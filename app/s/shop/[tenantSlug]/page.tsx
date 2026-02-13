@@ -2310,7 +2310,6 @@ export default function ShopPage() {
                 ref={addProductFileRef}
                 type="file"
                 accept="image/*"
-                capture="environment"
                 className="hidden"
                 onChange={(e) => {
                   const file = e.target.files?.[0]
