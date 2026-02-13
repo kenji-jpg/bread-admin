@@ -25,10 +25,13 @@ interface Permissions {
     canManageAdmins: boolean        // 管理員管理
     canDeleteTenant: boolean        // 刪除店家
 
-    // 方案權限（Pro 專屬）
-    canAccessShop: boolean          // 商城功能
-    canUseMyshipEmail: boolean      // 賣貨便自動狀態更新
-    canUseChromeExtension: boolean  // Chrome 插件（預留）
+    // 方案權限（Pro+ 專屬）
+    canAccessShop: boolean          // 商城功能（Pro+）
+    canUseMyshipEmail: boolean      // 賣貨便自動狀態更新（Pro+）
+    canUseChromeExtension: boolean  // Chrome 插件（Pro+）
+
+    // 方案權限（Max 專屬）
+    canUseRealtime: boolean         // LIFF 即時同步（Max）
 }
 
 export function usePermission(): Permissions {
@@ -52,7 +55,9 @@ export function usePermission(): Permissions {
 
         // 超級管理員：角色權限全開，但方案權限仍依租戶實際 plan 判斷
         if (isSuperAdmin) {
-            const isPro = activeTenant?.plan === 'pro'
+            const plan = activeTenant?.plan
+            const isPro = plan === 'pro' || plan === 'max'
+            const isMax = plan === 'max'
             return {
                 role: 'owner' as Role,
                 isOwner: true,
@@ -71,6 +76,7 @@ export function usePermission(): Permissions {
                 canAccessShop: isPro,
                 canUseMyshipEmail: isPro,
                 canUseChromeExtension: isPro,
+                canUseRealtime: isMax,
             }
         }
 
@@ -80,8 +86,10 @@ export function usePermission(): Permissions {
         const isStaff = role === 'owner' || role === 'admin' || role === 'staff'
         const isViewer = role !== null
 
-        // 方案檢查
-        const isPro = activeTenant?.plan === 'pro'
+        // 方案檢查（basic < pro < max）
+        const plan = activeTenant?.plan
+        const isPro = plan === 'pro' || plan === 'max'
+        const isMax = plan === 'max'
 
         return {
             role,
@@ -101,10 +109,13 @@ export function usePermission(): Permissions {
             canManageAdmins: isOwner,             // owner only
             canDeleteTenant: isOwner,             // owner only
 
-            // 方案權限（Pro 專屬）
+            // 方案權限（Pro+ 專屬）
             canAccessShop: isPro,
             canUseMyshipEmail: isPro,
             canUseChromeExtension: isPro,
+
+            // 方案權限（Max 專屬）
+            canUseRealtime: isMax,
         }
     }, [tenants, currentTenant, tenant, tenantUserRole, isSuperAdmin])
 

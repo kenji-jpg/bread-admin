@@ -101,6 +101,7 @@ interface Tenant {
   name: string
   slug: string
   liff_id?: string | null
+  plan?: string
   payment_info?: { bank?: string; account?: string; name?: string }
 }
 
@@ -406,9 +407,10 @@ export default function ShopPage() {
     }
   }, [isStaff, tenant, loadAllOrders])
 
-  // Realtime 訂閱 - 商品即時同步（UPDATE / INSERT / DELETE）
+  // Realtime 訂閱 - 商品即時同步（僅 Max 方案或 Staff 啟用）
   useEffect(() => {
     if (!tenant?.id) return
+    if (tenant.plan !== 'max' && !isStaff) return
 
     const channel = supabase
       .channel(`shop-${tenant.id}`)
@@ -500,7 +502,7 @@ export default function ShopPage() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [tenant?.id, supabase, loadShop])
+  }, [tenant?.id, tenant?.plan, isStaff, supabase, loadShop])
 
   // 已移除 30 秒輪詢 — Realtime 訂閱已處理商品即時同步
 

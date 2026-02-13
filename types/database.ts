@@ -46,7 +46,7 @@ export interface Tenant {
   business_hours: { start: string; end: string } | null
   payment_info: { bank: string; account: string; name: string } | MaskedPaymentInfo | null
   admin_line_ids: string[] | MaskedAdminLineIds
-  plan: 'basic' | 'pro'
+  plan: 'basic' | 'pro' | 'max'
   plan_id?: string | null  // 新增：關聯 plan_id
   subscription_status: 'active' | 'expired' | 'cancelled'
   status?: 'active' | 'expired' | 'cancelled'  // 新增：租戶狀態（與 subscription_status 同義）
