@@ -33,6 +33,7 @@ import {
   CheckCircle,
   Truck,
   MapPin,
+  Copy,
 } from 'lucide-react'
 import Image from 'next/image'
 
@@ -2005,31 +2006,6 @@ export default function ShopPage() {
                       </div>
                     </div>
 
-                    {/* 匯款資訊（宅配/自取） */}
-                    {(selectedShipping === 'delivery' || selectedShipping === 'pickup') && tenant?.payment_info && (
-                      <div className="bg-muted/50 rounded-xl p-4 space-y-2">
-                        <p className="text-sm font-medium">匯款資訊</p>
-                        {tenant.payment_info.bank && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">銀行</span>
-                            <span>{tenant.payment_info.bank}</span>
-                          </div>
-                        )}
-                        {tenant.payment_info.account && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">帳號</span>
-                            <span>{tenant.payment_info.account}</span>
-                          </div>
-                        )}
-                        {tenant.payment_info.name && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">戶名</span>
-                            <span>{tenant.payment_info.name}</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
                     {/* 出貨方式 */}
                     <div className="flex items-center gap-2 text-sm">
                       <span className="text-muted-foreground">出貨方式：</span>
@@ -2116,13 +2092,6 @@ export default function ShopPage() {
                           <p className="text-sm text-blue-700">
                             請依匯款資訊轉帳，匯款完成後等待店家確認出貨。
                           </p>
-                          {tenant?.payment_info && (
-                            <div className="mt-2 pt-2 border-t border-blue-200 space-y-1 text-sm text-blue-700">
-                              {tenant.payment_info.bank && <p>銀行：{tenant.payment_info.bank}</p>}
-                              {tenant.payment_info.account && <p>帳號：{tenant.payment_info.account}</p>}
-                              {tenant.payment_info.name && <p>戶名：{tenant.payment_info.name}</p>}
-                            </div>
-                          )}
                         </div>
                       )}
                       {checkoutResult.shipping_method === 'pickup' && (
@@ -2133,16 +2102,45 @@ export default function ShopPage() {
                           <p className="text-sm text-blue-700">
                             請依匯款資訊轉帳，店家確認後安排取貨。
                           </p>
-                          {tenant?.payment_info && (
-                            <div className="mt-2 pt-2 border-t border-blue-200 space-y-1 text-sm text-blue-700">
-                              {tenant.payment_info.bank && <p>銀行：{tenant.payment_info.bank}</p>}
-                              {tenant.payment_info.account && <p>帳號：{tenant.payment_info.account}</p>}
-                              {tenant.payment_info.name && <p>戶名：{tenant.payment_info.name}</p>}
-                            </div>
-                          )}
                         </div>
                       )}
                     </div>
+
+                    {/* 匯款資訊（宅配/自取） */}
+                    {checkoutResult.shipping_method !== 'myship' && tenant?.payment_info && (
+                      <div className="bg-muted/50 rounded-xl p-4 space-y-3">
+                        <p className="text-sm font-medium">匯款資訊</p>
+                        {tenant.payment_info.bank && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">銀行</span>
+                            <span>{tenant.payment_info.bank}</span>
+                          </div>
+                        )}
+                        {tenant.payment_info.account && (
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">帳號</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono">{tenant.payment_info.account}</span>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(tenant.payment_info!.account!)
+                                  toast.success('已複製帳號')
+                                }}
+                                className="p-1 rounded-md hover:bg-muted active:scale-95 transition-transform"
+                              >
+                                <Copy className="w-3.5 h-3.5 text-muted-foreground" />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        {tenant.payment_info.name && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">戶名</span>
+                            <span>{tenant.payment_info.name}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* 關閉按鈕 */}
