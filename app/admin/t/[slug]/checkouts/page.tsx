@@ -571,7 +571,7 @@ export default function CheckoutsPage() {
                 item.checkout_no,
                 item.customer_name || item.member_display_name || item.member_nickname || '',
                 item.total_amount,
-                item.shipping_fee,
+                (item.shipping_method || 'myship') !== 'myship' ? item.shipping_fee : '',
                 item.item_count,
                 item.payment_status === 'paid' ? '已付款' : '待付款',
                 STATUS_LABELS[item.shipping_status] || item.shipping_status,
@@ -892,7 +892,7 @@ export default function CheckoutsPage() {
                                             </TableCell>
                                             <TableCell className="text-right font-semibold">
                                                 ${item.total_amount.toLocaleString()}
-                                                {item.shipping_fee > 0 && (
+                                                {item.shipping_fee > 0 && item.shipping_method !== 'myship' && (
                                                     <span className="text-xs text-muted-foreground ml-1">
                                                         (+${item.shipping_fee}運費)
                                                     </span>
@@ -1371,7 +1371,7 @@ export default function CheckoutsPage() {
                                                 </TableCell>
                                             </TableRow>
                                         ))}
-                                        {(checkoutDetail.checkout?.shipping_fee ?? 0) > 0 && (
+                                        {(checkoutDetail.checkout?.shipping_fee ?? 0) > 0 && checkoutDetail.checkout?.shipping_method !== 'myship' && (
                                             <TableRow>
                                                 <TableCell colSpan={4} className="text-right text-muted-foreground">運費</TableCell>
                                                 <TableCell className="text-right">
@@ -1382,7 +1382,7 @@ export default function CheckoutsPage() {
                                         <TableRow className="bg-muted/50">
                                             <TableCell colSpan={4} className="text-right font-bold">總計</TableCell>
                                             <TableCell className="text-right font-bold text-lg">
-                                                ${((checkoutDetail.checkout?.total_amount ?? 0) + (checkoutDetail.checkout?.shipping_fee ?? 0)).toLocaleString()}
+                                                ${((checkoutDetail.checkout?.total_amount ?? 0) + (checkoutDetail.checkout?.shipping_method !== 'myship' ? (checkoutDetail.checkout?.shipping_fee ?? 0) : 0)).toLocaleString()}
                                             </TableCell>
                                         </TableRow>
                                     </TableBody>
