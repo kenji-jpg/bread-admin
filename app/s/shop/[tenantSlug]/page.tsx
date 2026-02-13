@@ -37,7 +37,7 @@ import {
 import Image from 'next/image'
 
 // 壓縮圖片
-async function compressImage(file: File, maxWidth = 800, quality = 0.8): Promise<Blob> {
+async function compressImage(file: File, maxWidth = 400, quality = 0.7): Promise<Blob> {
   return new Promise((resolve, reject) => {
     const img = new window.Image()
     img.onload = () => {

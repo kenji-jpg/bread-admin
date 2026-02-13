@@ -19,7 +19,7 @@ import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 
 // 壓縮圖片至最大寬度並輸出為 WebP
-async function compressImage(file: File, maxWidth = 800, quality = 0.8): Promise<Blob> {
+async function compressImage(file: File, maxWidth = 400, quality = 0.7): Promise<Blob> {
     return new Promise((resolve, reject) => {
         const img = new Image()
         img.onload = () => {
