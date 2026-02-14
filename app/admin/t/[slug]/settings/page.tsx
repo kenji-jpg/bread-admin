@@ -73,6 +73,7 @@ import {
     Link2Off,
     QrCode,
     Lock,
+    Wallet,
 } from 'lucide-react'
 
 type AssignableRole = 'admin' | 'staff' | 'viewer'
@@ -622,10 +623,26 @@ export default function SettingsPage() {
 
             {/* Tabs */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-                <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:grid-cols-none lg:inline-flex">
+                <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:grid-cols-none lg:inline-flex">
                     <TabsTrigger value="basic" className="gap-2">
                         <Store className="h-4 w-4" />
                         <span className="hidden sm:inline">基本資訊</span>
+                    </TabsTrigger>
+                    <TabsTrigger
+                        value="billing"
+                        className="gap-2"
+                        onClick={(e) => {
+                            e.preventDefault()
+                            window.location.href = `/admin/t/${tenant?.slug}/settings/billing`
+                        }}
+                    >
+                        <Wallet className="h-4 w-4" />
+                        <span className="hidden sm:inline">帳單訂閱</span>
+                        {tenant?.plan === 'basic' && (
+                            <Badge variant="secondary" className="ml-1 text-xs">
+                                升級
+                            </Badge>
+                        )}
                     </TabsTrigger>
                     <TabsTrigger value="payment" className="gap-2">
                         <CreditCard className="h-4 w-4" />

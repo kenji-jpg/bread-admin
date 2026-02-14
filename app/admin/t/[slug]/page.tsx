@@ -1,10 +1,12 @@
 'use client'
 
 import { motion } from 'framer-motion'
+import Link from 'next/link'
 import { useTenant } from '@/hooks/use-tenant'
 import { StatCard } from '@/components/dashboard/stat-card'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
     ShoppingCart,
@@ -13,6 +15,8 @@ import {
     Users,
     Clock,
     TrendingUp,
+    Sparkles,
+    ArrowRight,
 } from 'lucide-react'
 
 export default function TenantDashboardPage() {
@@ -67,6 +71,35 @@ export default function TenantDashboardPage() {
                 </h1>
                 <p className="text-muted-foreground mt-1">歡迎回來，這是您的營運概況</p>
             </motion.div>
+
+            {/* 升級 Pro Banner（僅 Basic 用戶顯示） */}
+            {tenant.plan === 'basic' && (
+                <motion.div variants={itemVariants}>
+                    <Card className="border-primary/50 bg-gradient-to-r from-primary/10 via-accent/10 to-primary/10">
+                        <CardContent className="p-6">
+                            <div className="flex items-center justify-between gap-4">
+                                <div className="flex items-start gap-4">
+                                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-accent">
+                                        <Sparkles className="h-6 w-6 text-primary-foreground" />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <h3 className="text-lg font-semibold">升級至 Pro 專業版</h3>
+                                        <p className="text-sm text-muted-foreground">
+                                            開啟 LIFF 商城、賣貨便自動化等進階功能，月付只要 NT$ 599
+                                        </p>
+                                    </div>
+                                </div>
+                                <Link href={`/admin/t/${tenant.slug}/settings/billing`}>
+                                    <Button className="gradient-primary rounded-xl whitespace-nowrap">
+                                        立即升級
+                                        <ArrowRight className="ml-2 h-4 w-4" />
+                                    </Button>
+                                </Link>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </motion.div>
+            )}
 
             {/* Stats Grid */}
             <motion.div variants={itemVariants} className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
