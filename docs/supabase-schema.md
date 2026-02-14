@@ -333,7 +333,7 @@ LINE 群組對應表
 | line_channel_access_token | text | | | |
 | admin_line_ids | text[] | | | |
 | default_shipping_method | text | | myship | 預設結帳模式: myship \| delivery \| pickup |
-| myship_notify_email | text | | | 賣貨便通知信箱（如 bread-lady@plushub.cc） |
+| myship_notify_email | text | | | 賣貨便通知信箱（如 mrsanpanman@plushub.cc） |
 | payment_info | jsonb | | {} | |
 | settings | jsonb | | {} | |
 | business_hours | jsonb | | | |

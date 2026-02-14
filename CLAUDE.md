@@ -215,7 +215,7 @@ Supabase 專案 ID: `kashgsxlrdyuirijocld`
 ### Cloudflare Email Routing（plushub.cc）
 - `admin@plushub.cc` → 轉發到管理員 Gmail
 - `*@plushub.cc`（catch-all） → `myship-email-worker`（處理賣貨便通知）
-- 各租戶的 `myship_notify_email`（如 `bread-lady@plushub.cc`）用於接收賣貨便通知
+- 各租戶的 `myship_notify_email`（如 `mrsanpanman@plushub.cc`）用於接收賣貨便通知
 
 ## LIFF 商城架構
 
@@ -234,7 +234,7 @@ Supabase 專案 ID: `kashgsxlrdyuirijocld`
 ### Dev 模式 Staff Override
 - URL 加 `?staff=1` 可在 localhost 強制開啟管理員模式（owner 角色）
 - 僅 `NODE_ENV === 'development'` 生效，production 不受影響
-- 範例：`http://localhost:3000/s/shop/bread-lady?staff=1`
+- 範例：`http://localhost:3000/s/shop/mrsanpanman?staff=1`
 
 ### 商品雙模式（預購/現貨）
 

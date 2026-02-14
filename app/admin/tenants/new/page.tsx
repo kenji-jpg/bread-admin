@@ -161,7 +161,7 @@ export default function NewTenantPage() {
                                 id="slug"
                                 value={slug}
                                 onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                                placeholder="例：bread-lady"
+                                placeholder="例：mrsanpanman"
                                 className="rounded-xl font-mono"
                                 required
                             />

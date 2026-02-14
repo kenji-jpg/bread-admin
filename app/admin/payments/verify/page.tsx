@@ -161,7 +161,7 @@ export default function VerifyPaymentPage() {
 
 您已成功轉出 NT$599 到 張高源
 
-備註：bread-lady
+備註：mrsanpanman
 時間：2024/02/14 15:30
 
 --
@@ -339,14 +339,14 @@ LINE Bank 連線商業銀行`}
                     <pre className="text-xs p-4 rounded-lg bg-muted/50 border overflow-x-auto">
                         {`您已成功轉出 NT$599 到 張高源
 
-備註：bread-lady
+備註：mrsanpanman
 時間：2024/02/14 15:30
 
 --
 LINE Bank 連線商業銀行`}
                     </pre>
                     <p className="text-xs text-muted-foreground mt-2">
-                        💡 系統會自動辨識：金額（599）、備註（bread-lady）、時間（2024/02/14 15:30）
+                        💡 系統會自動辨識：金額（599）、備註（mrsanpanman）、時間（2024/02/14 15:30）
                     </p>
                 </CardContent>
             </Card>

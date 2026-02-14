@@ -801,7 +801,7 @@ const result = await fetch(`${SUPABASE_URL}/rest/v1/rpc/process_myship_order_ema
   body: JSON.stringify({
     p_store_name: '260206-3869_亮菁菁',      // 賣場名稱，比對 myship_store_name
     p_myship_order_no: 'CM2602101607192',    // CM 訂單編號
-    p_recipient_email: 'bread-lady@plushub.cc' // 收件 email，反查 tenant
+    p_recipient_email: 'mrsanpanman@plushub.cc' // 收件 email，反查 tenant
   })
 })
 ```
@@ -828,7 +828,7 @@ const result = await fetch(`${SUPABASE_URL}/rest/v1/rpc/process_myship_completed
   },
   body: JSON.stringify({
     p_myship_order_no: 'CM2602101607192',      // CM 訂單編號
-    p_recipient_email: 'bread-lady@plushub.cc'  // 收件 email
+    p_recipient_email: 'mrsanpanman@plushub.cc'  // 收件 email
   })
 })
 ```
