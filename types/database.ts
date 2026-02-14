@@ -48,6 +48,10 @@ export interface Tenant {
   admin_line_ids: string[] | MaskedAdminLineIds
   plan: 'basic' | 'pro' | 'max'
   plan_id?: string | null  // 新增：關聯 plan_id
+  plan_expires_at?: string | null  // Pro 方案到期日
+  subscription_starts_at?: string | null  // 訂閱開始時間
+  subscription_auto_renew?: boolean  // 是否自動續約
+  next_billing_date?: string | null  // 下次扣款日期
   subscription_status: 'active' | 'expired' | 'cancelled'
   status?: 'active' | 'expired' | 'cancelled'  // 新增：租戶狀態（與 subscription_status 同義）
   monthly_orders: number

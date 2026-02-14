@@ -6,20 +6,16 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useTenant } from '@/hooks/use-tenant'
 import { Copy, Check, AlertCircle } from 'lucide-react'
-import { useToast } from '@/hooks/use-toast'
+import { toast } from 'sonner'
 
 export default function BillingPage() {
     const { tenant } = useTenant()
     const [copied, setCopied] = useState<string | null>(null)
-    const { toast } = useToast()
 
     const copyToClipboard = (text: string, label: string) => {
         navigator.clipboard.writeText(text)
         setCopied(label)
-        toast({
-            title: '已複製',
-            description: `${label}已複製到剪貼簿`,
-        })
+        toast.success(`${label}已複製到剪貼簿`)
         setTimeout(() => setCopied(null), 2000)
     }
 
@@ -230,10 +226,7 @@ export default function BillingPage() {
                             onClick={() => {
                                 const info = `銀行：連線商業銀行（LINE Bank）\n代碼：824\n帳號：111003274710\n戶名：張高源\n備註：${tenant?.slug}\n金額：NT$ 599（月費）或 NT$ 5,990（年費）`
                                 navigator.clipboard.writeText(info)
-                                toast({
-                                    title: '✅ 已複製轉帳資訊',
-                                    description: '已複製完整轉帳資訊到剪貼簿',
-                                })
+                                toast.success('已複製完整轉帳資訊到剪貼簿')
                             }}
                             variant="outline"
                             className="w-full"
