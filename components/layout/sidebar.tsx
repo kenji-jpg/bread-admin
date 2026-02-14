@@ -24,6 +24,7 @@ import {
     AlertTriangle,
     ShoppingBag,
     Lock,
+    Wallet,
 } from 'lucide-react'
 
 interface NavItem {
@@ -96,6 +97,11 @@ export function Sidebar() {
                 title: '租戶管理',
                 href: '/admin/tenants',
                 icon: <Building2 className="h-5 w-5" />,
+            },
+            {
+                title: '付款管理',
+                href: '/admin/payments',
+                icon: <Wallet className="h-5 w-5" />,
             },
         ]
         : []
