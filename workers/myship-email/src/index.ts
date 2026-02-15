@@ -3,6 +3,7 @@ import PostalMime from 'postal-mime'
 interface Env {
   SUPABASE_URL: string
   SUPABASE_SERVICE_ROLE_KEY: string
+  FORWARD_EMAIL?: string  // 可選：同時轉寄 email 到此信箱（如 Gmail）
 }
 
 // 賣貨便 email 類型
@@ -82,6 +83,10 @@ function parseMyshipEmail(
     if (!storeName) {
       const storeNameTextMatch = textContent.match(/賣場名稱[：:]\s*(.+)/)?.[1]?.trim() || null
       storeName = storeNameTextMatch
+    }
+    // 去除賣場名稱中的括號暱稱，例如 "260209-8117_Han. hui（huiiiiii）" → "260209-8117_Han. hui"
+    if (storeName) {
+      storeName = storeName.replace(/[（(][^）)]*[）)]$/, '').trim()
     }
   }
 
@@ -186,13 +191,17 @@ export default {
     // 只處理來自賣貨便的 email
     if (from !== 'no-reply@sp88.com') {
       console.log(`[skip] Non-myship email from: ${from}, subject: ${subject}`)
+      // 非賣貨便的 email 也轉寄到 Gmail
+      if (env.FORWARD_EMAIL) {
+        await message.forward(env.FORWARD_EMAIL).catch(() => {})
+      }
       return
     }
 
     console.log(`[received] to=${message.to}, from=${from}, subject=${subject}`)
 
     try {
-      // 讀取 email 原始內容並解析
+      // 讀取 email 原始內容並解析（注意：讀取後 stream 消耗，forward 需在之前或用其他方式）
       const rawEmail = await new Response(message.raw).arrayBuffer()
       const parser = new PostalMime()
       const parsed = await parser.parse(rawEmail)

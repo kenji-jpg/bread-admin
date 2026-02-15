@@ -47,6 +47,8 @@ import {
     Calendar,
     DollarSign,
     FileText,
+    Users,
+    TrendingUp,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Tenant } from '@/types/database'
@@ -82,9 +84,14 @@ interface ExpiringTenant extends Tenant {
     days_until_expiry?: number
 }
 
+interface BasicTenant extends Tenant {
+    // Basic 租戶（潛在客戶）
+}
+
 export default function PaymentsPage() {
     const [payments, setPayments] = useState<PaymentTransaction[]>([])
     const [expiringTenants, setExpiringTenants] = useState<ExpiringTenant[]>([])
+    const [basicTenants, setBasicTenants] = useState<BasicTenant[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState('')
     const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'completed' | 'failed'>('all')
@@ -147,6 +154,19 @@ export default function PaymentsPage() {
                     return { ...tenant, days_until_expiry: daysLeft }
                 })
                 setExpiringTenants(tenantsWithDays as ExpiringTenant[])
+            }
+
+            // 3. 取得所有 Basic 租戶（潛在升級客戶）
+            const { data: basicTenantsData, error: basicError } = await supabase
+                .from('tenants')
+                .select('*')
+                .eq('plan', 'basic')
+                .order('created_at', { ascending: false })
+
+            if (basicError) {
+                console.error('Error fetching basic tenants:', basicError)
+            } else if (basicTenantsData) {
+                setBasicTenants(basicTenantsData as BasicTenant[])
             }
 
             setIsLoading(false)
@@ -333,6 +353,16 @@ export default function PaymentsPage() {
         monthlyRevenue: payments
             .filter((p) => p.payment_status === 'completed')
             .reduce((sum, p) => sum + p.amount, 0),
+        basicTenants: basicTenants.length,
+        thisMonthNewSubscriptions: payments.filter((p) => {
+            const createdAt = new Date(p.created_at)
+            const now = new Date()
+            return (
+                p.payment_status === 'completed' &&
+                createdAt.getMonth() === now.getMonth() &&
+                createdAt.getFullYear() === now.getFullYear()
+            )
+        }).length,
     }
 
     return (
@@ -349,16 +379,32 @@ export default function PaymentsPage() {
                     </h1>
                     <p className="text-muted-foreground mt-1">管理所有付款記錄與訂閱</p>
                 </div>
-                <Link href="/admin/payments/verify">
-                    <Button className="gradient-primary rounded-xl">
-                        <FileText className="mr-2 h-4 w-4" />
-                        驗證付款通知
+                <div className="flex gap-2">
+                    <Button
+                        onClick={() => {
+                            if (basicTenants.length > 0) {
+                                openUpgradeDialog(basicTenants[0])
+                            } else {
+                                toast.error('目前沒有可升級的租戶')
+                            }
+                        }}
+                        variant="outline"
+                        className="rounded-xl"
+                    >
+                        <ArrowUpCircle className="mr-2 h-4 w-4" />
+                        建立訂閱
                     </Button>
-                </Link>
+                    <Link href="/admin/payments/verify">
+                        <Button className="gradient-primary rounded-xl">
+                            <FileText className="mr-2 h-4 w-4" />
+                            驗證付款通知
+                        </Button>
+                    </Link>
+                </div>
             </div>
 
             {/* Stats */}
-            <div className="grid gap-4 md:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
                 <Card className="border-border/50">
                     <CardContent className="pt-6">
                         <div className="flex items-center gap-3">
@@ -413,7 +459,83 @@ export default function PaymentsPage() {
                         </div>
                     </CardContent>
                 </Card>
+                <Card className="border-border/50">
+                    <CardContent className="pt-6">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/20">
+                                <Users className="h-5 w-5 text-blue-500" />
+                            </div>
+                            <div>
+                                <p className="text-2xl font-bold">{stats.basicTenants}</p>
+                                <p className="text-sm text-muted-foreground">Basic 租戶</p>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+                <Card className="border-border/50">
+                    <CardContent className="pt-6">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-500/20">
+                                <TrendingUp className="h-5 w-5 text-green-500" />
+                            </div>
+                            <div>
+                                <p className="text-2xl font-bold">{stats.thisMonthNewSubscriptions}</p>
+                                <p className="text-sm text-muted-foreground">本月新訂閱</p>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
             </div>
+
+            {/* Basic 租戶（潛在升級客戶） */}
+            {basicTenants.length > 0 && (
+                <Card className="border-blue-500/50 bg-blue-500/5">
+                    <CardHeader>
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <CardTitle className="flex items-center gap-2 text-blue-500">
+                                    <Users className="h-5 w-5" />
+                                    Basic 租戶 ({basicTenants.length})
+                                </CardTitle>
+                                <CardDescription>以下租戶使用免費版，可升級為 Pro</CardDescription>
+                            </div>
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="grid gap-3 md:grid-cols-2">
+                            {basicTenants.map((tenant) => (
+                                <div
+                                    key={tenant.id}
+                                    className="flex items-center justify-between p-3 rounded-lg bg-background border border-border/50"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500">
+                                            <span className="text-sm font-bold text-white">
+                                                {tenant.name.charAt(0)}
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <p className="font-medium">{tenant.name}</p>
+                                            <code className="text-xs text-muted-foreground">
+                                                {tenant.slug}
+                                            </code>
+                                        </div>
+                                    </div>
+                                    <Button
+                                        size="sm"
+                                        variant="default"
+                                        onClick={() => openUpgradeDialog(tenant)}
+                                        className="rounded-xl gradient-primary"
+                                    >
+                                        <ArrowUpCircle className="mr-1 h-4 w-4" />
+                                        升級 Pro
+                                    </Button>
+                                </div>
+                            ))}
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
 
             {/* 即將到期租戶 */}
             {expiringTenants.length > 0 && (
@@ -756,6 +878,32 @@ export default function PaymentsPage() {
 
                             <div className="space-y-2">
                                 <Label htmlFor="upgrade-amount">金額</Label>
+                                <div className="flex gap-2">
+                                    <Button
+                                        type="button"
+                                        variant={upgradeAmount === '599' ? 'default' : 'outline'}
+                                        size="sm"
+                                        onClick={() => {
+                                            setUpgradeAmount('599')
+                                            setUpgradeType('monthly')
+                                        }}
+                                        className="flex-1 rounded-xl"
+                                    >
+                                        NT$ 599
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant={upgradeAmount === '5990' ? 'default' : 'outline'}
+                                        size="sm"
+                                        onClick={() => {
+                                            setUpgradeAmount('5990')
+                                            setUpgradeType('yearly')
+                                        }}
+                                        className="flex-1 rounded-xl"
+                                    >
+                                        NT$ 5,990
+                                    </Button>
+                                </div>
                                 <Input
                                     id="upgrade-amount"
                                     type="number"

@@ -45,7 +45,17 @@
       "Bash(npx wrangler dns list:*)",
       "Bash(dig:*)",
       "Bash(npx wrangler:*)",
-      "Bash(lsof:*)"
+      "Bash(lsof:*)",
+      "Bash(sips:*)",
+      "Bash(npx tsx:*)",
+      "Bash(source .env.local)",
+      "Bash(export NEXT_PUBLIC_SUPABASE_URL=\"https://kashgsxlrdyuirijocld.supabase.co\")",
+      "Bash(export:*)",
+      "Bash(chmod:*)",
+      "Bash(bash:*)",
+      "mcp__8fec4908-0b15-4f9e-ada0-bf45b04402ce__fetch-apify-docs",
+      "WebFetch(domain:github.com)",
+      "Bash(npx supabase db push)"
     ]
   }
 }

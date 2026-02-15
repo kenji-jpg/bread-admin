@@ -17,6 +17,8 @@ export default function RegisterPage() {
     const [error, setError] = useState<string | null>(null)
     const [isLoading, setIsLoading] = useState(false)
     const [success, setSuccess] = useState(false)
+    const [resending, setResending] = useState(false)
+    const [resendSuccess, setResendSuccess] = useState(false)
     const router = useRouter()
     const supabase = createClient()
 
@@ -64,6 +66,32 @@ export default function RegisterPage() {
         }
     }
 
+    const handleResendVerification = async () => {
+        setResending(true)
+        setResendSuccess(false)
+
+        try {
+            const { error } = await supabase.auth.resend({
+                type: 'signup',
+                email: email,
+                options: {
+                    emailRedirectTo: `${window.location.origin}/auth/callback`,
+                },
+            })
+
+            if (error) {
+                setError(error.message)
+                return
+            }
+
+            setResendSuccess(true)
+        } catch {
+            setError('重新發送失敗，請稍後再試')
+        } finally {
+            setResending(false)
+        }
+    }
+
     // 註冊成功畫面
     if (success) {
         return (
@@ -93,13 +121,41 @@ export default function RegisterPage() {
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            <Button
-                                onClick={() => router.push('/login')}
-                                className="w-full h-12"
-                                variant="outline"
-                            >
-                                返回登入
-                            </Button>
+                            {resendSuccess && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: -10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="p-3 rounded-lg bg-success/10 border border-success/20 text-success text-sm text-center"
+                                >
+                                    驗證信已重新發送，請查收信箱
+                                </motion.div>
+                            )}
+
+                            <div className="space-y-2">
+                                <Button
+                                    onClick={handleResendVerification}
+                                    disabled={resending}
+                                    className="w-full h-12"
+                                    variant="default"
+                                >
+                                    {resending ? (
+                                        <>
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            發送中...
+                                        </>
+                                    ) : (
+                                        '重新發送驗證信'
+                                    )}
+                                </Button>
+
+                                <Button
+                                    onClick={() => router.push('/login')}
+                                    className="w-full h-12"
+                                    variant="outline"
+                                >
+                                    返回登入
+                                </Button>
+                            </div>
                         </CardContent>
                     </Card>
                 </motion.div>

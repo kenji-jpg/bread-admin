@@ -30,7 +30,16 @@ export default function LoginPage() {
             })
 
             if (error) {
-                setError(error.message)
+                // 提供友善的錯誤訊息
+                if (error.message.includes('Email not confirmed')) {
+                    setError('請先驗證您的 Email。若未收到驗證信，請返回註冊頁面重新發送。')
+                } else if (error.message.includes('Invalid login credentials')) {
+                    setError('Email 或密碼錯誤，請檢查後重試')
+                } else if (error.message.includes('Email link is invalid or has expired')) {
+                    setError('驗證連結已過期，請重新發送驗證信')
+                } else {
+                    setError(error.message)
+                }
                 return
             }
 
