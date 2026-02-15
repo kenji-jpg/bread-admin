@@ -92,6 +92,7 @@ export default function PaymentsPage() {
     const [payments, setPayments] = useState<PaymentTransaction[]>([])
     const [expiringTenants, setExpiringTenants] = useState<ExpiringTenant[]>([])
     const [basicTenants, setBasicTenants] = useState<BasicTenant[]>([])
+    const [allTenants, setAllTenants] = useState<Tenant[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState('')
     const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'completed' | 'failed'>('all')
@@ -117,7 +118,7 @@ export default function PaymentsPage() {
                 .from('payment_transactions')
                 .select(`
                     *,
-                    tenant:tenants!payment_transactions_tenant_id_fkey(name, plan, plan_expires_at)
+                    tenant:tenants(name, plan, plan_expires_at)
                 `)
                 .order('created_at', { ascending: false })
                 .limit(100)
@@ -134,7 +135,7 @@ export default function PaymentsPage() {
 
             const { data: tenantsData, error: tenantsError } = await supabase
                 .from('tenants')
-                .select('*')
+                .select('id, name, slug, plan, plan_expires_at, is_active, created_at, updated_at, subscription_starts_at, next_billing_date, subscription_auto_renew')
                 .eq('plan', 'pro')
                 .not('plan_expires_at', 'is', null)
                 .lte('plan_expires_at', sevenDaysLater.toISOString())
@@ -144,7 +145,7 @@ export default function PaymentsPage() {
                 console.error('Error fetching expiring tenants:', tenantsError)
             } else if (tenantsData) {
                 // 計算剩餘天數
-                const tenantsWithDays = tenantsData.map((tenant: Tenant) => {
+                const tenantsWithDays = tenantsData.map((tenant) => {
                     const daysLeft = tenant.plan_expires_at
                         ? Math.ceil(
                               (new Date(tenant.plan_expires_at).getTime() - Date.now()) /
@@ -159,7 +160,7 @@ export default function PaymentsPage() {
             // 3. 取得所有 Basic 租戶（潛在升級客戶）
             const { data: basicTenantsData, error: basicError } = await supabase
                 .from('tenants')
-                .select('*')
+                .select('id, name, slug, plan, plan_expires_at, is_active, created_at, updated_at, subscription_starts_at, next_billing_date, subscription_auto_renew')
                 .eq('plan', 'basic')
                 .order('created_at', { ascending: false })
 
@@ -167,6 +168,16 @@ export default function PaymentsPage() {
                 console.error('Error fetching basic tenants:', basicError)
             } else if (basicTenantsData) {
                 setBasicTenants(basicTenantsData as BasicTenant[])
+            }
+
+            // 4. 取得所有租戶（建立訂閱用）
+            const { data: allTenantsData } = await supabase
+                .from('tenants')
+                .select('id, name, slug, plan, plan_expires_at, is_active, created_at, updated_at, subscription_starts_at, next_billing_date, subscription_auto_renew')
+                .order('name', { ascending: true })
+
+            if (allTenantsData) {
+                setAllTenants(allTenantsData as Tenant[])
             }
 
             setIsLoading(false)
@@ -382,11 +393,11 @@ export default function PaymentsPage() {
                 <div className="flex gap-2">
                     <Button
                         onClick={() => {
-                            if (basicTenants.length > 0) {
-                                openUpgradeDialog(basicTenants[0])
-                            } else {
-                                toast.error('目前沒有可升級的租戶')
-                            }
+                            setSelectedTenant(null)
+                            setUpgradeAmount('')
+                            setUpgradeType('monthly')
+                            setUpgradeNote('')
+                            setUpgradeDialogOpen(true)
                         }}
                         variant="outline"
                         className="rounded-xl"
@@ -849,14 +860,34 @@ export default function PaymentsPage() {
                             為租戶建立付款記錄並升級為 Pro 方案
                         </DialogDescription>
                     </DialogHeader>
-                    {selectedTenant && (
-                        <div className="space-y-4 py-4">
-                            <div className="p-3 rounded-lg bg-muted/50 border">
-                                <p className="font-medium">{selectedTenant.name}</p>
-                                <code className="text-xs text-muted-foreground">
-                                    {selectedTenant.slug}
-                                </code>
-                            </div>
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label>選擇租戶</Label>
+                            <Select
+                                value={selectedTenant?.id || ''}
+                                onValueChange={(tenantId) => {
+                                    const tenant = allTenants.find(t => t.id === tenantId)
+                                    if (tenant) setSelectedTenant(tenant as ExpiringTenant)
+                                }}
+                            >
+                                <SelectTrigger className="rounded-xl">
+                                    <SelectValue placeholder="請選擇租戶..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {allTenants.map((t) => (
+                                        <SelectItem key={t.id} value={t.id}>
+                                            {t.name}
+                                            <span className="text-muted-foreground ml-2 text-xs">
+                                                ({t.slug}) · {t.plan === 'pro' ? 'Pro' : 'Basic'}
+                                            </span>
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        {selectedTenant && (
+                            <>
 
                             <div className="space-y-2">
                                 <Label htmlFor="upgrade-type">訂閱類型</Label>
@@ -931,8 +962,9 @@ export default function PaymentsPage() {
                                     ⚠️ 此操作將立即生效，請確認收到款項後再執行
                                 </p>
                             </div>
-                        </div>
-                    )}
+                        </>
+                        )}
+                    </div>
                     <DialogFooter>
                         <Button
                             variant="outline"
@@ -944,7 +976,7 @@ export default function PaymentsPage() {
                         </Button>
                         <Button
                             onClick={handleManualUpgrade}
-                            disabled={isUpgrading || !upgradeAmount}
+                            disabled={isUpgrading || !upgradeAmount || !selectedTenant}
                             className="rounded-xl gradient-primary"
                         >
                             {isUpgrading ? '處理中...' : '確認升級'}
