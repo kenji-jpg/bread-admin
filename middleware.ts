@@ -48,7 +48,7 @@ export async function middleware(request: NextRequest) {
     } = await supabase.auth.getUser()
 
     // 公開路由（不需要登入）
-    const publicPaths = ['/login', '/register', '/forgot-password', '/auth/reset-password']
+    const publicPaths = ['/login', '/register', '/forgot-password', '/auth/reset-password', '/terms', '/privacy']
     const isPublicPage = publicPaths.some(path => pathname.startsWith(path))
 
     // 需要登入的路由

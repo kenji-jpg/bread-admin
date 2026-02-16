@@ -25,6 +25,7 @@ import {
     ShoppingBag,
     Lock,
     Wallet,
+    FileText,
 } from 'lucide-react'
 
 interface NavItem {
@@ -102,6 +103,11 @@ export function Sidebar() {
                 title: '付款管理',
                 href: '/admin/payments',
                 icon: <Wallet className="h-5 w-5" />,
+            },
+            {
+                title: '法律條款',
+                href: '/admin/legal',
+                icon: <FileText className="h-5 w-5" />,
             },
         ]
         : []

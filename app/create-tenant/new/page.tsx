@@ -43,6 +43,7 @@ export default function CreateNewTenantPage() {
     const [error, setError] = useState<string | null>(null)
     const [slugError, setSlugError] = useState<string | null>(null)
     const [isSubmitting, setIsSubmitting] = useState(false)
+    const [agreedToTerms, setAgreedToTerms] = useState(false)
 
     const router = useRouter()
     const supabase = createClient()
@@ -519,9 +520,25 @@ export default function CreateNewTenantPage() {
                                 </motion.div>
                             )}
 
+                            {/* 同意條款 */}
+                            <label className="flex items-start gap-2 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={agreedToTerms}
+                                    onChange={(e) => setAgreedToTerms(e.target.checked)}
+                                    className="mt-1 h-4 w-4 rounded border-border accent-primary"
+                                />
+                                <span className="text-sm text-muted-foreground leading-relaxed">
+                                    我已閱讀並同意{' '}
+                                    <a href="/terms" target="_blank" className="text-primary hover:underline">服務條款</a>
+                                    {' '}及{' '}
+                                    <a href="/privacy" target="_blank" className="text-primary hover:underline">隱私政策</a>
+                                </span>
+                            </label>
+
                             <Button
                                 type="submit"
-                                disabled={isSubmitting || !!slugError}
+                                disabled={isSubmitting || !!slugError || !agreedToTerms}
                                 className="w-full h-12 text-base font-medium bg-gradient-to-r from-violet-500 to-purple-600 hover:opacity-90 transition-opacity"
                             >
                                 {isSubmitting ? (
@@ -542,14 +559,19 @@ export default function CreateNewTenantPage() {
                 </Card>
 
                 {/* Footer */}
-                <motion.p
+                <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.5 }}
-                    className="text-center text-sm text-muted-foreground mt-6"
+                    className="text-center text-sm text-muted-foreground mt-6 space-y-1"
                 >
-                    © 2026 PlusHub 接單系統
-                </motion.p>
+                    <div className="flex items-center justify-center gap-2">
+                        <a href="/terms" target="_blank" className="hover:text-foreground transition-colors">服務條款</a>
+                        <span>·</span>
+                        <a href="/privacy" target="_blank" className="hover:text-foreground transition-colors">隱私政策</a>
+                    </div>
+                    <p>© 2026 PlusHub 接單系統</p>
+                </motion.div>
             </motion.div>
         </div>
     )

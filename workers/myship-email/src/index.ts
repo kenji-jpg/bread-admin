@@ -3,7 +3,6 @@ import PostalMime from 'postal-mime'
 interface Env {
   SUPABASE_URL: string
   SUPABASE_SERVICE_ROLE_KEY: string
-  FORWARD_EMAIL?: string  // 可選：同時轉寄 email 到此信箱（如 Gmail）
 }
 
 // 賣貨便 email 類型
@@ -188,20 +187,35 @@ export default {
     const subject = message.headers.get('subject') || ''
     const from = message.from
 
+    // 根據收件人查租戶的轉寄目標，在讀取 raw stream 之前先 forward
+    const recipientEmail = message.to
+    try {
+      const tenantRes = await fetch(`${env.SUPABASE_URL}/rest/v1/tenants?myship_notify_email=eq.${encodeURIComponent(recipientEmail)}&select=forward_email`, {
+        headers: {
+          'apikey': env.SUPABASE_SERVICE_ROLE_KEY,
+          'Authorization': `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+        },
+      })
+      const tenants = await tenantRes.json() as Array<{ forward_email: string | null }>
+      const forwardTo = tenants?.[0]?.forward_email
+      if (forwardTo) {
+        await message.forward(forwardTo)
+        console.log(`[forward] ${recipientEmail} → ${forwardTo}`)
+      }
+    } catch (e) {
+      console.error(`[forward] Failed to lookup/forward:`, e)
+    }
+
     // 只處理來自賣貨便的 email
     if (from !== 'no-reply@sp88.com') {
       console.log(`[skip] Non-myship email from: ${from}, subject: ${subject}`)
-      // 非賣貨便的 email 也轉寄到 Gmail
-      if (env.FORWARD_EMAIL) {
-        await message.forward(env.FORWARD_EMAIL).catch(() => {})
-      }
       return
     }
 
     console.log(`[received] to=${message.to}, from=${from}, subject=${subject}`)
 
     try {
-      // 讀取 email 原始內容並解析（注意：讀取後 stream 消耗，forward 需在之前或用其他方式）
+      // 讀取 email 原始內容並解析
       const rawEmail = await new Response(message.raw).arrayBuffer()
       const parser = new PostalMime()
       const parsed = await parser.parse(rawEmail)

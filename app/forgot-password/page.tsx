@@ -207,14 +207,19 @@ export default function ForgotPasswordPage() {
                 </Card>
 
                 {/* Footer */}
-                <motion.p
+                <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.5 }}
-                    className="text-center text-sm text-muted-foreground mt-6"
+                    className="text-center text-sm text-muted-foreground mt-6 space-y-1"
                 >
-                    © 2026 PlusHub 接單系統
-                </motion.p>
+                    <div className="flex items-center justify-center gap-2">
+                        <a href="/terms" target="_blank" className="hover:text-foreground transition-colors">服務條款</a>
+                        <span>·</span>
+                        <a href="/privacy" target="_blank" className="hover:text-foreground transition-colors">隱私政策</a>
+                    </div>
+                    <p>© 2026 PlusHub 接單系統</p>
+                </motion.div>
             </motion.div>
         </div>
     )

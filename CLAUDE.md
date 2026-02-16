@@ -38,9 +38,10 @@ NEXT_PUBLIC_LIFF_ID             # LINE LIFF App ID（目前所有租戶共用）
 ```
 app/
 ├── login/, register/, forgot-password/   # 認證頁面
+├── terms/, privacy/                      # 服務條款、隱私政策（公開頁面）
 ├── auth/callback/route.ts                # OAuth 回呼（唯一 API route）
 ├── auth/redirect/page.tsx                # 登入後路由判斷
-├── create-tenant/                        # 建立/加入店家
+├── create-tenant/                        # 建立/加入店家（含同意條款 checkbox）
 ├── admin/
 │   ├── page.tsx                          # 超管首頁
 │   ├── tenants/                          # 超管：租戶管理、審核申請
@@ -52,10 +53,11 @@ app/
 │       ├── members/                      # 會員管理
 │       ├── shop/                         # 商城管理（LIFF 外觀設定）
 │       └── settings/                     # 店家設定（基本/付款/LINE/團隊）
+│           └── billing/                  # 帳務（方案升級/轉帳資訊）
 ├── s/                                    # LIFF 顧客端
 │   ├── page.tsx                          # LIFF 回調中繼（重定向）
 │   ├── layout.tsx                        # LiffProvider 包裝
-│   └── shop/[tenantSlug]/page.tsx        # 商城頁面（顧客瀏覽/下單）
+│   └── shop/[tenantSlug]/page.tsx        # 商城頁面（顧客瀏覽/下單/結帳）
 components/
 ├── ui/           # Radix UI 基礎元件（button, dialog, table 等）
 ├── layout/       # sidebar, header, tenant-switcher, theme-toggle
@@ -89,7 +91,7 @@ Supabase 專案 ID: `kashgsxlrdyuirijocld`
 
 | 資料表 | 用途 | 備註 |
 |--------|------|------|
-| tenants | 店家（多租戶） | `settings` JSONB 含 shop 設定，`plan` 欄位控制方案（basic/pro），`myship_notify_email` 賣貨便通知信箱 |
+| tenants | 店家（多租戶） | `settings` JSONB 含 shop 設定，`plan` 欄位控制方案（basic/pro/max），`myship_notify_email` 賣貨便通知信箱，`forward_email` 轉寄目標信箱 |
 | tenant_users | 店家管理員（角色綁定） | |
 | members | LINE 會員（顧客） | |
 | products | 商品 | `show_in_shop` 控制商城顯示（Pro 功能） |
@@ -194,7 +196,7 @@ Supabase 專案 ID: `kashgsxlrdyuirijocld`
 - `process_myship_completed_email` — 買家取貨通知：用 CM 訂單編號比對結帳單，狀態 `ordered`/`shipped` → `completed`
 
 **方案管理**
-- `update_tenant_plan_v1` — 超管升降級租戶方案（basic/pro）
+- `update_tenant_plan_v1` — 超管升降級租戶方案（basic/pro/max）
 
 ### RLS 重要規則
 
@@ -206,16 +208,22 @@ Supabase 專案 ID: `kashgsxlrdyuirijocld`
 - `notify-myship-url` — 發送賣貨便取貨通知給客戶
 
 ### Cloudflare Workers
-- `myship-email-worker` — 接收賣貨便 email 通知（`no-reply@sp88.com`），自動更新結帳單出貨狀態
+- `myship-email-worker` — 接收所有 `*@plushub.cc` email，自動轉寄 + 處理賣貨便通知
   - 部署 URL: `https://myship-email-worker.l0953578860.workers.dev`
   - 觸發方式: Cloudflare Email Routing（`*@plushub.cc` catch-all → Worker）
   - 環境變數: `SUPABASE_URL`（vars）、`SUPABASE_SERVICE_ROLE_KEY`（secret）
   - 代碼位置: `workers/myship-email/src/index.ts`
+  - **處理流程**：
+    1. 收到信 → 用 `message.to` 查 `tenants.myship_notify_email` 找到租戶
+    2. 取出 `tenants.forward_email` → 轉寄到租戶指定的 Gmail
+    3. 如果寄件人是 `no-reply@sp88.com`（賣貨便）→ 解析 email 內容 → 呼叫 RPC 更新結帳單狀態
+  - **賣場名稱比對**：Worker 解析時會去除括號暱稱（如 `Han. hui（huiiiiii）` → `Han. hui`），RPC 用前綴比對
 
 ### Cloudflare Email Routing（plushub.cc）
-- `admin@plushub.cc` → 轉發到管理員 Gmail
-- `*@plushub.cc`（catch-all） → `myship-email-worker`（處理賣貨便通知）
-- 各租戶的 `myship_notify_email`（如 `mrsanpanman@plushub.cc`）用於接收賣貨便通知
+- `admin@plushub.cc` → 轉發到管理員 Gmail（自訂規則）
+- `*@plushub.cc`（catch-all） → `myship-email-worker`
+- 各租戶的 `myship_notify_email`（如 `mrsanapanman@plushub.cc`）用於接收賣貨便通知
+- 各租戶的 `forward_email` 控制轉寄目標（Worker 自動查詢並轉寄）
 
 ## LIFF 商城架構
 
@@ -225,11 +233,18 @@ Supabase 專案 ID: `kashgsxlrdyuirijocld`
 
 ### 功能
 - 商品瀏覽（依分類篩選、搜尋）
-- 即時動態：Supabase Realtime 監聽 products 表，商品被購買時顯示 +N 動畫
+- 即時動態：Supabase Realtime 監聽 products 表，商品被購買時顯示 +N 動畫（Max 方案或 Staff 才啟用）
 - 熱門標記：sold_qty >= 5 顯示🔥標籤
 - 顧客下單（喊單）+ 查看自己訂單
-- Staff 模式：上架商品、補貨、關閉收單、截止/延長時限
+- **LIFF 結帳**：3 步驟 Modal（選擇出貨方式 → 確認 → 成功+匯款資訊+帳號複製）
+- Staff 模式：上架商品（含拍照+相簿）、補貨、關閉收單、截止/延長時限
 - 商城外觀由後台 `/admin/t/[slug]/shop` 控制（banner、公告、主題色、分類排序）
+
+### 效能優化
+- 商品在 LIFF init 完成前即可顯示（不等 `isReady`，只等 `isLoading`）
+- 圖片壓縮：上傳時 client-side WebP 壓縮（400px max width, 0.7 quality）
+- 圖片懶載入：前 4 張 `priority + eager`，其餘 `lazy`
+- 已移除 30 秒輪詢（Realtime 已取代）
 
 ### Dev 模式 Staff Override
 - URL 加 `?staff=1` 可在 localhost 強制開啟管理員模式（owner 角色）
@@ -285,12 +300,19 @@ viewer       → 唯讀存取
 |------|------|------|
 | 基本版 | `basic` | 商品、訂單、結帳、會員管理（核心功能） |
 | 專業版 | `pro` | 基本版 + LIFF 商城、賣貨便 Email 自動化、Chrome 插件 |
+| 旗艦版 | `max` | 專業版 + LIFF Realtime 即時同步（給顧客端） |
 
-- `tenants.plan` 欄位：`'basic'`（預設）或 `'pro'`
-- 前端判斷：`hooks/use-permission.tsx` 的 `canAccessShop`、`canUseMyshipEmail`、`canUseChromeExtension`
-- `isPro = activeTenant?.plan === 'pro'`，super_admin 始終擁有所有權限
+- `tenants.plan` 欄位：`'basic'`（預設）、`'pro'`、`'max'`
+- DB constraint：`tenants_plan_check` 限制為 `('basic', 'pro', 'max')`
+- 前端判斷：`hooks/use-permission.tsx`
+  - `isPro = plan === 'pro' || plan === 'max'`（Pro+ 權限）
+  - `isMax = plan === 'max'`（Max 專屬權限）
+  - `canAccessShop`、`canUseMyshipEmail`、`canUseChromeExtension`（Pro+）
+  - `canUseRealtime`（Max 專屬）
+- super_admin 始終擁有所有權限
 - 後台 sidebar 對 Basic 租戶鎖定 Pro 功能頁面，顯示🔒 + Pro Badge
-- 升降級：超管透過 `update_tenant_plan_v1` RPC 操作
+- 升降級：超管透過 `update_tenant_plan_v1` RPC 操作（支援 basic/pro/max）
+- LIFF Realtime：`tenant.plan === 'max'` 或 `isStaff` 才啟用即時同步
 
 ## 出貨方式
 
@@ -355,12 +377,17 @@ pending → url_sent → ordered → shipped → completed
 
 ## 已完成功能
 
-- **【完成】方案系統（Basic/Pro）**：`tenants.plan` 欄位、前端 permission hook、sidebar 鎖定、超管升降級 RPC
-- **【完成】賣貨便 Email 自動化**：Cloudflare Worker + Email Routing，自動處理訂單成立 / 買家取貨通知
+- **【完成】方案系統（Basic/Pro/Max）**：`tenants.plan` 欄位（三層）、前端 permission hook、sidebar 鎖定、超管升降級 RPC、Max 方案 Realtime 獨佔
+- **【完成】賣貨便 Email 自動化**：Cloudflare Worker + Email Routing，自動處理訂單成立 / 買家取貨通知。Worker 支援 per-tenant 轉寄（`forward_email`）、賣場名稱去除括號暱稱、RPC 前綴比對
 - **【完成】租戶建立審核機制**：`tenant_create_requests` 表 + 審核 RPC + 超管審核頁面
-- **【完成】Cloudflare Email Routing**：`admin@plushub.cc` → Gmail 轉發，`*@plushub.cc` catch-all → Worker
-- **【完成】商品雙模式（預購/現貨）**：LIFF 商城以 `is_limited` 判斷模式，預購不限購、不完銷；現貨受庫存限制、可完銷。影響範圍：`getProductMode()`、完銷判斷、Realtime 同步、選購 Modal 數量上限、購物車 +/- 上限、商品卡 badge
-- **【完成】LIFF 管理員模式改善**：修復 `update_product_end_time_v1` 截止功能（移除 `session_id IS NOT NULL`）、升級 `add_shop_product_v1`（支援 `is_limited`/`category`/`end_time`、自動 `show_in_shop=true`）、上架 Modal 新增預購/現貨切換、分類標籤、收單時限選擇、商品卡 Badge 重新設計、Dev 模式 `?staff=1` override
+- **【完成】Cloudflare Email Routing**：`admin@plushub.cc` → Gmail 轉發，`*@plushub.cc` catch-all → Worker → per-tenant 轉寄 + 賣貨便處理
+- **【完成】商品雙模式（預購/現貨）**：LIFF 商城以 `is_limited` 判斷模式，預購不限購、不完銷；現貨受庫存限制、可完銷
+- **【完成】LIFF 管理員模式改善**：上架 Modal 支援預購/現貨、分類、時限、拍照+相簿上傳
+- **【完成】LIFF 結帳功能**：3 步驟 Modal（出貨方式 → 確認 → 成功），支援賣貨便/宅配/自取，匯款資訊集中顯示 + 帳號快速複製
+- **【完成】LIFF 效能優化**：LIFF init 不阻塞商品渲染、圖片壓縮（400px/0.7）、懶載入、移除輪詢
+- **【完成】服務條款 & 隱私政策**：`/terms`、`/privacy` 公開頁面，建立租戶需勾選同意，所有認證頁 footer 含連結
+- **【完成】帳務頁面**：`/admin/t/[slug]/settings/billing`，顯示當前方案、升級轉帳資訊、Pro 功能清單
+- **【完成】Chrome 插件賣場名稱修正**：回填 DB 的 `myship_store_name` 現在包含暱稱，與賣貨便實際賣場名稱一致
 
 ## 參考文件
 
