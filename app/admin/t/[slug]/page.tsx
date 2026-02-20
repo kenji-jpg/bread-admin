@@ -18,6 +18,10 @@ import {
     Sparkles,
     ArrowRight,
     AlertTriangle,
+    Crown,
+    CalendarDays,
+    Shield,
+    CreditCard,
 } from 'lucide-react'
 
 export default function TenantDashboardPage() {
@@ -73,106 +77,146 @@ export default function TenantDashboardPage() {
                 <p className="text-muted-foreground mt-1">歡迎回來，這是您的營運概況</p>
             </motion.div>
 
-            {/* 升級 Pro Banner（僅 Basic 用戶顯示） */}
-            {tenant.plan === 'basic' && (
-                <motion.div variants={itemVariants}>
-                    <Card className="border-primary/50 bg-gradient-to-r from-primary/10 via-accent/10 to-primary/10">
-                        <CardContent className="p-6">
-                            <div className="flex items-center justify-between gap-4">
-                                <div className="flex items-start gap-4">
-                                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-accent">
-                                        <Sparkles className="h-6 w-6 text-primary-foreground" />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <h3 className="text-lg font-semibold">升級至 Pro 專業版</h3>
-                                        <p className="text-sm text-muted-foreground">
-                                            開啟 LIFF 商城、賣貨便自動化等進階功能，月付只要 NT$ 699
-                                        </p>
-                                    </div>
-                                </div>
-                                <Link href={`/admin/t/${tenant.slug}/settings/billing`}>
-                                    <Button className="gradient-primary rounded-xl whitespace-nowrap">
-                                        立即升級
-                                        <ArrowRight className="ml-2 h-4 w-4" />
-                                    </Button>
-                                </Link>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </motion.div>
-            )}
-
-            {/* 到期提醒 Banner */}
+            {/* 訂閱狀態卡 */}
             {(() => {
                 const daysLeft = tenant.plan_expires_at
                     ? Math.ceil((new Date(tenant.plan_expires_at).getTime() - Date.now()) / 86400000)
                     : null
                 const isExpiringSoon = daysLeft !== null && daysLeft > 0 && daysLeft <= 7
                 const isExpired = daysLeft !== null && daysLeft <= 0
+                const isFreeGrandfathered = !tenant.plan_expires_at
 
+                const planLabel = tenant.plan === 'pro' ? 'Pro 專業版' : tenant.plan === 'max' ? 'Max 旗艦版' : 'Basic 基本版'
+                const PlanIcon = tenant.plan === 'basic' ? Shield : Crown
+
+                // 狀態判定
+                let statusLabel: string
+                let statusColor: string // tailwind classes for badge
                 if (isExpired) {
-                    return (
-                        <motion.div variants={itemVariants}>
-                            <Card className="border-destructive/50 bg-gradient-to-r from-destructive/10 via-destructive/5 to-destructive/10">
-                                <CardContent className="p-6">
-                                    <div className="flex items-center justify-between gap-4">
-                                        <div className="flex items-start gap-4">
-                                            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-destructive/20">
-                                                <AlertTriangle className="h-6 w-6 text-destructive" />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <h3 className="text-lg font-semibold text-destructive">方案已過期</h3>
-                                                <p className="text-sm text-muted-foreground">
-                                                    您的方案已過期，服務即將暫停。請儘速續費以繼續使用。
-                                                </p>
-                                            </div>
-                                        </div>
-                                        <Link href={`/admin/t/${tenant.slug}/settings/billing`}>
-                                            <Button variant="destructive" className="rounded-xl whitespace-nowrap">
-                                                立即續費
-                                                <ArrowRight className="ml-2 h-4 w-4" />
-                                            </Button>
-                                        </Link>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        </motion.div>
-                    )
+                    statusLabel = '已過期'
+                    statusColor = 'bg-destructive/15 text-destructive border-destructive/30'
+                } else if (isExpiringSoon) {
+                    statusLabel = '即將到期'
+                    statusColor = 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                } else if (isFreeGrandfathered) {
+                    statusLabel = '永久啟用'
+                    statusColor = 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                } else {
+                    statusLabel = '使用中'
+                    statusColor = 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
                 }
 
-                if (isExpiringSoon) {
-                    return (
-                        <motion.div variants={itemVariants}>
-                            <Card className="border-amber-500/50 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-amber-500/10">
-                                <CardContent className="p-6">
-                                    <div className="flex items-center justify-between gap-4">
-                                        <div className="flex items-start gap-4">
-                                            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-500/20">
-                                                <Clock className="h-6 w-6 text-amber-600 dark:text-amber-400" />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <h3 className="text-lg font-semibold text-amber-600 dark:text-amber-400">
-                                                    方案即將到期
-                                                </h3>
-                                                <p className="text-sm text-muted-foreground">
-                                                    您的方案將在 {daysLeft} 天後到期（{new Date(tenant.plan_expires_at!).toLocaleDateString('zh-TW')}），請及時續費。
-                                                </p>
-                                            </div>
-                                        </div>
-                                        <Link href={`/admin/t/${tenant.slug}/settings/billing`}>
-                                            <Button className="rounded-xl whitespace-nowrap bg-amber-500 hover:bg-amber-600 text-white">
-                                                前往續費
-                                                <ArrowRight className="ml-2 h-4 w-4" />
-                                            </Button>
-                                        </Link>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        </motion.div>
-                    )
-                }
+                // 外框色
+                const borderColor = isExpired
+                    ? 'border-destructive/40'
+                    : isExpiringSoon
+                        ? 'border-amber-500/40'
+                        : 'border-border/50'
 
-                return null
+                return (
+                    <motion.div variants={itemVariants}>
+                        <Card className={`${borderColor} overflow-hidden`}>
+                            {/* 到期/即將到期警示條 */}
+                            {isExpired && (
+                                <div className="bg-destructive/10 border-b border-destructive/20 px-6 py-2.5 flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <AlertTriangle className="h-4 w-4 text-destructive" />
+                                        <span className="text-sm font-medium text-destructive">
+                                            您的方案已過期，服務即將暫停
+                                        </span>
+                                    </div>
+                                    <Link href={`/admin/t/${tenant.slug}/settings/billing`}>
+                                        <Button size="sm" variant="destructive" className="rounded-lg h-7 text-xs">
+                                            立即續費
+                                            <ArrowRight className="ml-1 h-3 w-3" />
+                                        </Button>
+                                    </Link>
+                                </div>
+                            )}
+                            {isExpiringSoon && (
+                                <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-2.5 flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                                        <span className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                                            方案將在 {daysLeft} 天後到期，請及時續費
+                                        </span>
+                                    </div>
+                                    <Link href={`/admin/t/${tenant.slug}/settings/billing`}>
+                                        <Button size="sm" className="rounded-lg h-7 text-xs bg-amber-500 hover:bg-amber-600 text-white">
+                                            前往續費
+                                            <ArrowRight className="ml-1 h-3 w-3" />
+                                        </Button>
+                                    </Link>
+                                </div>
+                            )}
+
+                            <CardContent className="p-6">
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    {/* 方案等級 */}
+                                    <div className="space-y-1.5">
+                                        <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                                            <PlanIcon className="h-3.5 w-3.5" />
+                                            方案等級
+                                        </div>
+                                        <p className="text-lg font-bold tracking-tight">{planLabel}</p>
+                                        {tenant.plan === 'basic' && !isExpired && (
+                                            <Link href={`/admin/t/${tenant.slug}/settings/billing`} className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                                                <Sparkles className="h-3 w-3" />
+                                                升級 Pro
+                                            </Link>
+                                        )}
+                                    </div>
+
+                                    {/* 啟用狀態 */}
+                                    <div className="space-y-1.5">
+                                        <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                                            <Shield className="h-3.5 w-3.5" />
+                                            啟用狀態
+                                        </div>
+                                        <div>
+                                            <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusColor}`}>
+                                                {statusLabel}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* 啟用日期 */}
+                                    <div className="space-y-1.5">
+                                        <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                                            <CalendarDays className="h-3.5 w-3.5" />
+                                            啟用日期
+                                        </div>
+                                        <p className="text-sm font-medium">
+                                            {tenant.subscription_starts_at
+                                                ? new Date(tenant.subscription_starts_at).toLocaleDateString('zh-TW')
+                                                : new Date(tenant.created_at).toLocaleDateString('zh-TW')}
+                                        </p>
+                                    </div>
+
+                                    {/* 到期日期 */}
+                                    <div className="space-y-1.5">
+                                        <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                                            <CreditCard className="h-3.5 w-3.5" />
+                                            到期日期
+                                        </div>
+                                        <p className={`text-sm font-medium ${isExpired ? 'text-destructive' : isExpiringSoon ? 'text-amber-600 dark:text-amber-400' : ''}`}>
+                                            {isFreeGrandfathered
+                                                ? '無期限'
+                                                : tenant.plan_expires_at
+                                                    ? new Date(tenant.plan_expires_at).toLocaleDateString('zh-TW')
+                                                    : '—'}
+                                        </p>
+                                        {daysLeft !== null && daysLeft > 0 && daysLeft <= 30 && (
+                                            <p className={`text-xs ${isExpiringSoon ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'}`}>
+                                                剩餘 {daysLeft} 天
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </motion.div>
+                )
             })()}
 
             {/* Stats Grid */}
