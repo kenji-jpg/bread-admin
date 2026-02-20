@@ -181,7 +181,7 @@ export default function ShopPage() {
   const tenantSlug = params.tenantSlug as string
   const supabaseRef = useRef(createClient())
   const supabase = supabaseRef.current
-  const { isReady, isLoggedIn, profile, login } = useLiff()
+  const { isReady, isLoggedIn, profile, login, error: liffError } = useLiff()
 
   // Dev mode: ?staff=1 強制開啟管理員模式（僅 localhost）
   const isDevStaff = process.env.NODE_ENV === 'development' && searchParams.get('staff') === '1'
@@ -812,6 +812,19 @@ export default function ShopPage() {
           {[...Array(6)].map((_, i) => (
             <Skeleton key={i} className="aspect-square rounded-xl" />
           ))}
+        </div>
+      </div>
+    )
+  }
+
+  // LIFF 錯誤（未設定 LIFF ID 等）
+  if (liffError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="text-center">
+          <Store className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+          <p className="text-muted-foreground mb-2">{liffError}</p>
+          <p className="text-xs text-muted-foreground">請聯繫店家管理員設定 LINE Login</p>
         </div>
       </div>
     )

@@ -21,8 +21,6 @@ interface LiffContextType {
 
 const LiffContext = createContext<LiffContextType | undefined>(undefined)
 
-const LIFF_ID = process.env.NEXT_PUBLIC_LIFF_ID || ''
-
 // Dev 模式：localhost 時跳過 LIFF 驗證，用假 profile 直接進商城
 const IS_DEV = typeof window !== 'undefined' && (
   window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
@@ -39,7 +37,7 @@ const DEV_PROFILE: LiffProfile = {
  * 從外部瀏覽器打開 → 會跳轉一次到 LINE Login
  */
 export function getLiffShareUrl(path: string, customLiffId?: string): string {
-  const liffId = customLiffId || LIFF_ID
+  const liffId = customLiffId
   if (!liffId) return path
   // path 例如 /s/abc123 → https://liff.line.me/{liffId}/s/abc123
   const cleanPath = path.startsWith('/') ? path : `/${path}`
@@ -48,8 +46,8 @@ export function getLiffShareUrl(path: string, customLiffId?: string): string {
 
 /**
  * 產生商城 LIFF 分享連結
- * 例如 → https://liff.line.me/{LIFF_ID}/s/shop/{tenantSlug}
- * 可傳入 customLiffId 使用租戶專屬的 LIFF ID
+ * 例如 → https://liff.line.me/{liffId}/s/shop/{tenantSlug}
+ * 必須傳入 customLiffId（租戶專屬 LIFF ID）
  */
 export function getShopShareUrl(tenantSlug: string, customLiffId?: string): string {
   return getLiffShareUrl(`/s/shop/${tenantSlug}`, customLiffId)
@@ -57,9 +55,10 @@ export function getShopShareUrl(tenantSlug: string, customLiffId?: string): stri
 
 interface LiffProviderProps {
   children: ReactNode
+  liffId?: string  // 租戶專屬 LIFF ID
 }
 
-export function LiffProvider({ children }: LiffProviderProps) {
+export function LiffProvider({ children, liffId: tenantLiffId }: LiffProviderProps) {
   const [isReady, setIsReady] = useState(false)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [isInClient, setIsInClient] = useState(false)
@@ -79,8 +78,8 @@ export function LiffProvider({ children }: LiffProviderProps) {
       }
 
       try {
-        if (!LIFF_ID) {
-          setError('LIFF ID 未設定')
+        if (!tenantLiffId) {
+          setError('此店家尚未設定 LIFF ID')
           setIsReady(true)
           return
         }
@@ -97,7 +96,7 @@ export function LiffProvider({ children }: LiffProviderProps) {
         // - LINE 內開啟：liff.init() 自動授權，零跳轉
         // - 外部瀏覽器：自動觸發 liff.login()，只跳轉一次
         await liff.init({
-          liffId: LIFF_ID,
+          liffId: tenantLiffId,
           withLoginOnExternalBrowser: true,
         })
 

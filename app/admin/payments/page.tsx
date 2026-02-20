@@ -106,8 +106,14 @@ export default function PaymentsPage() {
     const [selectedTenant, setSelectedTenant] = useState<ExpiringTenant | null>(null)
     const [upgradeAmount, setUpgradeAmount] = useState('')
     const [upgradeType, setUpgradeType] = useState<'monthly' | 'yearly'>('monthly')
+    const [upgradeTargetPlan, setUpgradeTargetPlan] = useState<'basic' | 'pro'>('basic')
     const [upgradeNote, setUpgradeNote] = useState('')
     const [isUpgrading, setIsUpgrading] = useState(false)
+
+    const PLAN_PRICES = {
+        basic: { monthly: 199, yearly: 1990 },
+        pro: { monthly: 699, yearly: 6990 },
+    }
 
     useEffect(() => {
         const fetchData = async () => {
@@ -136,7 +142,6 @@ export default function PaymentsPage() {
             const { data: tenantsData, error: tenantsError } = await supabase
                 .from('tenants')
                 .select('id, name, slug, plan, plan_expires_at, is_active, created_at, updated_at, subscription_starts_at, next_billing_date, subscription_auto_renew')
-                .eq('plan', 'pro')
                 .not('plan_expires_at', 'is', null)
                 .lte('plan_expires_at', sevenDaysLater.toISOString())
                 .order('plan_expires_at', { ascending: true })
@@ -269,11 +274,9 @@ export default function PaymentsPage() {
             return
         }
 
-        if (
-            (upgradeType === 'monthly' && amount !== 599) ||
-            (upgradeType === 'yearly' && amount !== 5990)
-        ) {
-            toast.error(`${upgradeType === 'monthly' ? '月繳' : '年繳'}金額應為 ${upgradeType === 'monthly' ? 'NT$ 599' : 'NT$ 5,990'}`)
+        const expectedAmount = PLAN_PRICES[upgradeTargetPlan][upgradeType]
+        if (amount !== expectedAmount) {
+            toast.error(`${upgradeTargetPlan === 'basic' ? 'Basic' : 'Pro'} ${upgradeType === 'monthly' ? '月繳' : '年繳'}金額應為 NT$ ${expectedAmount.toLocaleString()}`)
             return
         }
 
@@ -306,12 +309,12 @@ export default function PaymentsPage() {
 
             if (paymentError) throw paymentError
 
-            // 2. 升級租戶
+            // 2. 升級/續訂租戶方案
             const { data: upgradeData, error: upgradeError } = (await supabase.rpc(
                 'update_tenant_plan_v1',
                 {
                     p_tenant_id: selectedTenant.id,
-                    p_new_plan: 'pro',
+                    p_new_plan: upgradeTargetPlan,
                 }
             )) as {
                 data: { success: boolean; error?: string } | null
@@ -322,10 +325,11 @@ export default function PaymentsPage() {
                 throw new Error(upgradeData?.error || '升級失敗')
             }
 
-            // 3. 更新訂閱到期時間
+            // 3. 更新訂閱到期時間 + 恢復啟用狀態
             const { error: updateError } = await supabase
                 .from('tenants')
                 .update({
+                    is_active: true,
                     plan_expires_at: endsAt.toISOString(),
                     subscription_starts_at: startsAt.toISOString(),
                     next_billing_date: endsAt.toISOString(),
@@ -334,7 +338,8 @@ export default function PaymentsPage() {
 
             if (updateError) throw updateError
 
-            toast.success(`已成功升級 ${selectedTenant.name} 為 Pro`)
+            const planLabel = upgradeTargetPlan === 'pro' ? 'Pro' : 'Basic'
+            toast.success(`已成功${selectedTenant.plan === upgradeTargetPlan ? '續訂' : '升級'} ${selectedTenant.name} 為 ${planLabel}`)
             setUpgradeDialogOpen(false)
 
             // 重新載入資料
@@ -508,7 +513,7 @@ export default function PaymentsPage() {
                                     <Users className="h-5 w-5" />
                                     Basic 租戶 ({basicTenants.length})
                                 </CardTitle>
-                                <CardDescription>以下租戶使用免費版，可升級為 Pro</CardDescription>
+                                <CardDescription>以下租戶使用基本版，可建立訂閱或升級</CardDescription>
                             </div>
                         </div>
                     </CardHeader>
@@ -539,7 +544,7 @@ export default function PaymentsPage() {
                                         className="rounded-xl gradient-primary"
                                     >
                                         <ArrowUpCircle className="mr-1 h-4 w-4" />
-                                        升級 Pro
+                                        建立訂閱
                                     </Button>
                                 </div>
                             ))}
@@ -556,7 +561,7 @@ export default function PaymentsPage() {
                             <AlertCircle className="h-5 w-5" />
                             即將到期的租戶 ({expiringTenants.length})
                         </CardTitle>
-                        <CardDescription>以下租戶的 Pro 訂閱將在 7 天內到期</CardDescription>
+                        <CardDescription>以下租戶的訂閱將在 7 天內到期或已過期</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="space-y-3">
@@ -855,9 +860,9 @@ export default function PaymentsPage() {
             <Dialog open={upgradeDialogOpen} onOpenChange={setUpgradeDialogOpen}>
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
-                        <DialogTitle>手動升級 / 續訂</DialogTitle>
+                        <DialogTitle>建立訂閱 / 續訂</DialogTitle>
                         <DialogDescription>
-                            為租戶建立付款記錄並升級為 Pro 方案
+                            為租戶建立付款記錄並設定方案
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
@@ -890,55 +895,105 @@ export default function PaymentsPage() {
                             <>
 
                             <div className="space-y-2">
-                                <Label htmlFor="upgrade-type">訂閱類型</Label>
+                                <Label>目標方案</Label>
                                 <Select
-                                    value={upgradeType}
-                                    onValueChange={(value: 'monthly' | 'yearly') =>
-                                        setUpgradeType(value)
-                                    }
+                                    value={upgradeTargetPlan}
+                                    onValueChange={(value: 'basic' | 'pro') => {
+                                        setUpgradeTargetPlan(value)
+                                        // 自動更新金額
+                                        const prices = PLAN_PRICES[value]
+                                        setUpgradeAmount(prices[upgradeType].toString())
+                                    }}
                                 >
                                     <SelectTrigger className="rounded-xl">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="monthly">月繳 (NT$ 599)</SelectItem>
-                                        <SelectItem value="yearly">年繳 (NT$ 5,990)</SelectItem>
+                                        <SelectItem value="basic">Basic 基本版</SelectItem>
+                                        <SelectItem value="pro">Pro 專業版</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="upgrade-type">訂閱類型</Label>
+                                <Select
+                                    value={upgradeType}
+                                    onValueChange={(value: 'monthly' | 'yearly') => {
+                                        setUpgradeType(value)
+                                        setUpgradeAmount(PLAN_PRICES[upgradeTargetPlan][value].toString())
+                                    }}
+                                >
+                                    <SelectTrigger className="rounded-xl">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="monthly">月繳 Basic (NT$ 199) / Pro (NT$ 699)</SelectItem>
+                                        <SelectItem value="yearly">年繳 Basic (NT$ 1,990) / Pro (NT$ 6,990)</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
 
                             <div className="space-y-2">
                                 <Label htmlFor="upgrade-amount">金額</Label>
-                                <div className="flex gap-2">
+                                <div className="grid grid-cols-4 gap-2">
                                     <Button
                                         type="button"
-                                        variant={upgradeAmount === '599' ? 'default' : 'outline'}
+                                        variant={upgradeAmount === '199' ? 'default' : 'outline'}
                                         size="sm"
                                         onClick={() => {
-                                            setUpgradeAmount('599')
+                                            setUpgradeAmount('199')
                                             setUpgradeType('monthly')
+                                            setUpgradeTargetPlan('basic')
                                         }}
-                                        className="flex-1 rounded-xl"
+                                        className="rounded-xl text-xs"
                                     >
-                                        NT$ 599
+                                        $199
                                     </Button>
                                     <Button
                                         type="button"
-                                        variant={upgradeAmount === '5990' ? 'default' : 'outline'}
+                                        variant={upgradeAmount === '1990' ? 'default' : 'outline'}
                                         size="sm"
                                         onClick={() => {
-                                            setUpgradeAmount('5990')
+                                            setUpgradeAmount('1990')
                                             setUpgradeType('yearly')
+                                            setUpgradeTargetPlan('basic')
                                         }}
-                                        className="flex-1 rounded-xl"
+                                        className="rounded-xl text-xs"
                                     >
-                                        NT$ 5,990
+                                        $1,990
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant={upgradeAmount === '699' ? 'default' : 'outline'}
+                                        size="sm"
+                                        onClick={() => {
+                                            setUpgradeAmount('699')
+                                            setUpgradeType('monthly')
+                                            setUpgradeTargetPlan('pro')
+                                        }}
+                                        className="rounded-xl text-xs"
+                                    >
+                                        $699
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant={upgradeAmount === '6990' ? 'default' : 'outline'}
+                                        size="sm"
+                                        onClick={() => {
+                                            setUpgradeAmount('6990')
+                                            setUpgradeType('yearly')
+                                            setUpgradeTargetPlan('pro')
+                                        }}
+                                        className="rounded-xl text-xs"
+                                    >
+                                        $6,990
                                     </Button>
                                 </div>
                                 <Input
                                     id="upgrade-amount"
                                     type="number"
-                                    placeholder={upgradeType === 'monthly' ? '599' : '5990'}
+                                    placeholder={PLAN_PRICES[upgradeTargetPlan][upgradeType].toString()}
                                     value={upgradeAmount}
                                     onChange={(e) => setUpgradeAmount(e.target.value)}
                                     className="rounded-xl"

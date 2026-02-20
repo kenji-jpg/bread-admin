@@ -9,12 +9,21 @@ import { Copy, Check, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
-type PlanType = 'monthly' | 'yearly'
+type BillingCycle = 'monthly' | 'yearly'
+type TargetPlan = 'basic' | 'pro'
+
+const PLANS = {
+    basic: { name: 'Basic 基本版', monthly: 199, yearly: 1990, yearlySave: 398 },
+    pro: { name: 'Pro 專業版', monthly: 699, yearly: 6990, yearlySave: 1398 },
+}
 
 export default function BillingPage() {
     const { tenant } = useTenant()
     const [copied, setCopied] = useState<string | null>(null)
-    const [selectedPlan, setSelectedPlan] = useState<PlanType>('monthly')
+    const [selectedCycle, setSelectedCycle] = useState<BillingCycle>('monthly')
+    const [selectedTarget, setSelectedTarget] = useState<TargetPlan>(
+        tenant?.plan === 'pro' ? 'pro' : 'basic'
+    )
 
     const copyToClipboard = (text: string, label: string) => {
         navigator.clipboard.writeText(text)
@@ -23,18 +32,26 @@ export default function BillingPage() {
         setTimeout(() => setCopied(null), 2000)
     }
 
+    // 到期判斷（不限方案）
     const isExpiringSoon =
-        tenant?.plan === 'pro' &&
         tenant?.plan_expires_at &&
-        new Date(tenant.plan_expires_at).getTime() - Date.now() < 7 * 24 * 60 * 60 * 1000
+        new Date(tenant.plan_expires_at).getTime() - Date.now() < 7 * 24 * 60 * 60 * 1000 &&
+        new Date(tenant.plan_expires_at) > new Date()
 
     const isExpired =
-        tenant?.plan === 'pro' &&
         tenant?.plan_expires_at &&
         new Date(tenant.plan_expires_at) < new Date()
 
-    const currentAmount = selectedPlan === 'monthly' ? 599 : 5990
-    const shouldShowUpgrade = tenant?.plan === 'basic' || isExpired || isExpiringSoon
+    const daysLeft = tenant?.plan_expires_at
+        ? Math.ceil((new Date(tenant.plan_expires_at).getTime() - Date.now()) / 86400000)
+        : null
+
+    const targetPlan = PLANS[selectedTarget]
+    const currentAmount = selectedCycle === 'monthly' ? targetPlan.monthly : targetPlan.yearly
+    const shouldShowUpgrade = isExpired || isExpiringSoon || tenant?.plan === 'basic'
+
+    // 判斷是否為免費（plan_expires_at = NULL 的現有租戶）
+    const isFreeGrandfathered = !tenant?.plan_expires_at
 
     return (
         <div className="space-y-6">
@@ -46,12 +63,17 @@ export default function BillingPage() {
                 <CardContent>
                     <div className="flex items-center gap-4">
                         <Badge variant={tenant?.plan === 'pro' ? 'default' : 'secondary'} className="text-sm">
-                            {tenant?.plan === 'pro' ? 'Pro 專業版' : 'Basic 免費版'}
+                            {PLANS[tenant?.plan as TargetPlan]?.name || 'Basic 基本版'}
                         </Badge>
                         {tenant?.plan_expires_at && (
                             <span className="text-sm text-muted-foreground">
                                 到期日：{new Date(tenant.plan_expires_at).toLocaleDateString('zh-TW')}
                             </span>
+                        )}
+                        {isFreeGrandfathered && (
+                            <Badge variant="outline" className="text-xs">
+                                免費使用中
+                            </Badge>
                         )}
                     </div>
 
@@ -60,24 +82,19 @@ export default function BillingPage() {
                         <div className="mt-4 p-3 bg-destructive/10 border border-destructive/20 rounded-lg flex items-start gap-2">
                             <AlertCircle className="h-5 w-5 text-destructive mt-0.5" />
                             <div className="space-y-1">
-                                <p className="text-sm font-semibold text-destructive">訂閱已過期</p>
-                                <p className="text-sm text-muted-foreground">請盡快續訂以繼續使用 Pro 功能</p>
+                                <p className="text-sm font-semibold text-destructive">方案已過期</p>
+                                <p className="text-sm text-muted-foreground">請盡快續費以繼續使用服務</p>
                             </div>
                         </div>
                     )}
 
                     {isExpiringSoon && !isExpired && (
-                        <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
-                            <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
+                        <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-start gap-2">
+                            <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5" />
                             <div className="space-y-1">
-                                <p className="text-sm font-semibold text-amber-900">訂閱即將到期</p>
-                                <p className="text-sm text-amber-800">
-                                    還剩{' '}
-                                    {Math.ceil(
-                                        (new Date(tenant.plan_expires_at!).getTime() - Date.now()) /
-                                            (1000 * 60 * 60 * 24)
-                                    )}{' '}
-                                    天，請及時續訂
+                                <p className="text-sm font-semibold text-amber-600 dark:text-amber-400">方案即將到期</p>
+                                <p className="text-sm text-muted-foreground">
+                                    還剩 {daysLeft} 天，請及時續費
                                 </p>
                             </div>
                         </div>
@@ -85,37 +102,85 @@ export default function BillingPage() {
                 </CardContent>
             </Card>
 
-            {/* 升級 Pro / 續訂 */}
+            {/* 續訂 / 升級 */}
             {shouldShowUpgrade && (
                 <Card>
                     <CardHeader>
                         <CardTitle>
-                            {tenant?.plan === 'basic' ? '升級 Pro 專業版' : '續訂 Pro 專業版'}
+                            {tenant?.plan === 'pro' ? '續訂方案' : '續訂 / 升級方案'}
                         </CardTitle>
                         <CardDescription>
                             透過銀行轉帳付款，轉帳後約 5-10 分鐘自動開通
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
-                        {/* 方案價格 - 可選擇 */}
+                        {/* 目標方案選擇（Basic 用戶可選 Basic 或 Pro） */}
+                        {tenant?.plan !== 'pro' && (
+                            <div className="space-y-3">
+                                <h3 className="font-semibold text-sm text-muted-foreground">選擇方案</h3>
+                                <div className="grid gap-3 md:grid-cols-2">
+                                    <button
+                                        onClick={() => setSelectedTarget('basic')}
+                                        className={cn(
+                                            'border-2 rounded-lg p-4 text-left transition-all relative',
+                                            selectedTarget === 'basic'
+                                                ? 'border-primary bg-primary/5'
+                                                : 'border-border hover:border-primary/50'
+                                        )}
+                                    >
+                                        {selectedTarget === 'basic' && (
+                                            <CheckCircle2 className="absolute top-3 right-3 h-5 w-5 text-primary" />
+                                        )}
+                                        <p className="font-semibold">Basic 基本版</p>
+                                        <p className="text-sm text-muted-foreground mt-1">
+                                            商品、訂單、結帳、會員管理
+                                        </p>
+                                        <p className="text-lg font-bold mt-2">NT$ 199 <span className="text-sm font-normal text-muted-foreground">/ 月</span></p>
+                                    </button>
+                                    <button
+                                        onClick={() => setSelectedTarget('pro')}
+                                        className={cn(
+                                            'border-2 rounded-lg p-4 text-left transition-all relative',
+                                            selectedTarget === 'pro'
+                                                ? 'border-primary bg-primary/5'
+                                                : 'border-border hover:border-primary/50'
+                                        )}
+                                    >
+                                        <Badge className="absolute -top-2 -right-2" variant="default">
+                                            推薦
+                                        </Badge>
+                                        {selectedTarget === 'pro' && (
+                                            <CheckCircle2 className="absolute top-3 right-3 h-5 w-5 text-primary" />
+                                        )}
+                                        <p className="font-semibold">Pro 專業版</p>
+                                        <p className="text-sm text-muted-foreground mt-1">
+                                            LIFF 商城、賣貨便自動化、Chrome 插件
+                                        </p>
+                                        <p className="text-lg font-bold mt-2">NT$ 699 <span className="text-sm font-normal text-muted-foreground">/ 月</span></p>
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 月繳 / 年繳選擇 */}
                         <div className="space-y-3">
-                            <h3 className="font-semibold text-sm text-muted-foreground">選擇方案</h3>
+                            <h3 className="font-semibold text-sm text-muted-foreground">繳費週期</h3>
                             <div className="grid gap-3 md:grid-cols-2">
                                 {/* 月繳 */}
                                 <button
-                                    onClick={() => setSelectedPlan('monthly')}
+                                    onClick={() => setSelectedCycle('monthly')}
                                     className={cn(
                                         'border-2 rounded-lg p-4 space-y-2 text-left transition-all',
-                                        selectedPlan === 'monthly'
+                                        selectedCycle === 'monthly'
                                             ? 'border-primary bg-primary/5'
                                             : 'border-border hover:border-primary/50'
                                     )}
                                 >
-                                    {selectedPlan === 'monthly' && (
+                                    {selectedCycle === 'monthly' && (
                                         <CheckCircle2 className="absolute top-2 right-2 h-5 w-5 text-primary" />
                                     )}
                                     <div className="flex items-baseline gap-2">
-                                        <span className="text-3xl font-bold">NT$ 599</span>
+                                        <span className="text-3xl font-bold">NT$ {targetPlan.monthly.toLocaleString()}</span>
                                         <span className="text-sm text-muted-foreground">/ 月</span>
                                     </div>
                                     <p className="text-xs text-muted-foreground">每月訂閱，隨時可停</p>
@@ -123,22 +188,22 @@ export default function BillingPage() {
 
                                 {/* 年繳 */}
                                 <button
-                                    onClick={() => setSelectedPlan('yearly')}
+                                    onClick={() => setSelectedCycle('yearly')}
                                     className={cn(
                                         'border-2 rounded-lg p-4 space-y-2 text-left transition-all relative',
-                                        selectedPlan === 'yearly'
+                                        selectedCycle === 'yearly'
                                             ? 'border-primary bg-primary/5'
                                             : 'border-border hover:border-primary/50'
                                     )}
                                 >
                                     <Badge className="absolute -top-2 -right-2" variant="secondary">
-                                        省 NT$ 1,198
+                                        省 NT$ {targetPlan.yearlySave.toLocaleString()}
                                     </Badge>
-                                    {selectedPlan === 'yearly' && (
+                                    {selectedCycle === 'yearly' && (
                                         <CheckCircle2 className="absolute top-2 left-2 h-5 w-5 text-primary" />
                                     )}
                                     <div className="flex items-baseline gap-2">
-                                        <span className="text-3xl font-bold">NT$ 5,990</span>
+                                        <span className="text-3xl font-bold">NT$ {targetPlan.yearly.toLocaleString()}</span>
                                         <span className="text-sm text-muted-foreground">/ 年</span>
                                     </div>
                                     <p className="text-xs text-muted-foreground">年繳優惠，省兩個月</p>
@@ -154,8 +219,8 @@ export default function BillingPage() {
                                     <span className="text-4xl font-bold gradient-text">
                                         NT$ {currentAmount.toLocaleString()}
                                     </span>
-                                    <Badge variant={selectedPlan === 'yearly' ? 'default' : 'secondary'}>
-                                        {selectedPlan === 'monthly' ? '月繳' : '年繳'}
+                                    <Badge variant={selectedCycle === 'yearly' ? 'default' : 'secondary'}>
+                                        {selectedCycle === 'monthly' ? '月繳' : '年繳'} {targetPlan.name}
                                     </Badge>
                                 </div>
                             </div>
@@ -259,7 +324,7 @@ export default function BillingPage() {
                         {/* 一鍵複製全部 */}
                         <Button
                             onClick={() => {
-                                const info = `銀行：連線商業銀行（LINE Bank）\n代碼：824\n帳號：111003274710\n戶名：張高源\n備註：${tenant?.slug}\n金額：NT$ ${currentAmount.toLocaleString()}`
+                                const info = `銀行：連線商業銀行（LINE Bank）\n代碼：824\n帳號：111003274710\n戶名：張高源\n備註：${tenant?.slug}\n方案：${targetPlan.name}（${selectedCycle === 'monthly' ? '月繳' : '年繳'}）\n金額：NT$ ${currentAmount.toLocaleString()}`
                                 navigator.clipboard.writeText(info)
                                 toast.success('已複製完整轉帳資訊到剪貼簿')
                             }}
@@ -299,8 +364,8 @@ export default function BillingPage() {
                 </Card>
             )}
 
-            {/* Pro 功能清單 */}
-            {shouldShowUpgrade && (
+            {/* Pro 功能清單（Basic 用戶升級誘因） */}
+            {(shouldShowUpgrade || tenant?.plan === 'basic') && (
                 <Card>
                     <CardHeader>
                         <CardTitle>Pro 專業版功能</CardTitle>

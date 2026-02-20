@@ -17,6 +17,7 @@ import {
     TrendingUp,
     Sparkles,
     ArrowRight,
+    AlertTriangle,
 } from 'lucide-react'
 
 export default function TenantDashboardPage() {
@@ -85,7 +86,7 @@ export default function TenantDashboardPage() {
                                     <div className="space-y-1">
                                         <h3 className="text-lg font-semibold">升級至 Pro 專業版</h3>
                                         <p className="text-sm text-muted-foreground">
-                                            開啟 LIFF 商城、賣貨便自動化等進階功能，月付只要 NT$ 599
+                                            開啟 LIFF 商城、賣貨便自動化等進階功能，月付只要 NT$ 699
                                         </p>
                                     </div>
                                 </div>
@@ -100,6 +101,79 @@ export default function TenantDashboardPage() {
                     </Card>
                 </motion.div>
             )}
+
+            {/* 到期提醒 Banner */}
+            {(() => {
+                const daysLeft = tenant.plan_expires_at
+                    ? Math.ceil((new Date(tenant.plan_expires_at).getTime() - Date.now()) / 86400000)
+                    : null
+                const isExpiringSoon = daysLeft !== null && daysLeft > 0 && daysLeft <= 7
+                const isExpired = daysLeft !== null && daysLeft <= 0
+
+                if (isExpired) {
+                    return (
+                        <motion.div variants={itemVariants}>
+                            <Card className="border-destructive/50 bg-gradient-to-r from-destructive/10 via-destructive/5 to-destructive/10">
+                                <CardContent className="p-6">
+                                    <div className="flex items-center justify-between gap-4">
+                                        <div className="flex items-start gap-4">
+                                            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-destructive/20">
+                                                <AlertTriangle className="h-6 w-6 text-destructive" />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <h3 className="text-lg font-semibold text-destructive">方案已過期</h3>
+                                                <p className="text-sm text-muted-foreground">
+                                                    您的方案已過期，服務即將暫停。請儘速續費以繼續使用。
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <Link href={`/admin/t/${tenant.slug}/settings/billing`}>
+                                            <Button variant="destructive" className="rounded-xl whitespace-nowrap">
+                                                立即續費
+                                                <ArrowRight className="ml-2 h-4 w-4" />
+                                            </Button>
+                                        </Link>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </motion.div>
+                    )
+                }
+
+                if (isExpiringSoon) {
+                    return (
+                        <motion.div variants={itemVariants}>
+                            <Card className="border-amber-500/50 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-amber-500/10">
+                                <CardContent className="p-6">
+                                    <div className="flex items-center justify-between gap-4">
+                                        <div className="flex items-start gap-4">
+                                            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-500/20">
+                                                <Clock className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <h3 className="text-lg font-semibold text-amber-600 dark:text-amber-400">
+                                                    方案即將到期
+                                                </h3>
+                                                <p className="text-sm text-muted-foreground">
+                                                    您的方案將在 {daysLeft} 天後到期（{new Date(tenant.plan_expires_at!).toLocaleDateString('zh-TW')}），請及時續費。
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <Link href={`/admin/t/${tenant.slug}/settings/billing`}>
+                                            <Button className="rounded-xl whitespace-nowrap bg-amber-500 hover:bg-amber-600 text-white">
+                                                前往續費
+                                                <ArrowRight className="ml-2 h-4 w-4" />
+                                            </Button>
+                                        </Link>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </motion.div>
+                    )
+                }
+
+                return null
+            })()}
 
             {/* Stats Grid */}
             <motion.div variants={itemVariants} className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

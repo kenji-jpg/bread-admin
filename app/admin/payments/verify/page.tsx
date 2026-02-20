@@ -310,9 +310,9 @@ LINE Bank 連線商業銀行`}
                                         <p className="text-sm font-medium">常見問題：</p>
                                         <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
                                             <li>備註中的 slug 不存在或拼寫錯誤</li>
-                                            <li>金額不符（月繳應為 599，年繳應為 5990）</li>
+                                            <li>金額不符（Basic 月繳 199/年繳 1990，Pro 月繳 699/年繳 6990）</li>
                                             <li>通知格式不正確（請完整複製 LINE Bank 通知）</li>
-                                            <li>租戶已經是 Pro 方案（需使用手動續訂）</li>
+                                            <li>如需手動續訂或升級，請回付款管理頁使用「建立訂閱」</li>
                                         </ul>
                                     </div>
 
