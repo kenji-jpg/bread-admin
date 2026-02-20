@@ -2,7 +2,7 @@
 
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { directRpc } from '@/lib/supabase/direct-rpc'
 import { LiffProvider } from '@/hooks/use-liff'
 
 export default function ShopLayout({
@@ -27,17 +27,16 @@ export default function ShopLayout({
 
     const fetchLiffId = async () => {
       try {
-        const supabase = createClient()
-        const { data } = await supabase
-          .from('tenants')
-          .select('liff_id')
-          .eq('slug', slug)
-          .single()
-        if (data?.liff_id) {
-          setTenantLiffId(data.liff_id)
+        // 用 SECURITY DEFINER RPC 繞過 RLS（LIFF 端是 anon 角色）
+        const { data } = await directRpc<string | null>(
+          'get_tenant_liff_id',
+          { p_slug: slug }
+        )
+        if (data) {
+          setTenantLiffId(data)
         }
       } catch {
-        // 查詢失敗，用預設（LiffProvider 會顯示未設定錯誤）
+        // 查詢失敗，LiffProvider 會顯示未設定錯誤
       }
       setReady(true)
     }
