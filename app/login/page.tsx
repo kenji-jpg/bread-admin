@@ -106,7 +106,7 @@ export default function LoginPage() {
 
                         <div className="space-y-1">
                             <CardTitle className="text-2xl font-bold tracking-tight">
-                                <span className="gradient-text">PlusHub 接單系統</span>
+                                <span className="gradient-text">+PlusHub 接單系統</span>
                             </CardTitle>
                             <CardDescription className="text-muted-foreground">
                                 登入您的管理後台
@@ -206,7 +206,7 @@ export default function LoginPage() {
                         <span>·</span>
                         <a href="/privacy" target="_blank" className="hover:text-foreground transition-colors">隱私政策</a>
                     </div>
-                    <p>© 2026 PlusHub 接單系統</p>
+                    <p>© 2026 +PlusHub 接單系統</p>
                 </motion.div>
             </motion.div>
         </div>
