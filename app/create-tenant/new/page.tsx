@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
@@ -11,6 +11,13 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+} from '@/components/ui/dialog'
+import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
@@ -19,7 +26,8 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Loader2, Store, Send, ArrowLeft, LogOut, Clock, CheckCircle, XCircle, RefreshCw } from 'lucide-react'
+import { Loader2, Store, Send, ArrowLeft, LogOut, Clock, CheckCircle, XCircle, RefreshCw, FileText, Check } from 'lucide-react'
+import { LegalContentRenderer, type ContentSection } from '@/components/legal-content-renderer'
 import type {
     GetMyCreateRequestResponse,
     RequestCreateTenantResponse,
@@ -44,6 +52,15 @@ export default function CreateNewTenantPage() {
     const [slugError, setSlugError] = useState<string | null>(null)
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [agreedToTerms, setAgreedToTerms] = useState(false)
+
+    // 條款閱讀 Dialog 狀態
+    const [termsRead, setTermsRead] = useState(false)
+    const [privacyRead, setPrivacyRead] = useState(false)
+    const [legalDialog, setLegalDialog] = useState<'terms' | 'privacy' | null>(null)
+    const [legalContent, setLegalContent] = useState<ContentSection[]>([])
+    const [legalLoading, setLegalLoading] = useState(false)
+    const [scrolledToBottom, setScrolledToBottom] = useState(false)
+    const scrollViewportRef = useRef<HTMLDivElement>(null)
 
     const router = useRouter()
     const supabase = createClient()
@@ -155,6 +172,43 @@ export default function CreateNewTenantPage() {
         }
         setSlugError(null)
         return true
+    }
+
+    // 開啟條款 Dialog
+    const openLegalDialog = async (type: 'terms' | 'privacy') => {
+        setLegalDialog(type)
+        setScrolledToBottom(false)
+        setLegalLoading(true)
+        setLegalContent([])
+
+        try {
+            const { data } = await supabase.rpc('get_platform_content_v1', {
+                p_content_type: type,
+            }) as { data: { success: boolean; content?: ContentSection[] } | null; error: Error | null }
+
+            if (data?.success && data.content) {
+                setLegalContent(data.content)
+            }
+        } catch {
+            // 載入失敗
+        }
+        setLegalLoading(false)
+    }
+
+    // 捲動到底偵測
+    const handleLegalScroll = () => {
+        const el = scrollViewportRef.current
+        if (!el) return
+        if (el.scrollTop + el.clientHeight >= el.scrollHeight - 30) {
+            setScrolledToBottom(true)
+        }
+    }
+
+    // 確認已讀
+    const confirmRead = () => {
+        if (legalDialog === 'terms') setTermsRead(true)
+        if (legalDialog === 'privacy') setPrivacyRead(true)
+        setLegalDialog(null)
     }
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -521,20 +575,45 @@ export default function CreateNewTenantPage() {
                             )}
 
                             {/* 同意條款 */}
-                            <label className="flex items-start gap-2 cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={agreedToTerms}
-                                    onChange={(e) => setAgreedToTerms(e.target.checked)}
-                                    className="mt-1 h-4 w-4 rounded border-border accent-primary"
-                                />
-                                <span className="text-sm text-muted-foreground leading-relaxed">
-                                    我已閱讀並同意{' '}
-                                    <a href="/terms" target="_blank" className="text-primary hover:underline">服務條款</a>
-                                    {' '}及{' '}
-                                    <a href="/privacy" target="_blank" className="text-primary hover:underline">隱私政策</a>
-                                </span>
-                            </label>
+                            <div className="space-y-3">
+                                <p className="text-sm font-medium">請閱讀以下條款</p>
+                                <div className="flex gap-2">
+                                    <Button
+                                        type="button"
+                                        variant={termsRead ? 'outline' : 'secondary'}
+                                        size="sm"
+                                        onClick={() => openLegalDialog('terms')}
+                                        className={`flex-1 rounded-xl ${termsRead ? 'border-green-500/50 text-green-600 dark:text-green-400' : ''}`}
+                                    >
+                                        <FileText className="mr-1.5 h-3.5 w-3.5" />
+                                        服務條款
+                                        {termsRead && <Check className="ml-1.5 h-3.5 w-3.5" />}
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant={privacyRead ? 'outline' : 'secondary'}
+                                        size="sm"
+                                        onClick={() => openLegalDialog('privacy')}
+                                        className={`flex-1 rounded-xl ${privacyRead ? 'border-green-500/50 text-green-600 dark:text-green-400' : ''}`}
+                                    >
+                                        <FileText className="mr-1.5 h-3.5 w-3.5" />
+                                        隱私政策
+                                        {privacyRead && <Check className="ml-1.5 h-3.5 w-3.5" />}
+                                    </Button>
+                                </div>
+                                <label className={`flex items-start gap-2 ${termsRead && privacyRead ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
+                                    <input
+                                        type="checkbox"
+                                        checked={agreedToTerms}
+                                        onChange={(e) => setAgreedToTerms(e.target.checked)}
+                                        disabled={!termsRead || !privacyRead}
+                                        className="mt-1 h-4 w-4 rounded border-border accent-primary"
+                                    />
+                                    <span className="text-sm text-muted-foreground leading-relaxed">
+                                        我已閱讀並同意服務條款及隱私政策
+                                    </span>
+                                </label>
+                            </div>
 
                             <Button
                                 type="submit"
@@ -555,6 +634,46 @@ export default function CreateNewTenantPage() {
                             </Button>
 
                         </form>
+
+                        {/* 條款閱讀 Dialog */}
+                        <Dialog open={legalDialog !== null} onOpenChange={(open) => { if (!open) setLegalDialog(null) }}>
+                            <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col">
+                                <DialogHeader>
+                                    <DialogTitle>
+                                        {legalDialog === 'terms' ? '服務條款' : '隱私政策'}
+                                    </DialogTitle>
+                                </DialogHeader>
+                                {legalLoading ? (
+                                    <div className="flex items-center justify-center py-20">
+                                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                                    </div>
+                                ) : (
+                                    <div
+                                        ref={scrollViewportRef}
+                                        onScroll={handleLegalScroll}
+                                        className="h-[60vh] overflow-y-auto border rounded-lg p-4"
+                                    >
+                                        <LegalContentRenderer sections={legalContent} />
+                                    </div>
+                                )}
+                                <DialogFooter>
+                                    <Button
+                                        onClick={confirmRead}
+                                        disabled={!scrolledToBottom && !legalLoading && legalContent.length > 0}
+                                        className="w-full rounded-xl"
+                                    >
+                                        {scrolledToBottom ? (
+                                            <>
+                                                <Check className="mr-2 h-4 w-4" />
+                                                我已閱讀完畢
+                                            </>
+                                        ) : (
+                                            '請捲動至底部以繼續'
+                                        )}
+                                    </Button>
+                                </DialogFooter>
+                            </DialogContent>
+                        </Dialog>
                     </CardContent>
                 </Card>
 
