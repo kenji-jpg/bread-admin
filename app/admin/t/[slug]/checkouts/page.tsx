@@ -45,6 +45,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { toast } from 'sonner'
 import {
     Receipt,
@@ -904,7 +905,8 @@ export default function CheckoutsPage() {
                                                     try {
                                                         const items: CheckoutItemDetail[] = JSON.parse(item.checkout_items)
                                                         if (items.length === 0) return <span className="text-muted-foreground">-</span>
-                                                        return (
+
+                                                        const preview = (
                                                             <div className="text-xs space-y-0.5">
                                                                 {items.slice(0, 3).map((detail, idx) => (
                                                                     <div key={idx} className="truncate">
@@ -917,6 +919,44 @@ export default function CheckoutsPage() {
                                                                     </div>
                                                                 )}
                                                             </div>
+                                                        )
+
+                                                        // 超過 2 項就可點開查看完整明細
+                                                        if (items.length <= 2) return preview
+
+                                                        return (
+                                                            <Popover>
+                                                                <PopoverTrigger asChild>
+                                                                    <button className="text-left cursor-pointer hover:bg-muted/50 rounded-md px-1 py-0.5 -mx-1 transition-colors">
+                                                                        {preview}
+                                                                    </button>
+                                                                </PopoverTrigger>
+                                                                <PopoverContent align="start" className="w-80 p-0">
+                                                                    <div className="px-4 py-3 border-b">
+                                                                        <p className="font-medium text-sm">商品明細（共 {items.length} 項）</p>
+                                                                    </div>
+                                                                    <div className="max-h-64 overflow-y-auto">
+                                                                        {items.map((detail, idx) => (
+                                                                            <div
+                                                                                key={idx}
+                                                                                className="flex items-center justify-between px-4 py-2 text-sm border-b last:border-b-0"
+                                                                            >
+                                                                                <span className="truncate mr-3 flex-1">{detail.name}</span>
+                                                                                <div className="flex items-center gap-3 shrink-0 text-muted-foreground">
+                                                                                    <span>x{detail.qty}</span>
+                                                                                    <span className="w-16 text-right font-medium text-foreground">
+                                                                                        ${detail.subtotal.toLocaleString()}
+                                                                                    </span>
+                                                                                </div>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                    <div className="flex items-center justify-between px-4 py-2.5 bg-muted/50 border-t font-medium text-sm">
+                                                                        <span>合計</span>
+                                                                        <span>${items.reduce((sum, d) => sum + d.subtotal, 0).toLocaleString()}</span>
+                                                                    </div>
+                                                                </PopoverContent>
+                                                            </Popover>
                                                         )
                                                     } catch {
                                                         return <span className="text-muted-foreground">-</span>
