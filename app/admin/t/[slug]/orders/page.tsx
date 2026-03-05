@@ -434,54 +434,63 @@ export default function OrdersPage() {
         }
 
         setIsSubmitting(true)
-        let successCount = 0
 
-        // 為每個客戶建立結帳單
-        for (const [, memberOrders] of ordersByMember) {
-            // 取得客戶的 LINE user ID
-            const firstOrder = memberOrders[0]
-            const lineUserId = firstOrder.member?.line_user_id
-
-            if (!lineUserId) {
-                console.error('找不到客戶的 LINE user ID')
-                continue
-            }
-
-            // 使用 RPC 建立結帳單（包含結帳模式）
-            const { data: checkoutData, error: checkoutError } = await supabase.rpc('create_checkout_v2', {
-                p_tenant_id: tenant!.id,
-                p_line_user_id: lineUserId,
-                p_receiver_name: firstOrder.customer_name || firstOrder.member?.display_name || null,
-                p_receiver_phone: null,
-                p_receiver_store_id: null,
-                p_shipping_method: checkoutShippingMethod,
-            })
-
-            if (checkoutError || !checkoutData?.success) {
-                console.error('建立結帳單失敗：', checkoutError || checkoutData?.error)
-                continue
-            }
-
-            const checkoutId = checkoutData.checkout_id
-
-            // 使用 RPC 關聯訂單項目到結帳單
+        // 單一客戶結帳處理（含完整 try-catch）
+        const processMember = async (memberOrders: OrderWithDetails[]): Promise<boolean> => {
             try {
+                const firstOrder = memberOrders[0]
+                const lineUserId = firstOrder.member?.line_user_id
+
+                if (!lineUserId) {
+                    console.error('找不到客戶的 LINE user ID')
+                    return false
+                }
+
+                // Step 1: 建立結帳單
+                const { data: checkoutData, error: checkoutError } = await supabase.rpc('create_checkout_v2', {
+                    p_tenant_id: tenant!.id,
+                    p_line_user_id: lineUserId,
+                    p_receiver_name: firstOrder.customer_name || firstOrder.member?.display_name || null,
+                    p_receiver_phone: null,
+                    p_receiver_store_id: null,
+                    p_shipping_method: checkoutShippingMethod,
+                })
+
+                if (checkoutError || !checkoutData?.success) {
+                    console.error('建立結帳單失敗：', checkoutError || checkoutData?.error)
+                    return false
+                }
+
+                // Step 2: 關聯訂單項目到結帳單
                 const linkResult = await linkOrderItemsToCheckout(
                     supabase,
                     tenant!.id,
-                    checkoutId,
+                    checkoutData.checkout_id,
                     memberOrders.map((o) => o.id)
                 )
 
-                if (linkResult.success) {
-                    successCount++
-                } else {
+                if (!linkResult.success) {
                     console.error('關聯訂單失敗：', linkResult.error)
+                    return false
                 }
-            } catch (linkError) {
-                console.error('關聯訂單失敗：', linkError)
+
+                return true
+            } catch (err) {
+                console.error('處理客戶結帳失敗：', err)
+                return false
             }
         }
+
+        // 使用 Promise.allSettled 並行處理所有客戶，避免逐一 await 導致 auth token 過期
+        const memberGroups = Array.from(ordersByMember.values())
+        const results = await Promise.allSettled(
+            memberGroups.map((memberOrders) => processMember(memberOrders))
+        )
+
+        const successCount = results.filter(
+            (r) => r.status === 'fulfilled' && r.value === true
+        ).length
+        const failCount = memberGroups.length - successCount
 
         // 刷新資料
         fetchOrders()
@@ -495,9 +504,15 @@ export default function OrdersPage() {
             delivery: '🚚 宅配',
             pickup: '🏠 自取',
         }
-        toast.success(`已為 ${successCount} 位客戶建立結帳單`, {
-            description: `結帳模式：${methodLabels[checkoutShippingMethod]}`,
-        })
+        if (successCount > 0) {
+            toast.success(`已為 ${successCount} 位客戶建立結帳單`, {
+                description: failCount > 0
+                    ? `${failCount} 筆失敗，結帳模式：${methodLabels[checkoutShippingMethod]}`
+                    : `結帳模式：${methodLabels[checkoutShippingMethod]}`,
+            })
+        } else {
+            toast.error('結帳處理失敗，請稍後重試')
+        }
     }
 
     // 計算選中訂單的統計資訊
