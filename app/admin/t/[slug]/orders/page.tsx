@@ -101,6 +101,9 @@ export default function OrdersPage() {
     const [deleteOrder, setDeleteOrder] = useState<OrderWithDetails | null>(null)
     const [isSubmitting, setIsSubmitting] = useState(false)
 
+    // 已結帳訂單檢視 Dialog
+    const [viewingOrder, setViewingOrder] = useState<OrderWithDetails | null>(null)
+
     // 批量結帳 Dialog 狀態
     const [batchCheckoutConfirm, setBatchCheckoutConfirm] = useState(false)
     const [checkoutShippingMethod, setCheckoutShippingMethod] = useState<'myship' | 'delivery' | 'pickup'>('myship')
@@ -724,10 +727,13 @@ export default function OrdersPage() {
                                             initial={{ opacity: 0, y: 10 }}
                                             animate={{ opacity: 1, y: 0 }}
                                             transition={{ delay: index * 0.02 }}
-                                            className={`group hover:bg-muted/50 transition-colors ${!order.checkout_id ? 'cursor-pointer' : ''}`}
+                                            className="group hover:bg-muted/50 transition-colors cursor-pointer"
                                             onClick={() => {
-                                                // 只有未結帳的訂單可以編輯
-                                                if (!order.checkout_id) {
+                                                if (order.checkout_id) {
+                                                    // 已結帳 → 唯讀檢視
+                                                    setViewingOrder(order)
+                                                } else {
+                                                    // 未結帳 → 編輯
                                                     openEditDialog(order)
                                                 }
                                             }}
@@ -986,6 +992,76 @@ export default function OrdersPage() {
                             </Button>
                         </div>
                     </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* View Order Detail Dialog (已結帳訂單唯讀檢視) */}
+            <Dialog open={!!viewingOrder} onOpenChange={() => setViewingOrder(null)}>
+                <DialogContent className="glass-strong sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>訂單明細</DialogTitle>
+                        <DialogDescription>
+                            {viewingOrder?.customer_name || viewingOrder?.member?.display_name || '匿名'} 的訂單
+                        </DialogDescription>
+                    </DialogHeader>
+                    {viewingOrder && (
+                        <div className="space-y-4 py-2">
+                            {/* 商品資訊 */}
+                            <div className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm text-muted-foreground">商品</span>
+                                    <span className="font-medium">{viewingOrder.item_name || viewingOrder.product?.name || '-'}</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm text-muted-foreground">SKU</span>
+                                    <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{viewingOrder.sku}</code>
+                                </div>
+                                <Separator />
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm text-muted-foreground">數量</span>
+                                    <span>{viewingOrder.quantity}</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm text-muted-foreground">單價</span>
+                                    <span>${viewingOrder.unit_price.toLocaleString()}</span>
+                                </div>
+                            </div>
+
+                            {/* 小計 */}
+                            <div className="flex items-center justify-between py-2.5 px-3 bg-muted/50 rounded-xl">
+                                <span className="text-sm text-muted-foreground">小計</span>
+                                <span className="font-bold text-lg">
+                                    ${(viewingOrder.quantity * viewingOrder.unit_price).toLocaleString()}
+                                </span>
+                            </div>
+
+                            {/* 備註 */}
+                            {viewingOrder.note && (
+                                <div className="space-y-1.5">
+                                    <span className="text-sm text-muted-foreground">備註</span>
+                                    <p className="text-sm bg-muted/50 rounded-xl px-3 py-2">{viewingOrder.note}</p>
+                                </div>
+                            )}
+
+                            {/* 狀態與時間 */}
+                            <Separator />
+                            <div className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm text-muted-foreground">狀態</span>
+                                    {getStatusBadge(viewingOrder)}
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm text-muted-foreground">下單時間</span>
+                                    <span className="text-sm">{new Date(viewingOrder.created_at).toLocaleString('zh-TW')}</span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setViewingOrder(null)} className="rounded-xl">
+                            關閉
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
 
