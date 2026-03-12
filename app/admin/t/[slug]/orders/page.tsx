@@ -73,6 +73,14 @@ import {
 type OrderWithDetails = OrderItem & {
     member?: Member
     product?: Product
+    auction_order?: { product_name: string | null }[]
+}
+
+// 取得商品顯示名稱（優先順序：product.name → auction_order.product_name → item_name）
+function getProductDisplayName(order: OrderWithDetails): string {
+    if (order.product?.name) return order.product.name
+    if (order.auction_order?.[0]?.product_name) return order.auction_order[0].product_name
+    return order.item_name || '-'
 }
 
 export default function OrdersPage() {
@@ -114,13 +122,14 @@ export default function OrdersPage() {
         if (!tenant) return
         setIsLoading(true)
 
-        // 載入所有訂單資料（前端分頁）
+        // 載入所有訂單資料（前端分頁），含 auction_orders 的 product_name
         const { data } = await supabase
             .from('order_items')
             .select(`
                 *,
                 member:members(*),
-                product:products(*)
+                product:products(*),
+                auction_order:auction_orders!auction_orders_order_item_id_fkey(product_name)
             `)
             .eq('tenant_id', tenant.id)
             .order('created_at', { ascending: false })
@@ -167,8 +176,10 @@ export default function OrdersPage() {
                 return false
             }
 
+            const productName = getProductDisplayName(order)
             const searchMatch =
                 searchQuery === '' ||
+                productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 order.item_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 order.customer_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 order.sku?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -329,7 +340,7 @@ export default function OrdersPage() {
         const rows = filteredOrders.map((order) => [
             order.id,
             order.customer_name || '',
-            order.item_name || '',
+            getProductDisplayName(order),
             order.sku,
             order.quantity,
             order.unit_price,
@@ -755,7 +766,7 @@ export default function OrdersPage() {
                                                     )}
                                                 </div>
                                             </TableCell>
-                                            <TableCell>{order.item_name || order.product?.name || '-'}</TableCell>
+                                            <TableCell>{getProductDisplayName(order)}</TableCell>
                                             <TableCell>
                                                 <code className="text-xs bg-muted px-1.5 py-0.5 rounded">
                                                     {order.sku}
@@ -901,7 +912,7 @@ export default function OrdersPage() {
                     <DialogHeader>
                         <DialogTitle>編輯訂單</DialogTitle>
                         <DialogDescription>
-                            {editingOrder?.item_name} - {editingOrder?.customer_name}
+                            {editingOrder ? getProductDisplayName(editingOrder) : ''} - {editingOrder?.customer_name}
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
@@ -1010,7 +1021,7 @@ export default function OrdersPage() {
                             <div className="space-y-3">
                                 <div className="flex items-center justify-between">
                                     <span className="text-sm text-muted-foreground">商品</span>
-                                    <span className="font-medium">{viewingOrder.item_name || viewingOrder.product?.name || '-'}</span>
+                                    <span className="font-medium">{getProductDisplayName(viewingOrder)}</span>
                                 </div>
                                 <div className="flex items-center justify-between">
                                     <span className="text-sm text-muted-foreground">SKU</span>
@@ -1071,7 +1082,7 @@ export default function OrdersPage() {
                     <AlertDialogHeader>
                         <AlertDialogTitle>確定要取消此訂單？</AlertDialogTitle>
                         <AlertDialogDescription>
-                            將刪除 {deleteOrder?.customer_name} 的 {deleteOrder?.item_name} 訂單 (數量: {deleteOrder?.quantity})。
+                            將刪除 {deleteOrder?.customer_name} 的 {deleteOrder ? getProductDisplayName(deleteOrder) : ''} 訂單 (數量: {deleteOrder?.quantity})。
                             此操作無法復原。
                         </AlertDialogDescription>
                     </AlertDialogHeader>
