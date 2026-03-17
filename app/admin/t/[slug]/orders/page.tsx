@@ -495,16 +495,22 @@ export default function OrdersPage() {
             }
         }
 
-        // 使用 Promise.allSettled 並行處理所有客戶，避免逐一 await 導致 auth token 過期
+        // 逐一處理每位客戶（避免並行請求觸發速率限制）
         const memberGroups = Array.from(ordersByMember.values())
-        const results = await Promise.allSettled(
-            memberGroups.map((memberOrders) => processMember(memberOrders))
-        )
+        let successCount = 0
+        let failCount = 0
+        const failedNames: string[] = []
 
-        const successCount = results.filter(
-            (r) => r.status === 'fulfilled' && r.value === true
-        ).length
-        const failCount = memberGroups.length - successCount
+        for (const memberOrders of memberGroups) {
+            const result = await processMember(memberOrders)
+            if (result) {
+                successCount++
+            } else {
+                failCount++
+                const name = memberOrders[0]?.customer_name || memberOrders[0]?.member?.display_name || '未知'
+                failedNames.push(name)
+            }
+        }
 
         // 刷新資料
         fetchOrders()
@@ -521,11 +527,15 @@ export default function OrdersPage() {
         if (successCount > 0) {
             toast.success(`已為 ${successCount} 位客戶建立結帳單`, {
                 description: failCount > 0
-                    ? `${failCount} 筆失敗，結帳模式：${methodLabels[checkoutShippingMethod]}`
+                    ? `${failCount} 筆失敗（${failedNames.join('、')}），結帳模式：${methodLabels[checkoutShippingMethod]}`
                     : `結帳模式：${methodLabels[checkoutShippingMethod]}`,
             })
         } else {
-            toast.error('結帳處理失敗，請稍後重試')
+            toast.error(`結帳處理失敗`, {
+                description: failedNames.length > 0
+                    ? `失敗客戶：${failedNames.slice(0, 5).join('、')}${failedNames.length > 5 ? '...' : ''}`
+                    : '請稍後重試',
+            })
         }
     }
 
