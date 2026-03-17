@@ -306,24 +306,22 @@ export default function OrdersPage() {
         setIsSubmitting(false)
     }
 
-    // 全選 / 取消全選（僅當前頁面）
+    // 全選 / 取消全選（所有篩選後的訂單，跨頁）
+    const allSelectableIds = useMemo(() =>
+        filteredOrders.filter((o) => !o.checkout_id).map((o) => o.id),
+        [filteredOrders]
+    )
+
     const handleSelectAll = () => {
-        const pageSelectableIds = paginatedOrders
-            .filter((o) => !o.checkout_id)
-            .map((o) => o.id)
+        const isAllSelected = allSelectableIds.length > 0 &&
+            allSelectableIds.every((id) => selectedOrders.has(id))
 
-        const allPageSelected = pageSelectableIds.every((id) => selectedOrders.has(id))
-
-        if (allPageSelected) {
-            // 取消選取當前頁面的所有訂單
-            const newSelected = new Set(selectedOrders)
-            pageSelectableIds.forEach((id) => newSelected.delete(id))
-            setSelectedOrders(newSelected)
+        if (isAllSelected) {
+            // 取消全部選取
+            setSelectedOrders(new Set())
         } else {
-            // 選取當前頁面的所有可選訂單
-            const newSelected = new Set(selectedOrders)
-            pageSelectableIds.forEach((id) => newSelected.add(id))
-            setSelectedOrders(newSelected)
+            // 選取所有篩選後的可選訂單（跨頁）
+            setSelectedOrders(new Set(allSelectableIds))
         }
     }
 
@@ -561,10 +559,9 @@ export default function OrdersPage() {
         )
     }
 
-    // 當前頁面可選取的訂單
-    const pageSelectableOrders = paginatedOrders.filter((o) => !o.checkout_id)
-    const isAllPageSelected = pageSelectableOrders.length > 0 &&
-        pageSelectableOrders.every((o) => selectedOrders.has(o.id))
+    // 全選狀態判定（基於所有篩選結果，非僅當前頁）
+    const isAllSelected = allSelectableIds.length > 0 &&
+        allSelectableIds.every((id) => selectedOrders.has(id))
 
     return (
         <motion.div
@@ -718,9 +715,9 @@ export default function OrdersPage() {
                                     <TableRow className="hover:bg-transparent">
                                         <TableHead className="w-12 pl-5">
                                             <Checkbox
-                                                checked={isAllPageSelected}
+                                                checked={isAllSelected}
                                                 onCheckedChange={handleSelectAll}
-                                                aria-label="全選本頁"
+                                                aria-label="全選"
                                             />
                                         </TableHead>
                                         <TableHead>客戶</TableHead>
