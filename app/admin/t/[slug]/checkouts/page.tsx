@@ -909,8 +909,9 @@ export default function CheckoutsPage() {
                                                         const preview = (
                                                             <div className="text-xs space-y-0.5">
                                                                 {items.slice(0, 3).map((detail, idx) => (
-                                                                    <div key={idx} className="truncate">
-                                                                        {detail.name} x{detail.qty}
+                                                                    <div key={idx} className="truncate flex justify-between gap-2">
+                                                                        <span className="truncate">{detail.name} x{detail.qty}</span>
+                                                                        <span className="shrink-0 text-muted-foreground">${detail.subtotal.toLocaleString()}</span>
                                                                     </div>
                                                                 ))}
                                                                 {items.length > 3 && (
@@ -920,9 +921,6 @@ export default function CheckoutsPage() {
                                                                 )}
                                                             </div>
                                                         )
-
-                                                        // 超過 2 項就可點開查看完整明細
-                                                        if (items.length <= 2) return preview
 
                                                         return (
                                                             <Popover>
