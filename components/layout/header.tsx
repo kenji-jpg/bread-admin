@@ -18,11 +18,13 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Badge } from '@/components/ui/badge'
 import { LogOut, User, Bell, AlertTriangle } from 'lucide-react'
+import { usePendingRequests } from '@/hooks/use-pending-requests'
 
 export function Header() {
     const { user, isSuperAdmin, signOut } = useAuth()
     const { tenant, actualIsActive, isSuperAdminUser } = useTenant()
     const router = useRouter()
+    const { pendingCount } = usePendingRequests()
 
     // 顯示已停用警告：超管存取已停用的租戶時
     const showDisabledWarning = isSuperAdminUser && !actualIsActive
@@ -68,10 +70,23 @@ export function Header() {
 
             {/* Right Section */}
             <div className="flex items-center gap-2">
-                {/* Notifications */}
-                <Button variant="ghost" size="icon" className="rounded-xl hover:bg-muted">
-                    <Bell className="h-5 w-5 text-muted-foreground" />
-                </Button>
+                {/* Notifications — 超管專用 */}
+                {isSuperAdmin && (
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="rounded-xl hover:bg-muted relative"
+                        onClick={() => router.push('/admin/tenants/requests')}
+                        title="租戶建立審核"
+                    >
+                        <Bell className="h-5 w-5 text-muted-foreground" />
+                        {pendingCount > 0 && (
+                            <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-white animate-in zoom-in-50 duration-200">
+                                {pendingCount > 99 ? '99+' : pendingCount}
+                            </span>
+                        )}
+                    </Button>
+                )}
 
                 {/* Theme Toggle */}
                 <ThemeToggle />

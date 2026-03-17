@@ -177,11 +177,13 @@ export default function OrdersPage() {
             }
 
             const productName = getProductDisplayName(order)
+            const memberNickname = order.member?.nickname || ''
             const searchMatch =
                 searchQuery === '' ||
                 productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 order.item_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 order.customer_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                memberNickname.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 order.sku?.toLowerCase().includes(searchQuery.toLowerCase())
 
             let statusMatch = true
@@ -761,6 +763,9 @@ export default function OrdersPage() {
                                             <TableCell className="font-medium">
                                                 <div>
                                                     {order.customer_name || order.member?.display_name || '匿名'}
+                                                    {order.member?.nickname && (
+                                                        <span className="ml-1 text-xs text-muted-foreground">({order.member.nickname})</span>
+                                                    )}
                                                     {order.note && (
                                                         <MessageSquare className="inline-block ml-1 h-3 w-3 text-muted-foreground" />
                                                     )}
