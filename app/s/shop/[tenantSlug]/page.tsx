@@ -34,6 +34,9 @@ import {
   Truck,
   MapPin,
   Copy,
+  Search,
+  ChevronDown,
+  ArrowUpDown,
 } from 'lucide-react'
 import Image from 'next/image'
 
@@ -217,6 +220,9 @@ export default function ShopPage() {
 
   // 分類篩選
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+  // 排序
+  const [sortBy, setSortBy] = useState<'newest' | 'price_asc' | 'price_desc' | 'popular'>('newest')
+  const [isSortOpen, setIsSortOpen] = useState(false)
 
   // ========== 管理員模式 ==========
   const [isStaff, setIsStaff] = useState(false)
@@ -526,6 +532,27 @@ export default function ShopPage() {
     toast.success(`已加入購物車：${selectedProduct.name} x${quantity}`)
     setSelectedProduct(null)
     setQuantity(1)
+  }
+
+  // 快速加入購物車（從卡片按鈕，數量 1）
+  const handleQuickAddToCart = (e: React.MouseEvent, product: Product) => {
+    e.stopPropagation()
+    if (!isLoggedIn) {
+      login()
+      return
+    }
+    setCart((prev) => {
+      const existing = prev.find((item) => item.product.id === product.id)
+      if (existing) {
+        return prev.map((item) =>
+          item.product.id === product.id
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        )
+      }
+      return [...prev, { product, quantity: 1 }]
+    })
+    toast.success(`已加入購物車：${product.name}`)
   }
 
   // 確認下單（批次送出購物車）
@@ -870,10 +897,24 @@ export default function ShopPage() {
     return 'preorder'
   }
 
-  const accentColor = shopSettings.accent_color || ''
+  // 商城主題色：麵包超人紅橘色
+  const accentColor = '#D94E2B'
 
   return (
-    <div className="min-h-screen pb-20">
+    <div
+      className="min-h-screen max-w-lg mx-auto"
+      style={{
+        '--shop-bg': '#FEF0DB',
+        '--shop-card': '#ffffff',
+        '--shop-card-border': '#F5E0C4',
+        '--shop-text': '#4A2C17',
+        '--shop-text-sub': '#8B6B4A',
+        '--shop-muted': '#F7D9B4',
+        '--shop-accent': accentColor,
+        backgroundColor: 'var(--shop-bg)',
+        color: 'var(--shop-text)',
+      } as React.CSSProperties}
+    >
       {/* 購物須知 Modal */}
       <AnimatePresence>
         {showShoppingNotice && (
@@ -942,7 +983,7 @@ export default function ShopPage() {
         )}
       </AnimatePresence>
 
-      {/* Header（含背景圖） */}
+      {/* Header */}
       <header className="sticky top-0 z-40 border-b relative overflow-hidden">
         {shopSettings.banner_url ? (
           <>
@@ -955,49 +996,123 @@ export default function ShopPage() {
                 backgroundRepeat: 'no-repeat',
               }}
             />
-            <div className="absolute inset-0 bg-black/50" />
+            <div className="absolute inset-0 bg-black/40" />
           </>
         ) : (
-          <div className="absolute inset-0 bg-background/95 backdrop-blur" />
+          <div className="absolute inset-0" style={{ backgroundColor: '#D94E2B' }} />
         )}
         <div className="px-4 py-3 relative z-10">
-          <div className="flex items-center gap-2">
-            <Store className="w-5 h-5" style={accentColor && !shopSettings.banner_url ? { color: accentColor } : shopSettings.banner_url ? { color: 'white' } : undefined} />
-            <h1 className={`text-lg font-bold truncate ${shopSettings.banner_url ? 'text-white' : ''}`}>{tenant.name}</h1>
-            {isStaff && (
-              <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 text-xs">
-                <Shield className="w-3 h-3 mr-0.5" />
-                管理
-              </Badge>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <p className={`text-xs ${shopSettings.banner_url ? 'text-green-400' : 'text-green-600'}`}>營業中</p>
-            {isStaff && staffStats && (
-              <p className={`text-xs ${shopSettings.banner_url ? 'text-white/70' : 'text-muted-foreground'}`}>
-                · 訂單 {staffStats.total_orders - staffStats.cancelled_count} · $
-                {staffStats.total_sales.toLocaleString()}
-              </p>
-            )}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div
+                className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
+                style={{
+                  backgroundColor: shopSettings.banner_url ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.2)',
+                }}
+              >
+                <Store className="w-4 h-4" style={{ color: 'white' }} />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <h1 className="text-base font-bold truncate" style={{ color: 'white' }}>{tenant.name}</h1>
+                  <span className="inline-flex items-center gap-1 text-[10px]" style={{ color: 'rgba(255,255,255,0.8)' }}>
+                    <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: '#bbf7d0' }} />
+                    營業中
+                  </span>
+                </div>
+                {isStaff && staffStats && (
+                  <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.7)' }}>
+                    訂單 {staffStats.total_orders - staffStats.cancelled_count} · ${staffStats.total_sales.toLocaleString()}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-0.5">
+              {isStaff && (
+                <>
+                  <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 text-[10px] px-1.5 py-0.5 mr-1">
+                    <Shield className="w-3 h-3 mr-0.5" />
+                    管理
+                  </Badge>
+                  <button
+                    className="relative p-2 rounded-full transition-colors"
+                    style={{ color: 'white' }}
+                    onClick={() => { loadAllOrders(); setIsAdminPanelOpen(true) }}
+                  >
+                    <Users className="w-5 h-5" />
+                  </button>
+                </>
+              )}
+              {/* 訂單 */}
+              {isLoggedIn && !isStaff && (
+                <button
+                  className="relative p-2 rounded-full transition-colors"
+                  style={{ color: 'white' }}
+                  onClick={() => setIsOrderDrawerOpen(true)}
+                >
+                  <Package className="w-5 h-5" />
+                  {orderItemCount > 0 && (
+                    <motion.span
+                      key={orderItemCount}
+                      initial={{ scale: 0.5 }}
+                      animate={{ scale: 1 }}
+                      className="absolute -top-0.5 -right-0.5 w-4 h-4 text-[10px] font-bold rounded-full flex items-center justify-center"
+                      style={{ backgroundColor: '#D94E2B', color: '#fff8f0' }}
+                    >
+                      {orderItemCount}
+                    </motion.span>
+                  )}
+                </button>
+              )}
+              {/* 購物車 */}
+              {isLoggedIn && !isStaff && (
+                <button
+                  className="relative p-2 rounded-full transition-colors"
+                  style={{ color: 'white' }}
+                  onClick={() => setIsCartOpen(true)}
+                >
+                  <ShoppingCart className="w-5 h-5" />
+                  {cartItemCount > 0 && (
+                    <motion.span
+                      key={cartItemCount}
+                      initial={{ scale: 0.5 }}
+                      animate={{ scale: 1 }}
+                      className="absolute -top-0.5 -right-0.5 w-4 h-4 text-[10px] font-bold rounded-full flex items-center justify-center"
+                      style={{ backgroundColor: '#c44e3c', color: 'white' }}
+                    >
+                      {cartItemCount}
+                    </motion.span>
+                  )}
+                </button>
+              )}
+              {/* 未登入：登入按鈕 */}
+              {!isLoggedIn && (
+                <button
+                  className="rounded-full h-7 px-3 text-[10px] font-medium transition-all active:scale-95"
+                  style={{ backgroundColor: '#D94E2B', color: '#fff8f0' }}
+                  onClick={login}
+                >
+                  登入
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </header>
 
-      {/* Announcement */}
+      {/* Announcement Banner */}
       {shopSettings.announcement && (
         <div
-          className="mx-2 mt-2 px-3 py-2 rounded-lg text-xs"
-          style={accentColor ? {
-            backgroundColor: `${accentColor}10`,
-            color: accentColor,
-            border: `1px solid ${accentColor}20`,
-          } : {
-            backgroundColor: 'hsl(var(--primary) / 0.05)',
-            border: '1px solid hsl(var(--primary) / 0.1)',
+          className="px-4 py-2.5 text-xs font-medium"
+          style={{
+            backgroundColor: accentColor || '#8b5e3c',
+            color: '#fff8f0',
           }}
         >
-          <Megaphone className="w-3 h-3 inline mr-1" />
-          {shopSettings.announcement}
+          <div className="flex items-center gap-1.5">
+            <Megaphone className="w-3.5 h-3.5 shrink-0 opacity-80" />
+            <span>{shopSettings.announcement}</span>
+          </div>
         </div>
       )}
 
@@ -1018,52 +1133,97 @@ export default function ShopPage() {
 
       {/* 分類標籤篩選 */}
       {(() => {
-        // 優先使用後台設定的分類（有排序），fallback 到商品動態分類
         const orderedCategories = shopCategories.length > 0
           ? shopCategories.map(c => c.name)
           : [...new Set(products.map(p => p.category).filter(Boolean))] as string[]
         if (orderedCategories.length === 0) return null
+        const getCategoryCount = (cat: string | null) => cat
+          ? products.filter(p => p.category === cat).length
+          : products.length
         return (
-          <div className="px-2 pt-2 pb-0 flex gap-1.5 overflow-x-auto scrollbar-hide">
+          <div className="px-3 pt-2.5 pb-0 flex gap-2 overflow-x-auto scrollbar-hide">
             <button
-              className="shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors text-white"
+              className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${selectedCategory === null ? 'shadow-sm' : ''}`}
               style={{
                 backgroundColor: selectedCategory === null
-                  ? (accentColor || 'hsl(var(--primary))')
-                  : 'transparent',
+                  ? (accentColor || '#8b5e3c')
+                  : '#F7D9B4',
                 color: selectedCategory === null
-                  ? 'white'
-                  : 'hsl(var(--muted-foreground))',
-                ...(selectedCategory !== null ? { backgroundColor: 'hsl(var(--muted))' } : {}),
+                  ? '#fff8f0'
+                  : '#8B6B4A',
               }}
               onClick={() => setSelectedCategory(null)}
             >
-              全部
+              全部 ({getCategoryCount(null)})
             </button>
             {orderedCategories.map(cat => (
               <button
                 key={cat}
-                className="shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors"
+                className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${selectedCategory === cat ? 'shadow-sm' : ''}`}
                 style={{
                   backgroundColor: selectedCategory === cat
-                    ? (accentColor || 'hsl(var(--primary))')
-                    : 'hsl(var(--muted))',
+                    ? (accentColor || '#8b5e3c')
+                    : '#F7D9B4',
                   color: selectedCategory === cat
-                    ? 'white'
-                    : 'hsl(var(--muted-foreground))',
+                    ? '#fff8f0'
+                    : '#8B6B4A',
                 }}
                 onClick={() => setSelectedCategory(selectedCategory === cat ? null : cat)}
               >
-                #{cat}
+                {cat} ({getCategoryCount(cat)})
               </button>
             ))}
           </div>
         )
       })()}
 
+      {/* 排序 & 商品數量 */}
+      {(() => {
+        const filteredCount = selectedCategory
+          ? products.filter(p => p.category === selectedCategory).length
+          : products.length
+        if (filteredCount === 0) return null
+        const sortLabels: Record<string, string> = {
+          newest: '最新上架',
+          price_asc: '價格低→高',
+          price_desc: '價格高→低',
+          popular: '熱門優先',
+        }
+        return (
+          <div className="flex items-center justify-between px-3 py-2">
+            <span className="text-xs" style={{ color: '#8B6B4A' }}>{filteredCount} 件商品</span>
+            <div className="relative">
+              <button
+                className="flex items-center gap-1 text-xs transition-colors"
+                style={{ color: '#8B6B4A' }}
+                onClick={() => setIsSortOpen(!isSortOpen)}
+              >
+                <ArrowUpDown className="w-3 h-3" />
+                {sortLabels[sortBy]}
+                <ChevronDown className={`w-3 h-3 transition-transform ${isSortOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {isSortOpen && (
+                <div className="absolute right-0 top-full mt-1 rounded-lg shadow-lg z-20 min-w-[120px] py-1" style={{ backgroundColor: '#ffffff', border: '1px solid #f0e6d9' }}>
+                  {(Object.entries(sortLabels) as [typeof sortBy, string][]).map(([key, label]) => (
+                    <button
+                      key={key}
+                      className="w-full text-left px-3 py-1.5 text-xs transition-colors"
+                      style={{ color: sortBy === key ? (accentColor || '#8b5e3c') : '#8b7355', fontWeight: sortBy === key ? 500 : 400 }}
+                      onClick={() => { setSortBy(key); setIsSortOpen(false) }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })()}
+
       {/* 商品列表 */}
-      <main className="p-2">
-        <div className="grid grid-cols-2 gap-2">
+      <main className="px-3 pb-2">
+        <div className="grid grid-cols-2 gap-3">
           {(selectedCategory ? products.filter(p => p.category === selectedCategory) : products)
             .slice()
             .sort((a, b) => {
@@ -1071,7 +1231,11 @@ export default function ShopPage() {
               const bUnavailable = b.status !== 'active' || b.is_expired || b.is_sold_out || (b.end_time && new Date(b.end_time).getTime() < Date.now()) || (b.is_limited && b.stock !== null && b.stock <= 0)
               if (aUnavailable && !bUnavailable) return 1
               if (!aUnavailable && bUnavailable) return -1
-              return 0
+              // 自訂排序
+              if (sortBy === 'price_asc') return a.price - b.price
+              if (sortBy === 'price_desc') return b.price - a.price
+              if (sortBy === 'popular') return b.sold_qty - a.sold_qty
+              return 0 // newest = 預設（API 已按 created_at 排序）
             })
             .map((product, index) => {
               const isExpired = product.end_time
@@ -1089,20 +1253,17 @@ export default function ShopPage() {
               return (
                 <motion.div
                   key={product.id}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.03 }}
-                  className={`relative rounded-xl overflow-hidden bg-card border ${(isUnavailable && !isStaff) ? 'opacity-60' : 'cursor-pointer active:scale-95'
-                    } transition-transform ${isInactive && isStaff ? 'opacity-50 ring-1 ring-gray-400 dark:ring-gray-600' : ''}`}
+                  className={`relative rounded-2xl overflow-hidden transition-all ${(isUnavailable && !isStaff) ? 'opacity-60' : 'cursor-pointer'
+                    } ${isInactive && isStaff ? 'opacity-50' : ''}`}
                   onClick={() => {
                     if (isStaff) {
-                      // 管理者：任何商品都可以點擊管理
                       setSelectedProduct(product)
                       return
                     }
                     if (isUnavailable) return
-                    if (isSoldOut) return
-                    if (isExpired) return
                     if (!isLoggedIn) {
                       login()
                       return
@@ -1117,24 +1278,27 @@ export default function ShopPage() {
                       key={product.sold_qty}
                       initial={{ scale: 1.3 }}
                       animate={{ scale: 1 }}
-                      className={`absolute top-1 left-1 z-10 px-1.5 py-0.5 rounded-full text-xs font-bold text-white ${isHot ? 'bg-red-500' : 'bg-black/60'
+                      className={`absolute top-1.5 left-1.5 z-10 px-1.5 py-0.5 rounded-full text-xs font-bold text-white ${isHot ? 'bg-red-500' : 'bg-black/60'
                         }`}
                     >
-                      已售 {product.sold_qty}
+                      +{product.sold_qty}
                       {isHot && <Flame className="inline w-3 h-3 ml-0.5" />}
                     </motion.div>
                   )}
 
                   {/* 右上 badges：預購/現貨 + 倒數時間 */}
-                  <div className="absolute top-1 right-1 z-10 flex flex-col items-end gap-0.5">
+                  <div className="absolute top-1.5 right-1.5 z-10 flex flex-col items-end gap-0.5">
                     <div
-                      className={`px-1.5 py-0.5 rounded-full text-xs text-white ${mode === 'stock' ? 'bg-green-500' : 'bg-blue-500'
-                        }`}
+                      className="px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+                      style={{
+                        backgroundColor: mode === 'stock' ? '#6B8E5E' : '#D94E2B',
+                        color: '#fff8f0',
+                      }}
                     >
                       {mode === 'stock' ? '現貨' : '預購'}
                     </div>
                     {timeRemaining && (
-                      <div className="px-1.5 py-0.5 rounded-full text-xs bg-orange-500 text-white">
+                      <div className="px-1.5 py-0.5 rounded-full text-[10px] bg-orange-500 text-white">
                         <Clock className="inline w-3 h-3 mr-0.5" />
                         {timeRemaining}
                       </div>
@@ -1142,7 +1306,7 @@ export default function ShopPage() {
                   </div>
 
                   {/* 商品圖片 */}
-                  <div className="aspect-square relative bg-muted">
+                  <div className="aspect-square relative rounded-2xl overflow-hidden" style={{ backgroundColor: '#F5E0C4' }}>
                     {product.image_url ? (
                       <Image
                         src={product.image_url}
@@ -1155,7 +1319,7 @@ export default function ShopPage() {
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
-                        <Package className="w-8 h-8 text-muted-foreground" />
+                        <Package className="w-10 h-10 text-muted-foreground/40" />
                       </div>
                     )}
 
@@ -1178,32 +1342,44 @@ export default function ShopPage() {
                   </div>
 
                   {/* 商品資訊 */}
-                  <div className="p-2">
-                    <p className="text-xs truncate">{product.name}</p>
-                    <div className="flex items-center gap-1">
-                      <p className="text-sm font-bold" style={accentColor ? { color: accentColor } : undefined}>${product.price}</p>
+                  <div className="p-2.5" style={{ backgroundColor: '#FEF0DB' }}>
+                    <p className="text-sm leading-tight line-clamp-2" style={{ color: '#4A2C17' }}>{product.name}</p>
+                    <div className="flex items-baseline gap-1 mt-1">
+                      <span className="text-xs" style={{ color: '#8B6B4A' }}>$</span>
+                      <span className="text-base font-bold" style={{ color: accentColor || '#8b5e3c' }}>{product.price.toLocaleString()}</span>
                       {mode === 'stock' && product.stock !== null && product.stock > 0 && (
-                        <span className="text-xs text-muted-foreground">
-                          剩{product.stock}
+                        <span className="text-[10px] ml-auto" style={{ color: '#8B6B4A' }}>
+                          剩 {product.stock}
                         </span>
                       )}
                     </div>
                     {product.is_limited && product.limit_qty && (
-                      <p className="text-xs text-orange-600">限購 {product.limit_qty}</p>
+                      <p className="text-[10px] mt-0.5" style={{ color: '#D94E2B' }}>限購 {product.limit_qty}</p>
                     )}
 
-                    {/* 管理員：顯示分配狀態（操作按鈕移至 Modal） */}
+                    {/* 管理員：顯示分配狀態 */}
                     {isStaff && pStats && (
-                      <div className="mt-1">
-                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <div className="mt-1.5 pt-1.5 border-t">
+                        <div className="flex items-center justify-between text-[10px] text-muted-foreground">
                           <span>
-                            {pStats.allocated}/{pStats.total}
+                            已配 {pStats.allocated}/{pStats.total}
                           </span>
                           {pStats.pending > 0 && (
-                            <span className="text-orange-600">{pStats.pending}待</span>
+                            <span className="text-orange-600 font-medium">{pStats.pending} 待處理</span>
                           )}
                         </div>
                       </div>
+                    )}
+
+                    {/* 顧客：加入購物車按鈕 */}
+                    {!isStaff && !isUnavailable && (
+                      <button
+                        className="w-full mt-2 py-1.5 rounded-lg text-xs font-medium transition-all active:scale-95"
+                        style={{ backgroundColor: accentColor || '#8b5e3c', color: '#fff8f0' }}
+                        onClick={(e) => handleQuickAddToCart(e, product)}
+                      >
+                        加入購物車
+                      </button>
                     )}
                   </div>
                 </motion.div>
@@ -1212,103 +1388,36 @@ export default function ShopPage() {
         </div>
 
         {products.length === 0 && (
-          <div className="text-center py-12 text-muted-foreground">
+          <div className="text-center py-16 text-muted-foreground">
             {isStaff ? (
-              <div>
-                <Package className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p className="mb-4">還沒有商品</p>
+              <div className="flex flex-col items-center">
+                <div className="w-20 h-20 rounded-full bg-purple-50 dark:bg-purple-950/30 flex items-center justify-center mb-4">
+                  <Camera className="w-8 h-8 text-purple-400" />
+                </div>
+                <p className="text-sm font-medium mb-1">還沒有商品</p>
+                <p className="text-xs mb-4">上架第一個商品開始營業吧！</p>
                 <Button
-                  className="bg-purple-600 hover:bg-purple-700"
+                  className="bg-purple-600 hover:bg-purple-700 rounded-xl"
                   onClick={() => setIsAddProductOpen(true)}
                 >
                   <Camera className="w-4 h-4 mr-1" />
-                  上架第一個商品
+                  上架商品
                 </Button>
               </div>
             ) : (
-              <div>
-                <Store className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>商城尚未開放</p>
+              <div className="flex flex-col items-center">
+                <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mb-4">
+                  <Store className="w-8 h-8 text-muted-foreground/50" />
+                </div>
+                <p className="text-sm font-medium mb-1">商城尚未開放</p>
+                <p className="text-xs">敬請期待</p>
               </div>
             )}
           </div>
         )}
       </main>
 
-      {/* 底部 Bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t px-4 py-3 safe-bottom">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {isLoggedIn && profile ? (
-              <>
-                {profile.pictureUrl && (
-                  <Image
-                    src={profile.pictureUrl}
-                    alt={profile.displayName}
-                    width={32}
-                    height={32}
-                    className="rounded-full"
-                  />
-                )}
-                <span className="text-sm">{profile.displayName}</span>
-              </>
-            ) : (
-              <Button size="sm" onClick={login}>
-                LINE 登入
-              </Button>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2">
-            {/* 管理員：管理面板按鈕 */}
-            {isStaff && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="border-purple-200 text-purple-700 dark:border-purple-800 dark:text-purple-400"
-                onClick={() => {
-                  loadAllOrders()
-                  setIsAdminPanelOpen(true)
-                }}
-              >
-                <Users className="w-4 h-4 mr-1" />
-                訂單
-              </Button>
-            )}
-
-            {/* 顧客：我的訂單按鈕 */}
-            {isLoggedIn && (
-              <Button variant="outline" size="sm" className="relative" onClick={() => setIsOrderDrawerOpen(true)}>
-                <Package className="w-4 h-4 mr-1" />
-                訂單
-                {orderItemCount > 0 && (
-                  <span className="absolute -top-2 -right-2 w-5 h-5 bg-blue-500 text-white text-xs rounded-full flex items-center justify-center">
-                    {orderItemCount}
-                  </span>
-                )}
-              </Button>
-            )}
-
-            {/* 顧客：購物車按鈕（管理者不顯示） */}
-            {isLoggedIn && !isStaff && (
-              <Button
-                variant="default"
-                className="relative"
-                onClick={() => setIsCartOpen(true)}
-                style={accentColor ? { backgroundColor: accentColor } : undefined}
-              >
-                <ShoppingCart className="w-4 h-4 mr-1" />
-                購物車
-                {cartItemCount > 0 && (
-                  <span className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
-                    {cartItemCount}
-                  </span>
-                )}
-              </Button>
-            )}
-          </div>
-        </div>
-      </div>
+      {/* 底部 Bar 已移除 — 操作按鈕統一在 Header */}
 
       {/* 商品 Modal：管理者 = 管理面板 / 客人 = 加入購物車 */}
       <AnimatePresence>

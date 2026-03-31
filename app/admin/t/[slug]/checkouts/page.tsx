@@ -67,6 +67,7 @@ import {
     Trash2,
     Download,
     Calendar,
+    X,
 } from 'lucide-react'
 
 // 狀態標籤配置 (按照後端文件)
@@ -109,9 +110,10 @@ const getShippingValue = <T,>(
     return item[key] ?? null
 }
 
-// 結帳模式顯示組件（僅顯示，不可編輯）
-function ShippingMethodCell({ item }: { item: CheckoutListItem }) {
+// 結帳模式組件（可編輯：pending/url_sent/ordered 時可改）
+function ShippingMethodCell({ item, onChangeMethod }: { item: CheckoutListItem; onChangeMethod?: (checkoutId: string, method: string) => void }) {
     const method = item.shipping_method || 'myship'
+    const canEdit = onChangeMethod && !['shipped', 'completed'].includes(item.shipping_status)
 
     const colorClass: Record<string, string> = {
         myship: 'bg-orange-500/20 text-orange-500 border-orange-500/30',
@@ -125,10 +127,25 @@ function ShippingMethodCell({ item }: { item: CheckoutListItem }) {
         pickup: '🏠 自取',
     }
 
+    if (!canEdit) {
+        return (
+            <Badge className={`${colorClass[method]} text-xs`}>
+                {labels[method]}
+            </Badge>
+        )
+    }
+
     return (
-        <Badge className={`${colorClass[method]} text-xs`}>
-            {labels[method]}
-        </Badge>
+        <Select value={method} onValueChange={(val) => onChangeMethod(item.id, val)}>
+            <SelectTrigger className="h-7 w-[110px] text-xs px-2">
+                <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+                <SelectItem value="myship">🏪 賣貨便</SelectItem>
+                <SelectItem value="delivery">🚚 宅配</SelectItem>
+                <SelectItem value="pickup">🏠 自取</SelectItem>
+            </SelectContent>
+        </Select>
     )
 }
 
@@ -497,6 +514,56 @@ export default function CheckoutsPage() {
         } finally {
             setIsUpdating(false)
             setBatchDeleteConfirm(false)
+        }
+    }
+
+    // 移除結帳單內的單一品項
+    const handleRemoveItem = async (checkoutId: string, orderItemId: string, itemName: string) => {
+        if (!confirm(`確定要從結帳單中移除「${itemName}」嗎？\n該品項將回到訂單管理。`)) return
+        setIsUpdating(true)
+        try {
+            const result = await checkoutApiRef.current.removeItem(checkoutId, orderItemId)
+            if (!result.success) {
+                toast.error(result.error || '移除失敗')
+                return
+            }
+            if (result.action === 'checkout_deleted') {
+                toast.success(`已移除「${itemName}」，結帳單已無品項，自動刪除`)
+            } else {
+                toast.success(`已移除「${itemName}」，金額更新為 $${result.new_total_amount?.toLocaleString()}`)
+            }
+            fetchCheckouts()
+        } catch (error: any) {
+            toast.error(error.message || '移除失敗')
+        } finally {
+            setIsUpdating(false)
+        }
+    }
+
+    // 變更出貨方式
+    const handleChangeShippingMethod = async (checkoutId: string, newMethod: string) => {
+        const checkout = checkouts.find(c => c.id === checkoutId)
+        if (!checkout) return
+        const oldMethod = checkout.shipping_method || 'myship'
+        if (oldMethod === newMethod) return
+
+        const methodLabels: Record<string, string> = { myship: '賣貨便', delivery: '宅配', pickup: '自取' }
+        if (!confirm(`確定要將出貨方式從「${methodLabels[oldMethod]}」改為「${methodLabels[newMethod]}」嗎？\n出貨狀態會重設為「待處理」。`)) return
+
+        setIsUpdating(true)
+        try {
+            const fee = newMethod === 'myship' ? 38 : newMethod === 'delivery' ? 0 : 0
+            const result = await checkoutApiRef.current.changeShippingMethod(checkoutId, newMethod, fee)
+            if (!result.success) {
+                toast.error(result.error || '變更失敗')
+                return
+            }
+            toast.success(`出貨方式已改為「${methodLabels[newMethod]}」，金額更新為 $${result.new_total_amount?.toLocaleString()}`)
+            fetchCheckouts()
+        } catch (error: any) {
+            toast.error(error.message || '變更失敗')
+        } finally {
+            setIsUpdating(false)
         }
     }
 
@@ -934,20 +1001,35 @@ export default function CheckoutsPage() {
                                                                         <p className="font-medium text-sm">商品明細（共 {items.length} 項）</p>
                                                                     </div>
                                                                     <div className="max-h-64 overflow-y-auto">
-                                                                        {items.map((detail, idx) => (
-                                                                            <div
-                                                                                key={idx}
-                                                                                className="flex items-center justify-between px-4 py-2 text-sm border-b last:border-b-0"
-                                                                            >
-                                                                                <span className="truncate mr-3 flex-1">{detail.name}</span>
-                                                                                <div className="flex items-center gap-3 shrink-0 text-muted-foreground">
-                                                                                    <span>x{detail.qty}</span>
-                                                                                    <span className="w-16 text-right font-medium text-foreground">
-                                                                                        ${detail.subtotal.toLocaleString()}
-                                                                                    </span>
+                                                                        {items.map((detail, idx) => {
+                                                                            const canRemove = !['shipped', 'completed'].includes(item.shipping_status) && items.length > 0
+                                                                            return (
+                                                                                <div
+                                                                                    key={idx}
+                                                                                    className="flex items-center justify-between px-4 py-2 text-sm border-b last:border-b-0 group"
+                                                                                >
+                                                                                    <span className="truncate mr-2 flex-1">{detail.name}</span>
+                                                                                    <div className="flex items-center gap-2 shrink-0 text-muted-foreground">
+                                                                                        <span>x{detail.qty}</span>
+                                                                                        <span className="w-16 text-right font-medium text-foreground">
+                                                                                            ${detail.subtotal.toLocaleString()}
+                                                                                        </span>
+                                                                                        {canRemove && detail.order_item_id && (
+                                                                                            <button
+                                                                                                className="opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive/80 transition-opacity ml-1"
+                                                                                                onClick={(e) => {
+                                                                                                    e.stopPropagation()
+                                                                                                    handleRemoveItem(item.id, detail.order_item_id!, detail.name)
+                                                                                                }}
+                                                                                                title="移除此品項"
+                                                                                            >
+                                                                                                <X className="h-3.5 w-3.5" />
+                                                                                            </button>
+                                                                                        )}
+                                                                                    </div>
                                                                                 </div>
-                                                                            </div>
-                                                                        ))}
+                                                                            )
+                                                                        })}
                                                                     </div>
                                                                     <div className="flex items-center justify-between px-4 py-2.5 bg-muted/50 border-t font-medium text-sm">
                                                                         <span>合計</span>
@@ -965,7 +1047,7 @@ export default function CheckoutsPage() {
                                             <TableCell>{getShippingBadge(item.shipping_status)}</TableCell>
                                             {/* 結帳模式欄位 */}
                                             <TableCell>
-                                                <ShippingMethodCell item={item} />
+                                                <ShippingMethodCell item={item} onChangeMethod={handleChangeShippingMethod} />
                                             </TableCell>
                                             {/* 通知狀態欄位 */}
                                             <TableCell>

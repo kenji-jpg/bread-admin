@@ -134,6 +134,29 @@ export interface NotifyMyshipResult {
     message?: string
 }
 
+// 移除單一品項回傳
+export interface RemoveItemResult {
+    success: boolean
+    error?: string
+    action?: 'item_removed' | 'checkout_deleted'
+    checkout_id?: string
+    removed_item?: string
+    new_item_count?: number
+    new_total_amount?: number
+}
+
+// 變更出貨方式回傳
+export interface ChangeShippingMethodResult {
+    success: boolean
+    error?: string
+    checkout_id?: string
+    old_method?: string
+    new_method?: string
+    old_fee?: number
+    new_fee?: number
+    new_total_amount?: number
+}
+
 // 刪除結帳單回傳
 export interface DeleteCheckoutResult {
     success: boolean
@@ -170,6 +193,8 @@ interface UseCheckoutReturn {
     markCompleted: (checkoutId: string, note?: string) => Promise<UpdateStatusResult>
     deleteCheckout: (checkoutId: string) => Promise<DeleteCheckoutResult>
     batchDeleteCheckouts: (checkoutIds: string[]) => Promise<BatchDeleteCheckoutsResult>
+    removeItem: (checkoutId: string, orderItemId: string) => Promise<RemoveItemResult>
+    changeShippingMethod: (checkoutId: string, method: string, fee?: number) => Promise<ChangeShippingMethodResult>
 }
 
 export const useCheckout = (tenantId: string): UseCheckoutReturn => {
@@ -331,6 +356,32 @@ export const useCheckout = (tenantId: string): UseCheckoutReturn => {
         }
     }, [tenantId, supabase])
 
+    // 移除結帳單內的單一品項
+    const removeItem = useCallback((
+        checkoutId: string,
+        orderItemId: string
+    ): Promise<RemoveItemResult> => {
+        return callRpc<RemoveItemResult>('remove_checkout_item_v1', {
+            p_tenant_id: tenantId,
+            p_checkout_id: checkoutId,
+            p_order_item_id: orderItemId
+        })
+    }, [tenantId, callRpc])
+
+    // 變更出貨方式
+    const changeShippingMethod = useCallback((
+        checkoutId: string,
+        method: string,
+        fee: number = 0
+    ): Promise<ChangeShippingMethodResult> => {
+        return callRpc<ChangeShippingMethodResult>('update_checkout_shipping_method_v1', {
+            p_tenant_id: tenantId,
+            p_checkout_id: checkoutId,
+            p_shipping_method: method,
+            p_shipping_fee: fee
+        })
+    }, [tenantId, callRpc])
+
     return {
         loading,
         error,
@@ -341,6 +392,8 @@ export const useCheckout = (tenantId: string): UseCheckoutReturn => {
         markShipped: (id, note) => updateStatus(id, 'mark_shipped', { note }),
         markCompleted: (id, note) => updateStatus(id, 'mark_completed', { note }),
         deleteCheckout,
-        batchDeleteCheckouts
+        batchDeleteCheckouts,
+        removeItem,
+        changeShippingMethod
     }
 }
