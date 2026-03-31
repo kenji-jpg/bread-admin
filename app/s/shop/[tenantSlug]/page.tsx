@@ -16,6 +16,7 @@ import {
   Clock,
   Flame,
   Package,
+  ClipboardList,
   Minus,
   Plus,
   X,
@@ -1046,43 +1047,49 @@ export default function ShopPage() {
               {/* 訂單 */}
               {isLoggedIn && !isStaff && (
                 <button
-                  className="relative p-2 rounded-full transition-colors"
-                  style={{ color: 'white' }}
+                  className="relative flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg transition-colors active:scale-95"
+                  style={{ color: 'rgba(255,255,255,0.9)' }}
                   onClick={() => setIsOrderDrawerOpen(true)}
                 >
-                  <Package className="w-5 h-5" />
-                  {orderItemCount > 0 && (
-                    <motion.span
-                      key={orderItemCount}
-                      initial={{ scale: 0.5 }}
-                      animate={{ scale: 1 }}
-                      className="absolute -top-0.5 -right-0.5 w-4 h-4 text-[10px] font-bold rounded-full flex items-center justify-center"
-                      style={{ backgroundColor: '#D94E2B', color: '#fff8f0' }}
-                    >
-                      {orderItemCount}
-                    </motion.span>
-                  )}
+                  <div className="relative">
+                    <ClipboardList className="w-5 h-5" />
+                    {orderItemCount > 0 && (
+                      <motion.span
+                        key={orderItemCount}
+                        initial={{ scale: 0.5 }}
+                        animate={{ scale: 1 }}
+                        className="absolute -top-1.5 -right-2.5 min-w-[16px] h-4 text-[10px] font-bold rounded-full flex items-center justify-center px-0.5"
+                        style={{ backgroundColor: '#fff8f0', color: '#D94E2B' }}
+                      >
+                        {orderItemCount}
+                      </motion.span>
+                    )}
+                  </div>
+                  <span className="text-[10px] leading-none">訂單</span>
                 </button>
               )}
               {/* 購物車 */}
               {isLoggedIn && !isStaff && (
                 <button
-                  className="relative p-2 rounded-full transition-colors"
-                  style={{ color: 'white' }}
+                  className="relative flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg transition-colors active:scale-95"
+                  style={{ color: 'rgba(255,255,255,0.9)' }}
                   onClick={() => setIsCartOpen(true)}
                 >
-                  <ShoppingCart className="w-5 h-5" />
-                  {cartItemCount > 0 && (
-                    <motion.span
-                      key={cartItemCount}
-                      initial={{ scale: 0.5 }}
-                      animate={{ scale: 1 }}
-                      className="absolute -top-0.5 -right-0.5 w-4 h-4 text-[10px] font-bold rounded-full flex items-center justify-center"
-                      style={{ backgroundColor: '#c44e3c', color: 'white' }}
-                    >
-                      {cartItemCount}
-                    </motion.span>
-                  )}
+                  <div className="relative">
+                    <ShoppingCart className="w-5 h-5" />
+                    {cartItemCount > 0 && (
+                      <motion.span
+                        key={cartItemCount}
+                        initial={{ scale: 0.5 }}
+                        animate={{ scale: 1 }}
+                        className="absolute -top-1.5 -right-2.5 min-w-[16px] h-4 text-[10px] font-bold rounded-full flex items-center justify-center px-0.5"
+                        style={{ backgroundColor: '#fff8f0', color: '#D94E2B' }}
+                      >
+                        {cartItemCount}
+                      </motion.span>
+                    )}
+                  </div>
+                  <span className="text-[10px] leading-none">購物車</span>
                 </button>
               )}
               {/* 未登入：登入按鈕 */}
