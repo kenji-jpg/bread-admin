@@ -902,10 +902,10 @@ export default function CheckoutsPage() {
                         </div>
                     ) : (
                         <div className="overflow-x-auto">
-                            <Table>
+                            <Table className="min-w-[1100px]">
                                 <TableHeader>
                                     <TableRow className="hover:bg-transparent">
-                                        <TableHead className="w-12 pl-5">
+                                        <TableHead className="w-10 pl-4">
                                             <Checkbox
                                                 checked={isAllSelected}
                                                 onCheckedChange={handleSelectAll}
@@ -913,16 +913,16 @@ export default function CheckoutsPage() {
                                                 aria-label="全選"
                                             />
                                         </TableHead>
-                                        <TableHead>單號</TableHead>
-                                        <TableHead>客戶</TableHead>
-                                        <TableHead className="text-right">金額</TableHead>
-                                        <TableHead>商品明細</TableHead>
-                                        <TableHead>付款狀態</TableHead>
-                                        <TableHead>出貨狀態</TableHead>
-                                        <TableHead>結帳模式</TableHead>
-                                        <TableHead>通知</TableHead>
-                                        <TableHead>時間</TableHead>
-                                        <TableHead className="pr-5">操作</TableHead>
+                                        <TableHead className="w-[110px]">單號</TableHead>
+                                        <TableHead className="w-[140px]">客戶</TableHead>
+                                        <TableHead className="text-right w-[100px]">金額</TableHead>
+                                        <TableHead className="w-[220px]">商品明細</TableHead>
+                                        <TableHead className="w-[72px]">付款</TableHead>
+                                        <TableHead className="w-[72px]">出貨</TableHead>
+                                        <TableHead className="w-[110px]">結帳模式</TableHead>
+                                        <TableHead className="w-[72px]">通知</TableHead>
+                                        <TableHead className="w-[80px]">時間</TableHead>
+                                        <TableHead className="w-[80px] pr-4">操作</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -934,7 +934,7 @@ export default function CheckoutsPage() {
                                             transition={{ delay: index * 0.02 }}
                                             className={`group hover:bg-muted/50 transition-colors ${selectedCheckouts.has(item.id) ? 'bg-muted/30' : ''}`}
                                         >
-                                            <TableCell className="pl-5">
+                                            <TableCell className="pl-4">
                                                 <Checkbox
                                                     checked={selectedCheckouts.has(item.id)}
                                                     onCheckedChange={() => toggleCheckoutSelection(item.id)}
@@ -948,25 +948,27 @@ export default function CheckoutsPage() {
                                                 </code>
                                             </TableCell>
                                             <TableCell className="font-medium">
-                                                {item.customer_name || item.member_display_name || '-'}
-                                                {item.member_nickname && (
-                                                    <span className="text-muted-foreground ml-1">({item.member_nickname})</span>
-                                                )}
+                                                <div className="truncate max-w-[140px]">
+                                                    {item.customer_name || item.member_display_name || '-'}
+                                                    {item.member_nickname && (
+                                                        <span className="text-muted-foreground ml-1">({item.member_nickname})</span>
+                                                    )}
+                                                </div>
                                                 {item.member_line_user_id && (
-                                                    <Badge variant="outline" className="ml-2 text-xs">
+                                                    <Badge variant="outline" className="mt-0.5 text-[10px] px-1 py-0">
                                                         LINE
                                                     </Badge>
                                                 )}
                                             </TableCell>
-                                            <TableCell className="text-right font-semibold">
+                                            <TableCell className="text-right font-semibold whitespace-nowrap">
                                                 ${item.total_amount.toLocaleString()}
                                                 {item.shipping_fee > 0 && item.shipping_method !== 'myship' && (
-                                                    <span className="text-xs text-muted-foreground ml-1">
+                                                    <div className="text-[10px] text-muted-foreground">
                                                         (+${item.shipping_fee}運費)
-                                                    </span>
+                                                    </div>
                                                 )}
                                             </TableCell>
-                                            <TableCell className="max-w-[200px]">
+                                            <TableCell className="max-w-[220px]">
                                                 {(() => {
                                                     if (!item.checkout_items) return <span className="text-muted-foreground">-</span>
                                                     try {
@@ -997,8 +999,11 @@ export default function CheckoutsPage() {
                                                                     </button>
                                                                 </PopoverTrigger>
                                                                 <PopoverContent align="start" className="w-80 p-0">
-                                                                    <div className="px-4 py-3 border-b">
+                                                                    <div className="px-4 py-3 border-b flex items-center justify-between">
                                                                         <p className="font-medium text-sm">商品明細（共 {items.length} 項）</p>
+                                                                        {!['shipped', 'completed'].includes(item.shipping_status) && (
+                                                                            <span className="text-[10px] text-muted-foreground">點 ✕ 移除品項</span>
+                                                                        )}
                                                                     </div>
                                                                     <div className="max-h-64 overflow-y-auto">
                                                                         {items.map((detail, idx) => {
@@ -1016,7 +1021,7 @@ export default function CheckoutsPage() {
                                                                                         </span>
                                                                                         {canRemove && detail.order_item_id && (
                                                                                             <button
-                                                                                                className="opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive/80 transition-opacity ml-1"
+                                                                                                className="text-destructive/60 hover:text-destructive transition-colors ml-1 p-0.5 rounded hover:bg-destructive/10"
                                                                                                 onClick={(e) => {
                                                                                                     e.stopPropagation()
                                                                                                     handleRemoveItem(item.id, detail.order_item_id!, detail.name)
@@ -1070,11 +1075,11 @@ export default function CheckoutsPage() {
                                                     </Badge>
                                                 )}
                                             </TableCell>
-                                            <TableCell className="text-muted-foreground text-sm">
+                                            <TableCell className="text-muted-foreground text-xs whitespace-nowrap">
                                                 {new Date(item.created_at).toLocaleDateString('zh-TW')}
                                             </TableCell>
                                             {/* 操作按鈕 - 根據結帳模式和狀態顯示下一步操作 */}
-                                            <TableCell className="pr-5">
+                                            <TableCell className="pr-4">
                                                 {(() => {
                                                     const method = item.shipping_method || 'myship'
                                                     const storeUrl = getShippingValue<string>(item, 'store_url')
