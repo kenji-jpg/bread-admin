@@ -275,7 +275,7 @@ export default function EditProductPage({ params }: { params: Promise<{ productI
                 throw new Error(result.error || '更新商品失敗')
             }
 
-            // 儲存規格變更
+            // 儲存規格變更（含關閉規格的情況）
             if (hasVariants) {
                 const variantNames = variants.map(v => v.name.trim())
                 if (variantNames.some(n => !n)) {
@@ -289,8 +289,9 @@ export default function EditProductPage({ params }: { params: Promise<{ productI
                     return
                 }
 
-                const { error: variantError } = await supabase.rpc('update_product_variants_v1', {
+                const { data: variantResult, error: variantError } = await supabase.rpc('update_product_variants_v1', {
                     p_product_id: productId,
+                    p_tenant_id: tenant.id,
                     p_variants: variants.map((v, idx) => ({
                         id: v.isNew ? null : v.id,
                         name: v.name.trim(),
@@ -298,10 +299,17 @@ export default function EditProductPage({ params }: { params: Promise<{ productI
                         sort_order: idx,
                     }))
                 })
-                if (variantError) {
-                    console.error('Update variants error:', variantError)
-                    toast.warning('商品已更新，但規格儲存失敗')
+                if (variantError || (variantResult && !variantResult.success)) {
+                    console.error('Update variants error:', variantError || variantResult?.error)
+                    toast.warning('商品已更新，但規格儲存失敗：' + (variantResult?.error || variantError?.message))
                 }
+            } else if (product?.has_variants) {
+                // 從有規格切換為無規格 → 傳空陣列讓 RPC 停用所有規格並設 has_variants=false
+                await supabase.rpc('update_product_variants_v1', {
+                    p_product_id: productId,
+                    p_tenant_id: tenant.id,
+                    p_variants: [],
+                })
             }
 
             toast.success('商品更新成功！')
@@ -581,7 +589,10 @@ export default function EditProductPage({ params }: { params: Promise<{ productI
                                                     <thead className="bg-muted/50">
                                                         <tr>
                                                             <th className="px-4 py-2 text-left font-medium text-muted-foreground">規格名稱</th>
-                                                            <th className="px-4 py-2 text-left font-medium text-muted-foreground w-20">庫存</th>
+                                                            <th className="px-4 py-2 text-left font-medium text-muted-foreground w-20">
+                                                                庫存
+                                                                {!isLimited && <span className="ml-1 text-[10px] text-muted-foreground/60">（追蹤用）</span>}
+                                                            </th>
                                                             <th className="px-4 py-2 text-left font-medium text-muted-foreground w-20">已售</th>
                                                             <th className="px-4 py-2 text-right w-12"></th>
                                                         </tr>

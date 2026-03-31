@@ -551,7 +551,10 @@ export default function NewProductPage() {
                                                     <thead className="bg-muted/50">
                                                         <tr>
                                                             <th className="px-4 py-2 text-left font-medium text-muted-foreground">規格名稱</th>
-                                                            <th className="px-4 py-2 text-left font-medium text-muted-foreground w-24">初始庫存</th>
+                                                            <th className="px-4 py-2 text-left font-medium text-muted-foreground w-24">
+                                                                初始庫存
+                                                                {!isLimited && <span className="ml-1 text-[10px] text-muted-foreground/60">（追蹤用）</span>}
+                                                            </th>
                                                             <th className="px-4 py-2 text-right w-12"></th>
                                                         </tr>
                                                     </thead>
