@@ -251,9 +251,14 @@ const ProductRow = ({
                 <TableCell onClick={handleRowClick} className="font-medium max-w-[200px] truncate" title={group.baseName}>
                     {group.baseName}
                     {hasVariants && (
-                        <span className="ml-2 px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">
+                        <span className="ml-2 px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded dark:bg-gray-800 dark:text-gray-300">
                             {group.variants.filter(v => v.status === 'active').length}/{group.variants.length} 規格上架
                         </span>
+                    )}
+                    {(group.mainProduct?.has_variants) && (
+                        <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0">
+                            多規格
+                        </Badge>
                     )}
                 </TableCell>
                 <TableCell onClick={handleRowClick}>
@@ -423,6 +428,10 @@ export default function ProductsPage() {
     const [globalRestockQty, setGlobalRestockQty] = useState('')
     const [isGlobalRestocking, setIsGlobalRestocking] = useState(false)
     const [orders, setOrders] = useState<OrderItem[]>([])
+    // 規格補貨相關
+    const [restockVariants, setRestockVariants] = useState<{ id: string; name: string; stock: number }[]>([])
+    const [restockSelectedVariantId, setRestockSelectedVariantId] = useState<string | null>(null)
+    const [isLoadingRestockVariants, setIsLoadingRestockVariants] = useState(false)
 
     // 選取狀態
     const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set())
@@ -470,17 +479,55 @@ export default function ProductsPage() {
         }
     }
 
+    // 當選擇補貨 SKU 時，檢查是否有規格
+    const handleSelectRestockSku = async (sku: string) => {
+        setGlobalRestockSku(sku)
+        setGlobalRestockSkuOpen(false)
+        setRestockVariants([])
+        setRestockSelectedVariantId(null)
+
+        const selectedProduct = products.find(p => p.sku === sku)
+        if (selectedProduct?.has_variants) {
+            setIsLoadingRestockVariants(true)
+            try {
+                const { data } = await supabase.rpc('get_product_variants_v1', {
+                    p_product_id: selectedProduct.id
+                })
+                if (data && Array.isArray(data)) {
+                    setRestockVariants(data.map((v: { id: string; name: string; stock: number }) => ({
+                        id: v.id, name: v.name, stock: v.stock
+                    })))
+                }
+            } catch { /* ignore */ }
+            setIsLoadingRestockVariants(false)
+        }
+    }
+
     // 全域補貨
     const handleGlobalRestock = async () => {
         if (!globalRestockSku || !globalRestockQty || !tenant) return
 
+        const selectedProduct = products.find(p => p.sku === globalRestockSku)
+        // 有規格的商品需選擇規格
+        if (selectedProduct?.has_variants && !restockSelectedVariantId) {
+            toast.error('請先選擇要補貨的規格')
+            return
+        }
+
         setIsGlobalRestocking(true)
         try {
-            const { data, error } = await supabase.rpc('restock_product_v2', {
-                p_tenant_id: tenant.id,
-                p_sku: globalRestockSku,
-                p_quantity: parseInt(globalRestockQty),
-            })
+            // 有規格 → 用 variant restock RPC；無規格 → 用 SKU restock
+            const { data, error } = selectedProduct?.has_variants && restockSelectedVariantId
+                ? await supabase.rpc('restock_product_by_id_v1', {
+                    p_product_id: selectedProduct.id,
+                    p_quantity: parseInt(globalRestockQty),
+                    p_variant_id: restockSelectedVariantId,
+                })
+                : await supabase.rpc('restock_product_v2', {
+                    p_tenant_id: tenant.id,
+                    p_sku: globalRestockSku,
+                    p_quantity: parseInt(globalRestockQty),
+                })
 
             if (error) {
                 toast.error('補貨失敗：' + error.message)
@@ -493,6 +540,8 @@ export default function ProductsPage() {
                 setGlobalRestockOpen(false)
                 setGlobalRestockSku('')
                 setGlobalRestockQty('')
+                setRestockVariants([])
+                setRestockSelectedVariantId(null)
                 fetchProducts()
             } else {
                 toast.error(result.message)
@@ -1070,10 +1119,7 @@ export default function ProductsPage() {
                                                         <CommandItem
                                                             key={sku}
                                                             value={`${sku} ${info.name}`}
-                                                            onSelect={() => {
-                                                                setGlobalRestockSku(sku)
-                                                                setGlobalRestockSkuOpen(false)
-                                                            }}
+                                                            onSelect={() => handleSelectRestockSku(sku)}
                                                         >
                                                             <Check
                                                                 className={cn(
@@ -1095,10 +1141,7 @@ export default function ProductsPage() {
                                                     <CommandItem
                                                         key={p.id}
                                                         value={`${p.sku} ${p.name}`}
-                                                        onSelect={() => {
-                                                            setGlobalRestockSku(p.sku)
-                                                            setGlobalRestockSkuOpen(false)
-                                                        }}
+                                                        onSelect={() => handleSelectRestockSku(p.sku)}
                                                     >
                                                         <Check
                                                             className={cn(
@@ -1119,6 +1162,32 @@ export default function ProductsPage() {
                                 </PopoverContent>
                             </Popover>
                         </div>
+                        {/* 規格選擇（有規格的商品才顯示） */}
+                        {restockVariants.length > 0 && (
+                            <div className="space-y-2">
+                                <Label>選擇規格</Label>
+                                {isLoadingRestockVariants ? (
+                                    <p className="text-sm text-muted-foreground">載入規格中...</p>
+                                ) : (
+                                    <div className="flex flex-wrap gap-2">
+                                        {restockVariants.map(v => (
+                                            <Button
+                                                key={v.id}
+                                                type="button"
+                                                variant={restockSelectedVariantId === v.id ? 'default' : 'outline'}
+                                                size="sm"
+                                                className="rounded-xl"
+                                                onClick={() => setRestockSelectedVariantId(v.id)}
+                                            >
+                                                {v.name}
+                                                <span className="ml-1 text-xs opacity-70">({v.stock})</span>
+                                            </Button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         <div className="space-y-2">
                             <Label htmlFor="restock-qty">補貨數量</Label>
                             <Input
@@ -1139,6 +1208,8 @@ export default function ProductsPage() {
                                 setGlobalRestockOpen(false)
                                 setGlobalRestockSku('')
                                 setGlobalRestockQty('')
+                                setRestockVariants([])
+                                setRestockSelectedVariantId(null)
                             }}
                             className="rounded-xl"
                         >
@@ -1146,7 +1217,7 @@ export default function ProductsPage() {
                         </Button>
                         <Button
                             onClick={handleGlobalRestock}
-                            disabled={!globalRestockSku || !globalRestockQty || isGlobalRestocking}
+                            disabled={!globalRestockSku || !globalRestockQty || isGlobalRestocking || (restockVariants.length > 0 && !restockSelectedVariantId)}
                             className="rounded-xl"
                         >
                             {isGlobalRestocking ? '補貨中...' : '確認補貨'}

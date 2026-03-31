@@ -16,6 +16,7 @@ export interface CheckoutItemDetail {
     price_source?: 'product' | 'manual' | 'promotion'
     order_item_id?: string
     original_price?: number | null
+    variant_name?: string | null
 }
 
 // 結帳單列表項目

@@ -979,7 +979,7 @@ export default function CheckoutsPage() {
                                                             <div className="text-xs space-y-0.5">
                                                                 {items.slice(0, 3).map((detail, idx) => (
                                                                     <div key={idx} className="truncate flex justify-between gap-2">
-                                                                        <span className="truncate">{detail.name} x{detail.qty}</span>
+                                                                        <span className="truncate">{detail.name}{detail.variant_name ? `（${detail.variant_name}）` : ''} x{detail.qty}</span>
                                                                         <span className="shrink-0 text-muted-foreground">${detail.subtotal.toLocaleString()}</span>
                                                                     </div>
                                                                 ))}
@@ -1013,7 +1013,7 @@ export default function CheckoutsPage() {
                                                                                     key={idx}
                                                                                     className="flex items-center justify-between px-4 py-2 text-sm border-b last:border-b-0 group"
                                                                                 >
-                                                                                    <span className="truncate mr-2 flex-1">{detail.name}</span>
+                                                                                    <span className="truncate mr-2 flex-1">{detail.name}{detail.variant_name ? `（${detail.variant_name}）` : ''}</span>
                                                                                     <div className="flex items-center gap-2 shrink-0 text-muted-foreground">
                                                                                         <span>x{detail.qty}</span>
                                                                                         <span className="w-16 text-right font-medium text-foreground">

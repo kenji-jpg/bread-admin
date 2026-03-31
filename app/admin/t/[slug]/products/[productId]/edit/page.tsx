@@ -15,7 +15,7 @@ import { Switch } from '@/components/ui/switch'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
-import { ArrowLeft, Upload, X, Loader2, Store, Lock } from 'lucide-react'
+import { ArrowLeft, Upload, X, Loader2, Store, Lock, Plus, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import type { Product } from '@/types/database'
@@ -61,6 +61,14 @@ async function compressImage(file: File, maxWidth = 400, quality = 0.7): Promise
     })
 }
 
+interface EditVariant {
+    id: string
+    name: string
+    stock: number
+    sold_qty: number
+    isNew?: boolean  // 新增的規格（尚未儲存到 DB）
+}
+
 export default function EditProductPage({ params }: { params: Promise<{ productId: string }> }) {
     const { productId } = use(params)
     const router = useRouter()
@@ -89,6 +97,11 @@ export default function EditProductPage({ params }: { params: Promise<{ productI
     const [stock, setStock] = useState(0)
     const [soldQty, setSoldQty] = useState(0)
     const [arrivedAt, setArrivedAt] = useState<string | null>(null)
+
+    // Variant state
+    const [hasVariants, setHasVariants] = useState(false)
+    const [variants, setVariants] = useState<EditVariant[]>([])
+    const [isLoadingVariants, setIsLoadingVariants] = useState(false)
 
     // Image state
     const [imageFile, setImageFile] = useState<File | null>(null)
@@ -128,11 +141,29 @@ export default function EditProductPage({ params }: { params: Promise<{ productI
                 setEndTime(data.end_time ? new Date(data.end_time).toISOString().slice(0, 16) : '')
                 setShowInShop(data.show_in_shop ?? false)
                 setImagePreview(data.image_url)
+                setHasVariants(data.has_variants ?? false)
 
                 // Read-only fields
                 setStock(data.stock)
                 setSoldQty(data.sold_qty)
                 setArrivedAt(data.arrived_at)
+
+                // 載入規格
+                if (data.has_variants) {
+                    setIsLoadingVariants(true)
+                    const { data: variantData } = await supabase.rpc('get_product_variants_v1', {
+                        p_product_id: data.id
+                    })
+                    if (variantData && Array.isArray(variantData)) {
+                        setVariants(variantData.map((v: { id: string; name: string; stock: number; sold_qty: number }) => ({
+                            id: v.id,
+                            name: v.name,
+                            stock: v.stock,
+                            sold_qty: v.sold_qty,
+                        })))
+                    }
+                    setIsLoadingVariants(false)
+                }
             }
             setIsLoading(false)
         }
@@ -242,6 +273,35 @@ export default function EditProductPage({ params }: { params: Promise<{ productI
 
             if (!result.success) {
                 throw new Error(result.error || '更新商品失敗')
+            }
+
+            // 儲存規格變更
+            if (hasVariants) {
+                const variantNames = variants.map(v => v.name.trim())
+                if (variantNames.some(n => !n)) {
+                    toast.error('規格名稱不可為空')
+                    setIsSubmitting(false)
+                    return
+                }
+                if (new Set(variantNames).size !== variantNames.length) {
+                    toast.error('規格名稱不可重複')
+                    setIsSubmitting(false)
+                    return
+                }
+
+                const { error: variantError } = await supabase.rpc('update_product_variants_v1', {
+                    p_product_id: productId,
+                    p_variants: variants.map((v, idx) => ({
+                        id: v.isNew ? null : v.id,
+                        name: v.name.trim(),
+                        stock: v.stock,
+                        sort_order: idx,
+                    }))
+                })
+                if (variantError) {
+                    console.error('Update variants error:', variantError)
+                    toast.warning('商品已更新，但規格儲存失敗')
+                }
             }
 
             toast.success('商品更新成功！')
@@ -469,6 +529,114 @@ export default function EditProductPage({ params }: { params: Promise<{ productI
                                         </p>
                                     </div>
                                 </div>
+                            </CardContent>
+                        </Card>
+
+                        {/* 商品規格 */}
+                        <Card className="border-border/50">
+                            <CardHeader>
+                                <CardTitle>商品規格</CardTitle>
+                                <CardDescription>設定商品的尺寸、顏色等規格選項（同價格不同選項）</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-6">
+                                <div className="flex items-center justify-between">
+                                    <div className="space-y-0.5">
+                                        <Label>此商品有多種規格</Label>
+                                        <p className="text-xs text-muted-foreground">
+                                            開啟後可設定不同規格的獨立庫存
+                                        </p>
+                                    </div>
+                                    <Switch
+                                        checked={hasVariants}
+                                        onCheckedChange={(checked) => {
+                                            setHasVariants(checked)
+                                            if (checked && variants.length === 0) {
+                                                setVariants([{ id: crypto.randomUUID(), name: '', stock: 0, sold_qty: 0, isNew: true }])
+                                            }
+                                        }}
+                                    />
+                                </div>
+
+                                {hasVariants && (
+                                    <div className="space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <Label>規格選項</Label>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => setVariants([...variants, { id: crypto.randomUUID(), name: '', stock: 0, sold_qty: 0, isNew: true }])}
+                                                className="h-8 text-primary"
+                                            >
+                                                <Plus className="mr-1 h-3 w-3" />
+                                                新增規格
+                                            </Button>
+                                        </div>
+
+                                        {isLoadingVariants ? (
+                                            <div className="text-sm text-muted-foreground py-4 text-center">載入規格中...</div>
+                                        ) : (
+                                            <div className="border border-border/50 rounded-xl overflow-hidden">
+                                                <table className="w-full text-sm">
+                                                    <thead className="bg-muted/50">
+                                                        <tr>
+                                                            <th className="px-4 py-2 text-left font-medium text-muted-foreground">規格名稱</th>
+                                                            <th className="px-4 py-2 text-left font-medium text-muted-foreground w-20">庫存</th>
+                                                            <th className="px-4 py-2 text-left font-medium text-muted-foreground w-20">已售</th>
+                                                            <th className="px-4 py-2 text-right w-12"></th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-border/50">
+                                                        {variants.map((variant) => (
+                                                            <tr key={variant.id} className="bg-card">
+                                                                <td className="p-2">
+                                                                    <Input
+                                                                        value={variant.name}
+                                                                        onChange={(e) => setVariants(variants.map(v =>
+                                                                            v.id === variant.id ? { ...v, name: e.target.value } : v
+                                                                        ))}
+                                                                        placeholder="輸入名稱"
+                                                                        className="h-9 rounded-lg border-0 bg-muted/50 focus-visible:bg-background focus-visible:ring-1"
+                                                                    />
+                                                                </td>
+                                                                <td className="p-2">
+                                                                    <Input
+                                                                        type="number"
+                                                                        value={variant.stock}
+                                                                        onChange={(e) => setVariants(variants.map(v =>
+                                                                            v.id === variant.id ? { ...v, stock: parseInt(e.target.value) || 0 } : v
+                                                                        ))}
+                                                                        className="h-9 rounded-lg border-0 bg-muted/50 focus-visible:bg-background focus-visible:ring-1"
+                                                                    />
+                                                                </td>
+                                                                <td className="p-2 text-center text-muted-foreground">
+                                                                    {variant.sold_qty}
+                                                                </td>
+                                                                <td className="p-2 text-right">
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant="ghost"
+                                                                        size="icon"
+                                                                        onClick={() => {
+                                                                            if (variants.length <= 1) {
+                                                                                toast.error('至少需要一個規格選項')
+                                                                                return
+                                                                            }
+                                                                            setVariants(variants.filter(v => v.id !== variant.id))
+                                                                        }}
+                                                                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                                                    >
+                                                                        <Trash2 className="h-4 w-4" />
+                                                                    </Button>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </CardContent>
                         </Card>
                     </div>

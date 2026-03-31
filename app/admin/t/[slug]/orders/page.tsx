@@ -76,11 +76,14 @@ type OrderWithDetails = OrderItem & {
     auction_order?: { product_name: string | null }[]
 }
 
-// 取得商品顯示名稱（優先順序：product.name → auction_order.product_name → item_name）
+// 取得商品顯示名稱（優先順序：product.name → auction_order.product_name → item_name）+ 規格名
 function getProductDisplayName(order: OrderWithDetails): string {
-    if (order.product?.name) return order.product.name
-    if (order.auction_order?.[0]?.product_name) return order.auction_order[0].product_name
-    return order.item_name || '-'
+    let name = '-'
+    if (order.product?.name) name = order.product.name
+    else if (order.auction_order?.[0]?.product_name) name = order.auction_order[0].product_name
+    else if (order.item_name) name = order.item_name
+    if (order.variant_name) name += `（${order.variant_name}）`
+    return name
 }
 
 export default function OrdersPage() {

@@ -97,6 +97,7 @@ export interface Product {
   sold_qty: number
   arrived_at: string | null
   show_in_shop: boolean
+  has_variants: boolean
   created_at: string
   updated_at: string
 }
@@ -127,6 +128,7 @@ export interface OrderItem {
   checkout_id: string | null
   sku: string
   item_name: string | null
+  variant_name: string | null
   quantity: number
   arrived_qty: number  // 已到貨數量（0 ~ quantity）
   unit_price: number
