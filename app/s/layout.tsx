@@ -13,8 +13,8 @@ import { LiffProvider } from '@/hooks/use-liff'
  * 4. sessionStorage：外部瀏覽器 fallback
  */
 function extractSlug(pathname: string): string | undefined {
-  // 1. 直接從 pathname
-  const pathMatch = pathname.match(/\/s\/shop\/([\w-]+)/)
+  // 1. 直接從 pathname（支援 /s/shop/ 和 /shop/ 兩種路徑）
+  const pathMatch = pathname.match(/\/(?:s\/)?shop\/([\w-]+)/)
   if (pathMatch?.[1]) return pathMatch[1]
 
   // 以下需要 window（客戶端）
@@ -27,7 +27,7 @@ function extractSlug(pathname: string): string | undefined {
   if (liffState) {
     try {
       const decoded = decodeURIComponent(liffState)
-      const stateMatch = decoded.match(/\/s\/shop\/([\w-]+)/)
+      const stateMatch = decoded.match(/\/(?:s\/)?shop\/([\w-]+)/)
       if (stateMatch?.[1]) return stateMatch[1]
     } catch { /* ignore */ }
   }
@@ -37,7 +37,7 @@ function extractSlug(pathname: string): string | undefined {
   if (redirectUri) {
     try {
       const decoded = decodeURIComponent(redirectUri)
-      const uriMatch = decoded.match(/\/s\/shop\/([\w-]+)/)
+      const uriMatch = decoded.match(/\/(?:s\/)?shop\/([\w-]+)/)
       if (uriMatch?.[1]) return uriMatch[1]
     } catch { /* ignore */ }
   }
@@ -46,7 +46,7 @@ function extractSlug(pathname: string): string | undefined {
   try {
     const saved = sessionStorage.getItem('liff_return_path')
     if (saved) {
-      const savedMatch = saved.match(/\/s\/shop\/([\w-]+)/)
+      const savedMatch = saved.match(/\/(?:s\/)?shop\/([\w-]+)/)
       if (savedMatch?.[1]) return savedMatch[1]
     }
   } catch { /* ignore */ }

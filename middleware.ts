@@ -31,8 +31,31 @@ export async function middleware(request: NextRequest) {
 
     const pathname = request.nextUrl.pathname
 
+    // === /shop/* 智慧路由：乾淨 URL 入口 ===
+    // LINE 瀏覽器 → 跳轉 LIFF URL（無縫登入）
+    // 外部瀏覽器 → rewrite 到 /s/shop/*（URL 維持 /shop/*）
+    if (pathname.startsWith('/shop/') && pathname !== '/shop/') {
+        const userAgent = request.headers.get('user-agent') || ''
+        const isLine = /Line\//i.test(userAgent)
+
+        if (isLine) {
+            const slug = pathname.split('/shop/')[1]?.split('?')[0]
+            const liffId = process.env.NEXT_PUBLIC_LIFF_ID
+            if (liffId && slug) {
+                return NextResponse.redirect(
+                    new URL(`https://liff.line.me/${liffId}/s/shop/${slug}`)
+                )
+            }
+        }
+
+        // 外部瀏覽器：內部 rewrite 到 /s/shop/*，瀏覽器 URL 不變
+        const url = request.nextUrl.clone()
+        url.pathname = '/s' + pathname // /shop/x → /s/shop/x
+        return NextResponse.rewrite(url)
+    }
+
     // 不需要 auth 檢查的路由（避免循環或干擾 LIFF）
-    const skipAuthPaths = ['/auth/redirect', '/auth/callback', '/s']
+    const skipAuthPaths = ['/auth/redirect', '/auth/callback', '/s', '/shop']
     const shouldSkipAuth = skipAuthPaths.some(path =>
         pathname === path || pathname.startsWith(`${path}/`)
     )

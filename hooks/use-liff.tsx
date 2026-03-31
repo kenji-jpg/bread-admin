@@ -45,12 +45,22 @@ export function getLiffShareUrl(path: string, customLiffId?: string): string {
 }
 
 /**
- * 產生商城 LIFF 分享連結
+ * 產生商城 LIFF 分享連結（LINE 內部用）
  * 例如 → https://liff.line.me/{liffId}/s/shop/{tenantSlug}
  * 必須傳入 customLiffId（租戶專屬 LIFF ID）
  */
 export function getShopShareUrl(tenantSlug: string, customLiffId?: string): string {
   return getLiffShareUrl(`/s/shop/${tenantSlug}`, customLiffId)
+}
+
+/**
+ * 產生商城乾淨分享連結（外部分享用）
+ * 例如 → https://www.plushub.cc/shop/{tenantSlug}
+ * LINE 瀏覽器開啟時 middleware 會自動跳轉 LIFF URL
+ */
+export function getShopCleanUrl(tenantSlug: string): string {
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://www.plushub.cc'
+  return `${origin}/shop/${tenantSlug}`
 }
 
 interface LiffProviderProps {
@@ -88,7 +98,7 @@ export function LiffProvider({ children, liffId: tenantLiffId }: LiffProviderPro
         // 先存住當前路徑，登入後回到 /s 時可以 redirect 回來
         const currentPath = window.location.pathname + window.location.search
         const pathOnly = window.location.pathname
-        if (pathOnly.startsWith('/s/') && !window.location.search.includes('code=')) {
+        if ((pathOnly.startsWith('/s/') || pathOnly.startsWith('/shop/')) && !window.location.search.includes('code=')) {
           sessionStorage.setItem('liff_return_path', pathOnly)
         }
 

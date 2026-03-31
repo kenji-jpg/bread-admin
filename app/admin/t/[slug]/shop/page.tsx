@@ -301,13 +301,10 @@ export default function ShopManagePage() {
         ))
     }
 
-    // Copy LIFF URL（優先使用租戶專屬 LIFF ID）
+    // Copy 商城連結（使用乾淨 URL，LINE 瀏覽器開啟時 middleware 自動跳轉 LIFF）
     const copyLiffUrl = () => {
         if (!tenant?.slug) return
-        const liffId = tenant.liff_id || process.env.NEXT_PUBLIC_LIFF_ID || ''
-        const url = liffId
-            ? `https://liff.line.me/${liffId}/s/shop/${tenant.slug}`
-            : `${window.location.origin}/s/shop/${tenant.slug}`
+        const url = `${window.location.origin}/shop/${tenant.slug}`
         navigator.clipboard.writeText(url)
         setCopied(true)
         toast.success('已複製商城連結')
@@ -401,7 +398,7 @@ export default function ShopManagePage() {
                         variant="outline"
                         size="sm"
                         onClick={() => {
-                            const url = `/s/shop/${tenant?.slug}`
+                            const url = `/shop/${tenant?.slug}`
                             window.open(url, '_blank')
                         }}
                         className="gap-1.5"
