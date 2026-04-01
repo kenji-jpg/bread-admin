@@ -154,8 +154,9 @@ export default function EditProductPage({ params }: { params: Promise<{ productI
                     const { data: variantData } = await supabase.rpc('get_product_variants_v1', {
                         p_product_id: data.id
                     })
-                    if (variantData && Array.isArray(variantData)) {
-                        setVariants(variantData.map((v: { id: string; name: string; stock: number; sold_qty: number }) => ({
+                    const variantList = variantData?.variants ?? variantData
+                    if (variantList && Array.isArray(variantList)) {
+                        setVariants(variantList.map((v: { id: string; name: string; stock: number; sold_qty: number }) => ({
                             id: v.id,
                             name: v.name,
                             stock: v.stock,
