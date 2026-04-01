@@ -343,16 +343,21 @@ export default function ShopPage() {
     if (!profile?.userId || !isStaff || !tenant) return
 
     try {
+      console.log('[Shop] loadAllOrders called:', { tenantId: tenant.id, lineUserId: profile.userId })
       const { data, error } = await supabase.rpc('get_shop_all_orders_v1', {
         p_tenant_id: tenant.id,
         p_line_user_id: profile.userId,
       })
+
+      console.log('[Shop] loadAllOrders result:', { data, error })
 
       if (error) throw error
 
       if (data.success) {
         setAllOrders(data.orders || [])
         setStaffStats(data.stats || null)
+      } else {
+        console.warn('[Shop] loadAllOrders RPC failed:', data.error)
       }
     } catch (err) {
       console.error('Load all orders error:', err)
@@ -1080,15 +1085,15 @@ export default function ShopPage() {
       {/* Announcement Banner */}
       {shopSettings.announcement && (
         <div
-          className="px-4 py-2.5 text-xs font-medium"
+          className="px-4 py-3 text-sm font-medium"
           style={{
-            backgroundColor: accentColor || '#8b5e3c',
+            background: `linear-gradient(135deg, ${accentColor || '#D94E2B'}, ${accentColor ? accentColor + 'dd' : '#C44425'})`,
             color: '#fff8f0',
           }}
         >
-          <div className="flex items-center gap-1.5">
-            <Megaphone className="w-3.5 h-3.5 shrink-0 opacity-80" />
-            <span>{shopSettings.announcement}</span>
+          <div className="flex items-start gap-2">
+            <Megaphone className="w-4 h-4 shrink-0 mt-0.5 opacity-90" />
+            <span className="leading-relaxed">{shopSettings.announcement}</span>
           </div>
         </div>
       )}
@@ -1233,8 +1238,9 @@ export default function ShopPage() {
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.03 }}
-                  className={`relative rounded-2xl overflow-hidden transition-all ${(isUnavailable && !isStaff) ? 'opacity-60' : 'cursor-pointer'
+                  className={`relative rounded-2xl overflow-hidden transition-all shadow-sm hover:shadow-md flex flex-col ${(isUnavailable && !isStaff) ? 'opacity-60' : 'cursor-pointer'
                     } ${isInactive && isStaff ? 'opacity-50' : ''}`}
+                  style={{ backgroundColor: '#ffffff' }}
                   onClick={() => {
                     if (isStaff) {
                       handleSelectProduct(product)
@@ -1282,7 +1288,7 @@ export default function ShopPage() {
                   </div>
 
                   {/* 商品圖片 */}
-                  <div className="aspect-square relative rounded-2xl overflow-hidden" style={{ backgroundColor: '#F5E0C4' }}>
+                  <div className="aspect-[3/4] relative overflow-hidden" style={{ backgroundColor: '#F5E0C4' }}>
                     {product.image_url ? (
                       <Image
                         src={product.image_url}
@@ -1318,9 +1324,9 @@ export default function ShopPage() {
                   </div>
 
                   {/* 商品資訊 */}
-                  <div className="p-2.5" style={{ backgroundColor: '#FEF0DB' }}>
-                    <p className="text-sm leading-tight line-clamp-2" style={{ color: '#4A2C17' }}>{product.name}</p>
-                    <div className="flex items-baseline gap-1 mt-1">
+                  <div className="p-2.5 flex flex-col flex-1" style={{ backgroundColor: '#ffffff' }}>
+                    <p className="text-sm leading-tight line-clamp-2 min-h-[2.5em]" style={{ color: '#4A2C17' }}>{product.name}</p>
+                    <div className="flex items-baseline gap-1 mt-1.5">
                       <span className="text-xs" style={{ color: '#8B6B4A' }}>$</span>
                       <span className="text-base font-bold" style={{ color: accentColor || '#8b5e3c' }}>{product.price.toLocaleString()}</span>
                       {mode === 'stock' && product.stock !== null && product.stock > 0 && (
@@ -1335,7 +1341,7 @@ export default function ShopPage() {
 
                     {/* 管理員：顯示分配狀態 */}
                     {isStaff && pStats && (
-                      <div className="mt-1.5 pt-1.5 border-t">
+                      <div className="mt-1.5 pt-1.5 border-t" style={{ borderColor: '#F5E0C4' }}>
                         <div className="flex items-center justify-between text-[10px] text-muted-foreground">
                           <span>
                             已配 {pStats.allocated}/{pStats.total}
@@ -1347,7 +1353,6 @@ export default function ShopPage() {
                       </div>
                     )}
 
-                    {/* 管理員商品卡不需要按鈕，顧客點擊卡片直接開喊單面板 */}
                   </div>
                 </motion.div>
               )
@@ -1458,27 +1463,27 @@ export default function ShopPage() {
                   return (
                     <div className="space-y-3">
                       {/* 訂單統計 */}
-                      <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-xl text-sm">
+                      <div className="flex items-center gap-3 p-3 rounded-xl text-sm" style={{ backgroundColor: '#F5E0C4' }}>
                         <div className="flex-1 text-center">
-                          <p className="text-lg font-bold">{pStats.total}</p>
-                          <p className="text-xs text-muted-foreground">總訂單</p>
+                          <p className="text-lg font-bold" style={{ color: '#4A2C17' }}>{pStats.total}</p>
+                          <p className="text-xs" style={{ color: '#8B6B4A' }}>總訂單</p>
                         </div>
                         <div className="flex-1 text-center">
-                          <p className="text-lg font-bold text-green-600">{pStats.allocated}</p>
-                          <p className="text-xs text-muted-foreground">已分配</p>
+                          <p className="text-lg font-bold" style={{ color: '#4A7C3F' }}>{pStats.allocated}</p>
+                          <p className="text-xs" style={{ color: '#8B6B4A' }}>已分配</p>
                         </div>
                         <div className="flex-1 text-center">
-                          <p className="text-lg font-bold text-orange-600">{pStats.pending}</p>
-                          <p className="text-xs text-muted-foreground">待處理</p>
+                          <p className="text-lg font-bold" style={{ color: '#D94E2B' }}>{pStats.pending}</p>
+                          <p className="text-xs" style={{ color: '#8B6B4A' }}>待處理</p>
                         </div>
                       </div>
 
                       {/* 操作按鈕 */}
                       <div className="grid grid-cols-2 gap-2">
                         {/* 補貨 */}
-                        <Button
-                          variant="outline"
-                          className="h-12 border-purple-200 text-purple-700 dark:border-purple-800 dark:text-purple-400"
+                        <button
+                          className="h-12 rounded-xl text-sm font-medium flex items-center justify-center gap-1"
+                          style={{ backgroundColor: '#7C3AED', color: '#fff' }}
                           onClick={async () => {
                             const prod = selectedProduct
                             setRestockProduct(prod)
@@ -1495,27 +1500,27 @@ export default function ShopPage() {
                             }
                           }}
                         >
-                          <PackagePlus className="w-4 h-4 mr-1" />
+                          <PackagePlus className="w-4 h-4" />
                           補貨
-                        </Button>
+                        </button>
 
                         {/* 截止 / 延長 */}
                         {!isExpiredProduct ? (
-                          <Button
-                            variant="outline"
-                            className="h-12 border-red-200 text-red-700 dark:border-red-800 dark:text-red-400"
+                          <button
+                            className="h-12 rounded-xl text-sm font-medium flex items-center justify-center gap-1"
+                            style={{ backgroundColor: '#DC2626', color: '#fff' }}
                             onClick={() => {
                               handleUpdateEndTime(selectedProduct.id, new Date())
                               setSelectedProduct(null)
                             }}
                           >
-                            <TimerOff className="w-4 h-4 mr-1" />
+                            <TimerOff className="w-4 h-4" />
                             截止收單
-                          </Button>
+                          </button>
                         ) : (
-                          <Button
-                            variant="outline"
-                            className="h-12 border-green-200 text-green-700 dark:border-green-800 dark:text-green-400"
+                          <button
+                            className="h-12 rounded-xl text-sm font-medium flex items-center justify-center gap-1"
+                            style={{ backgroundColor: '#16A34A', color: '#fff' }}
                             onClick={() => {
                               handleUpdateEndTime(
                                 selectedProduct.id,
@@ -1524,16 +1529,16 @@ export default function ShopPage() {
                               setSelectedProduct(null)
                             }}
                           >
-                            <TimerReset className="w-4 h-4 mr-1" />
+                            <TimerReset className="w-4 h-4" />
                             延長 1 小時
-                          </Button>
+                          </button>
                         )}
 
                         {/* 上架 / 下架 */}
                         {selectedProduct.status !== 'active' ? (
-                          <Button
-                            variant="outline"
-                            className="h-12 border-green-200 text-green-700 dark:border-green-800 dark:text-green-400"
+                          <button
+                            className="h-12 rounded-xl text-sm font-medium flex items-center justify-center gap-1 disabled:opacity-40"
+                            style={{ backgroundColor: '#16A34A', color: '#fff' }}
                             onClick={() => {
                               handleToggleProduct(selectedProduct.id, 'activate')
                               setSelectedProduct(null)
@@ -1544,15 +1549,15 @@ export default function ShopPage() {
                               <Loader2 className="w-4 h-4 animate-spin" />
                             ) : (
                               <>
-                                <Eye className="w-4 h-4 mr-1" />
+                                <Eye className="w-4 h-4" />
                                 上架
                               </>
                             )}
-                          </Button>
+                          </button>
                         ) : (
-                          <Button
-                            variant="outline"
-                            className="h-12 border-gray-200 text-gray-700 dark:border-gray-700 dark:text-gray-400"
+                          <button
+                            className="h-12 rounded-xl text-sm font-medium flex items-center justify-center gap-1 disabled:opacity-40"
+                            style={{ backgroundColor: '#E8D5BE', color: '#4A2C17' }}
                             onClick={() => {
                               handleToggleProduct(selectedProduct.id, 'deactivate')
                               setSelectedProduct(null)
@@ -1563,22 +1568,22 @@ export default function ShopPage() {
                               <Loader2 className="w-4 h-4 animate-spin" />
                             ) : (
                               <>
-                                <EyeOff className="w-4 h-4 mr-1" />
+                                <EyeOff className="w-4 h-4" />
                                 下架
                               </>
                             )}
-                          </Button>
+                          </button>
                         )}
 
                         {/* 關閉 */}
-                        <Button
-                          variant="outline"
-                          className="h-12"
+                        <button
+                          className="h-12 rounded-xl text-sm font-medium flex items-center justify-center gap-1"
+                          style={{ border: '1px solid #E8D5BE', backgroundColor: '#FFF8F0', color: '#8B6B4A' }}
                           onClick={() => setSelectedProduct(null)}
                         >
-                          <X className="w-4 h-4 mr-1" />
+                          <X className="w-4 h-4" />
                           關閉
-                        </Button>
+                        </button>
                       </div>
                     </div>
                   )
