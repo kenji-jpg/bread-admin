@@ -99,6 +99,7 @@ interface Product {
   is_sold_out: boolean
   created_at: string
   has_variants?: boolean
+  variants?: { name: string; stock: number }[]
 }
 
 interface ProductVariant {
@@ -1341,6 +1342,27 @@ export default function ShopPage() {
                     </div>
                     {product.is_limited && product.limit_qty && (
                       <p className="text-[10px] mt-0.5" style={{ color: '#D94E2B' }}>限購 {product.limit_qty}</p>
+                    )}
+
+                    {/* 規格標籤 */}
+                    {product.has_variants && product.variants && product.variants.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {product.variants.map((v) => {
+                          const isSoldOut = product.is_limited && v.stock <= 0
+                          return (
+                            <span
+                              key={v.name}
+                              className={`text-[10px] px-1.5 py-0.5 rounded-md ${isSoldOut ? 'line-through opacity-40' : ''}`}
+                              style={{
+                                backgroundColor: isSoldOut ? '#E8D5BE' : '#F5E0C4',
+                                color: '#4A2C17',
+                              }}
+                            >
+                              {v.name}
+                            </span>
+                          )
+                        })}
+                      </div>
                     )}
 
                     {/* 管理員：顯示分配狀態 */}
