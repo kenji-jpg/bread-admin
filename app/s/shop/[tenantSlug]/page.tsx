@@ -1243,7 +1243,7 @@ export default function ShopPage() {
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.03 }}
-                  className={`relative rounded-2xl overflow-hidden transition-all flex flex-col ${(isUnavailable && !isStaff) ? 'opacity-60' : 'cursor-pointer'
+                  className={`relative transition-all flex flex-col ${(isUnavailable && !isStaff) ? 'opacity-60' : 'cursor-pointer'
                     } ${isInactive && isStaff ? 'opacity-50' : ''}`}
                   onClick={() => {
                     if (isStaff) {
@@ -1292,7 +1292,7 @@ export default function ShopPage() {
                   </div>
 
                   {/* 商品圖片 */}
-                  <div className="aspect-square relative overflow-hidden" style={{ backgroundColor: '#F5E0C4' }}>
+                  <div className="aspect-square relative overflow-hidden rounded-2xl" style={{ backgroundColor: '#F5E0C4' }}>
                     {product.image_url ? (
                       <Image
                         src={product.image_url}
