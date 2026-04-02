@@ -1409,7 +1409,7 @@ export default function ShopPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/40"
+            className="fixed inset-0 z-50 bg-black/40 flex justify-center"
             onClick={() => { setSelectedProduct(null); setCarouselIndex(0) }}
           >
             <motion.div
@@ -1417,7 +1417,7 @@ export default function ShopPage() {
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 25 }}
-              className="absolute inset-x-0 top-12 bottom-0 rounded-t-2xl overflow-y-auto safe-bottom"
+              className="absolute inset-x-0 top-12 bottom-0 rounded-t-2xl overflow-y-auto safe-bottom max-w-lg mx-auto"
               style={{ backgroundColor: '#FFF8F0' }}
               onClick={(e) => e.stopPropagation()}
             >
@@ -1833,9 +1833,10 @@ export default function ShopPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/40"
+            className="fixed inset-0 z-50 bg-black/40 flex justify-center"
             onClick={() => setIsOrderDrawerOpen(false)}
           >
+            <div className="relative w-full max-w-lg h-full">
             <motion.div
               initial={{ x: '100%' }}
               animate={{ x: 0 }}
@@ -1931,6 +1932,7 @@ export default function ShopPage() {
                 </div>
               )}
             </motion.div>
+            </div>
           </motion.div>
           )
         })()}
@@ -1943,7 +1945,7 @@ export default function ShopPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/50 flex items-end justify-center"
+            className="fixed inset-0 z-50 bg-black/50 flex justify-center items-end"
             onClick={closeCheckoutModal}
           >
             <motion.div
@@ -2251,9 +2253,10 @@ export default function ShopPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/50"
+            className="fixed inset-0 z-50 bg-black/50 flex justify-center"
             onClick={() => setIsAdminPanelOpen(false)}
           >
+            <div className="relative w-full max-w-lg h-full">
             <motion.div
               initial={{ x: '100%' }}
               animate={{ x: 0 }}
@@ -2363,6 +2366,7 @@ export default function ShopPage() {
                 )}
               </div>
             </motion.div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -2374,7 +2378,7 @@ export default function ShopPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[60] bg-black/50"
+            className="fixed inset-0 z-[60] bg-black/50 flex justify-center"
             onClick={() => setIsAddProductOpen(false)}
           >
             <motion.div
@@ -2382,7 +2386,7 @@ export default function ShopPage() {
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 25 }}
-              className="absolute bottom-0 left-0 right-0 bg-background rounded-t-2xl p-4 safe-bottom"
+              className="absolute bottom-0 left-0 right-0 bg-background rounded-t-2xl p-4 safe-bottom max-w-lg mx-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <h3 className="text-lg font-bold mb-4">上架新商品</h3>
@@ -2692,7 +2696,7 @@ export default function ShopPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[60] bg-black/50"
+            className="fixed inset-0 z-[60] bg-black/50 flex justify-center"
             onClick={() => setRestockProduct(null)}
           >
             <motion.div
@@ -2700,7 +2704,7 @@ export default function ShopPage() {
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 25 }}
-              className="absolute bottom-0 left-0 right-0 bg-background rounded-t-2xl p-4 safe-bottom"
+              className="absolute bottom-0 left-0 right-0 bg-background rounded-t-2xl p-4 safe-bottom max-w-lg mx-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <h3 className="text-lg font-bold mb-1">補貨 - {restockProduct.name}</h3>
