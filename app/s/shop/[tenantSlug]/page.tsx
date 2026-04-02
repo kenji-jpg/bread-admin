@@ -1259,38 +1259,28 @@ export default function ShopPage() {
                     handleSelectProduct(product)
                   }}
                 >
-                  {/* 左上 badges：已售數量 */}
+                  {/* 右上 badge：即時銷售 */}
                   {product.sold_qty > 0 && (
                     <motion.div
                       key={product.sold_qty}
                       initial={{ scale: 1.3 }}
                       animate={{ scale: 1 }}
-                      className={`absolute top-1.5 left-1.5 z-10 px-1.5 py-0.5 rounded-full text-xs font-bold text-white ${isHot ? 'bg-red-500' : 'bg-black/60'
-                        }`}
+                      className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-1 rounded-full text-white font-bold"
+                      style={{ backgroundColor: isHot ? '#DC2626' : 'rgba(0,0,0,0.55)' }}
                     >
-                      +{product.sold_qty}
-                      {isHot && <Flame className="inline w-3 h-3 ml-0.5" />}
+                      {isHot && <Flame className="w-3.5 h-3.5" />}
+                      <span className="text-sm">+{product.sold_qty}</span>
+                      {isHot && <span className="text-[10px] font-medium">熱銷中</span>}
                     </motion.div>
                   )}
 
-                  {/* 右上 badges：預購/現貨 + 倒數時間 */}
-                  <div className="absolute top-1.5 right-1.5 z-10 flex flex-col items-end gap-0.5">
-                    <div
-                      className="px-1.5 py-0.5 rounded-full text-[10px] font-medium"
-                      style={{
-                        backgroundColor: mode === 'stock' ? '#6B8E5E' : '#D94E2B',
-                        color: '#fff8f0',
-                      }}
-                    >
-                      {mode === 'stock' ? '現貨' : '預購'}
+                  {/* 左上 badge：倒數時間 */}
+                  {timeRemaining && (
+                    <div className="absolute top-2 left-2 z-10 px-1.5 py-0.5 rounded-full text-[10px] bg-orange-500 text-white">
+                      <Clock className="inline w-3 h-3 mr-0.5" />
+                      {timeRemaining}
                     </div>
-                    {timeRemaining && (
-                      <div className="px-1.5 py-0.5 rounded-full text-[10px] bg-orange-500 text-white">
-                        <Clock className="inline w-3 h-3 mr-0.5" />
-                        {timeRemaining}
-                      </div>
-                    )}
-                  </div>
+                  )}
 
                   {/* 商品圖片 */}
                   <div className="aspect-square relative overflow-hidden rounded-2xl" style={{ backgroundColor: '#F5E0C4' }}>
@@ -1330,7 +1320,18 @@ export default function ShopPage() {
 
                   {/* 商品資訊 */}
                   <div className="p-2.5 flex flex-col flex-1">
-                    <p className="text-sm leading-tight line-clamp-2" style={{ color: '#4A2C17' }}>{product.name}</p>
+                    <div className="flex items-start gap-1.5">
+                      <span
+                        className="shrink-0 mt-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+                        style={{
+                          backgroundColor: mode === 'stock' ? '#6B8E5E' : '#D94E2B',
+                          color: '#fff8f0',
+                        }}
+                      >
+                        {mode === 'stock' ? '現貨' : '預購'}
+                      </span>
+                      <p className="text-sm leading-tight line-clamp-2" style={{ color: '#4A2C17' }}>{product.name}</p>
+                    </div>
                     <div className="flex items-baseline gap-1 mt-0.5">
                       <span className="text-xs" style={{ color: '#8B6B4A' }}>$</span>
                       <span className="text-base font-bold" style={{ color: accentColor || '#8b5e3c' }}>{product.price.toLocaleString()}</span>
