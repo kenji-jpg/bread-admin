@@ -93,6 +93,7 @@ export interface Product {
   category: string | null
   description: string | null
   image_url: string | null
+  image_urls: string[] | null
   end_time: string | null
   sold_qty: number
   arrived_at: string | null

@@ -156,43 +156,52 @@ export default function NewProductPage() {
         ))
     }
 
-    // Image state
-    const [imageFile, setImageFile] = useState<File | null>(null)
-    const [imagePreview, setImagePreview] = useState<string | null>(null)
+    // Image state (支援最多 5 張)
+    const [imageFiles, setImageFiles] = useState<File[]>([])
+    const [imagePreviews, setImagePreviews] = useState<string[]>([])
     const [isUploading, setIsUploading] = useState(false)
     const [isSubmitting, setIsSubmitting] = useState(false)
 
     const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0]
-        if (!file) return
+        const files = Array.from(e.target.files || [])
+        if (!files.length) return
 
-        // 驗證檔案類型
-        if (!file.type.startsWith('image/')) {
-            toast.error('請選擇圖片檔案')
+        const remaining = 5 - imageFiles.length
+        if (remaining <= 0) {
+            toast.error('最多上傳 5 張圖片')
             return
         }
+        const selected = files.slice(0, remaining)
 
-        // 驗證檔案大小（最大 10MB）
-        if (file.size > 10 * 1024 * 1024) {
-            toast.error('圖片大小不能超過 10MB')
-            return
+        for (const file of selected) {
+            if (!file.type.startsWith('image/')) {
+                toast.error('請選擇圖片檔案')
+                return
+            }
+            if (file.size > 10 * 1024 * 1024) {
+                toast.error('圖片大小不能超過 10MB')
+                return
+            }
         }
 
-        setImageFile(file)
         // 建立預覽
-        const reader = new FileReader()
-        reader.onload = (e) => {
-            setImagePreview(e.target?.result as string)
-        }
-        reader.readAsDataURL(file)
+        const newPreviews = await Promise.all(
+            selected.map(file => new Promise<string>((resolve) => {
+                const reader = new FileReader()
+                reader.onload = (e) => resolve(e.target?.result as string)
+                reader.readAsDataURL(file)
+            }))
+        )
+
+        setImageFiles(prev => [...prev, ...selected])
+        setImagePreviews(prev => [...prev, ...newPreviews])
+
+        if (fileInputRef.current) fileInputRef.current.value = ''
     }
 
-    const removeImage = () => {
-        setImageFile(null)
-        setImagePreview(null)
-        if (fileInputRef.current) {
-            fileInputRef.current.value = ''
-        }
+    const removeImage = (index: number) => {
+        setImageFiles(prev => prev.filter((_, i) => i !== index))
+        setImagePreviews(prev => prev.filter((_, i) => i !== index))
     }
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -225,37 +234,38 @@ export default function NewProductPage() {
             // 如果用戶有輸入 SKU 就用用戶的，否則用前端生成的（僅用於圖片檔名）
             const imageSku = sku.trim() || generateSKU()
             let imageUrl: string | null = null
+            let imageUrls: string[] = []
 
             // 上傳圖片（如果有）
-            if (imageFile) {
+            if (imageFiles.length > 0) {
                 setIsUploading(true)
                 try {
-                    // 壓縮圖片
-                    const compressedBlob = await compressImage(imageFile)
-                    const compressedFile = new File([compressedBlob], `${imageSku}.webp`, {
-                        type: 'image/webp',
-                    })
-
-                    // 上傳到 Supabase Storage
-                    const filePath = `${tenant.id}/products/${imageSku}.webp`
-                    const { data: uploadData, error: uploadError } = await supabase.storage
-                        .from('product-images')
-                        .upload(filePath, compressedFile, {
-                            cacheControl: '3600',
-                            upsert: true,
+                    for (let i = 0; i < imageFiles.length; i++) {
+                        const compressedBlob = await compressImage(imageFiles[i])
+                        const fileName = `${imageSku}-${i + 1}-${Date.now()}.webp`
+                        const compressedFile = new File([compressedBlob], fileName, {
+                            type: 'image/webp',
                         })
 
-                    if (uploadError) {
-                        console.error('Upload error:', uploadError)
-                        // 如果 bucket 不存在，繼續但不使用圖片
-                        toast.warning('圖片上傳失敗，將建立不含圖片的商品')
-                    } else {
-                        // 取得公開 URL
-                        const { data: { publicUrl } } = supabase.storage
+                        const filePath = `${tenant.id}/products/${fileName}`
+                        const { error: uploadError } = await supabase.storage
                             .from('product-images')
-                            .getPublicUrl(filePath)
-                        imageUrl = publicUrl
+                            .upload(filePath, compressedFile, {
+                                cacheControl: '3600',
+                                upsert: true,
+                            })
+
+                        if (uploadError) {
+                            console.error('Upload error:', uploadError)
+                            toast.warning(`第 ${i + 1} 張圖片上傳失敗`)
+                        } else {
+                            const { data: { publicUrl } } = supabase.storage
+                                .from('product-images')
+                                .getPublicUrl(filePath)
+                            imageUrls.push(publicUrl)
+                        }
                     }
+                    imageUrl = imageUrls[0] || null
                 } catch (compressError) {
                     console.error('Compress error:', compressError)
                     toast.warning('圖片處理失敗，將建立不含圖片的商品')
@@ -295,6 +305,7 @@ export default function NewProductPage() {
                     p_is_limited: isLimited,
                     p_end_time: endTime ? new Date(endTime).toISOString() : null,
                     p_image_url: imageUrl,
+                    p_image_urls: imageUrls.length > 0 ? imageUrls : null,
                     p_description: description.trim() || null,
                     p_cost: cost ? parseFloat(cost) : null,
                     p_category: category.trim() || null,
@@ -318,6 +329,7 @@ export default function NewProductPage() {
                     p_is_limited: isLimited,
                     p_end_time: endTime ? new Date(endTime).toISOString() : null,
                     p_image_url: imageUrl,
+                    p_image_urls: imageUrls.length > 0 ? imageUrls : null,
                     p_description: description.trim() || null,
                     p_cost: cost ? parseFloat(cost) : null,
                     p_category: category.trim() || null,
@@ -671,49 +683,51 @@ export default function NewProductPage() {
                                     ref={fileInputRef}
                                     type="file"
                                     accept="image/*"
+                                    multiple
                                     onChange={handleImageSelect}
                                     className="hidden"
                                 />
 
-                                {imagePreview ? (
-                                    <div className="relative">
-                                        <div className="aspect-square rounded-xl overflow-hidden border border-border/50">
-                                            <img
-                                                src={imagePreview}
-                                                alt="預覽"
-                                                className="w-full h-full object-cover"
-                                            />
+                                <div className="grid grid-cols-3 gap-3">
+                                    {imagePreviews.map((preview, index) => (
+                                        <div key={index} className="relative">
+                                            <div className="aspect-square rounded-xl overflow-hidden border border-border/50">
+                                                <img
+                                                    src={preview}
+                                                    alt={`預覽 ${index + 1}`}
+                                                    className="w-full h-full object-cover"
+                                                />
+                                            </div>
+                                            {index === 0 && (
+                                                <span className="absolute top-2 left-2 bg-primary text-primary-foreground text-[10px] font-medium px-1.5 py-0.5 rounded-md">
+                                                    主圖
+                                                </span>
+                                            )}
+                                            <Button
+                                                type="button"
+                                                variant="destructive"
+                                                size="icon"
+                                                className="absolute top-2 right-2 h-6 w-6 rounded-full"
+                                                onClick={() => removeImage(index)}
+                                            >
+                                                <X className="h-3 w-3" />
+                                            </Button>
                                         </div>
-                                        <Button
+                                    ))}
+                                    {imagePreviews.length < 5 && (
+                                        <button
                                             type="button"
-                                            variant="destructive"
-                                            size="icon"
-                                            className="absolute top-2 right-2 h-8 w-8 rounded-full"
-                                            onClick={removeImage}
+                                            onClick={() => fileInputRef.current?.click()}
+                                            className="aspect-square rounded-xl border-2 border-dashed border-border hover:border-primary/50 hover:bg-muted/50 transition-colors flex flex-col items-center justify-center gap-2"
                                         >
-                                            <X className="h-4 w-4" />
-                                        </Button>
-                                    </div>
-                                ) : (
-                                    <button
-                                        type="button"
-                                        onClick={() => fileInputRef.current?.click()}
-                                        className="w-full aspect-square rounded-xl border-2 border-dashed border-border hover:border-primary/50 hover:bg-muted/50 transition-colors flex flex-col items-center justify-center gap-3"
-                                    >
-                                        <div className="p-3 bg-muted rounded-full">
-                                            <Upload className="h-6 w-6 text-muted-foreground" />
-                                        </div>
-                                        <div className="text-center">
-                                            <p className="text-sm font-medium">點擊上傳圖片</p>
-                                            <p className="text-xs text-muted-foreground">
-                                                支援 JPG、PNG、WebP
-                                            </p>
-                                        </div>
-                                    </button>
-                                )}
+                                            <Upload className="h-5 w-5 text-muted-foreground" />
+                                            <span className="text-xs text-muted-foreground">新增圖片</span>
+                                        </button>
+                                    )}
+                                </div>
 
                                 <p className="text-xs text-muted-foreground mt-3">
-                                    圖片將壓縮至最大 800px 寬度，格式轉換為 WebP 以減少檔案大小
+                                    最多上傳 5 張圖片，第一張為商品主圖。圖片將壓縮為 WebP 格式
                                 </p>
                             </CardContent>
                         </Card>

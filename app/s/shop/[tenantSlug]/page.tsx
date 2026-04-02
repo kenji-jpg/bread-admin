@@ -88,6 +88,7 @@ interface Product {
   stock: number | null
   sold_qty: number
   image_url: string | null
+  image_urls: string[] | null
   description: string | null
   category: string | null
   end_time: string | null
@@ -207,6 +208,7 @@ export default function ShopPage() {
 
   // 選購 Modal 狀態
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
+  const [carouselIndex, setCarouselIndex] = useState(0)
   const [quantity, setQuantity] = useState(1)
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null)
   const [productVariants, setProductVariants] = useState<ProductVariant[]>([])
@@ -253,8 +255,8 @@ export default function ShopPage() {
   const [newProductIsLimited, setNewProductIsLimited] = useState(false)
   const [newProductCategory, setNewProductCategory] = useState('')
   const [newProductEndTime, setNewProductEndTime] = useState<number | null>(null) // null=不限時, 30/60/120=分鐘
-  const [newProductImage, setNewProductImage] = useState<File | null>(null)
-  const [newProductPreview, setNewProductPreview] = useState<string | null>(null)
+  const [newProductImages, setNewProductImages] = useState<File[]>([])
+  const [newProductPreviews, setNewProductPreviews] = useState<string[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const [newProductHasVariants, setNewProductHasVariants] = useState(false)
   const [newProductVariants, setNewProductVariants] = useState<{ name: string; stock: string }[]>([{ name: '', stock: '' }])
@@ -530,6 +532,7 @@ export default function ShopPage() {
   // ========== 選擇商品（載入規格）==========
   const handleSelectProduct = async (product: Product) => {
     setSelectedProduct(product)
+    setCarouselIndex(0)
     setQuantity(1)
     setSelectedVariant(null)
     setProductVariants([])
@@ -684,13 +687,14 @@ export default function ShopPage() {
 
     setIsUploading(true)
     try {
-      let imageUrl: string | null = null
-      const sku = `SP${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+      const imageUrls: string[] = []
+      const skuBase = `SP${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
 
-      // 上傳圖片
-      if (newProductImage) {
+      // 上傳圖片（支援多張）
+      for (let i = 0; i < newProductImages.length; i++) {
         try {
-          const compressedBlob = await compressImage(newProductImage)
+          const sku = `${skuBase}-${i}`
+          const compressedBlob = await compressImage(newProductImages[i])
           const compressedFile = new File([compressedBlob], `${sku}.webp`, {
             type: 'image/webp',
           })
@@ -707,12 +711,12 @@ export default function ShopPage() {
             const {
               data: { publicUrl },
             } = supabase.storage.from('product-images').getPublicUrl(filePath)
-            imageUrl = publicUrl
+            imageUrls.push(publicUrl)
           } else {
-            console.error('Upload error:', uploadError)
+            console.error('Upload error for image', i, uploadError)
           }
         } catch (err) {
-          console.error('Compress/upload error:', err)
+          console.error('Compress/upload error for image', i, err)
         }
       }
 
@@ -734,7 +738,8 @@ export default function ShopPage() {
         p_name: newProductName.trim(),
         p_price: parseFloat(newProductPrice),
         p_stock: newProductIsLimited && newProductStock ? parseInt(newProductStock) : 0,
-        p_image_url: imageUrl,
+        p_image_url: imageUrls[0] || null,
+        p_image_urls: imageUrls.length > 0 ? imageUrls : null,
         p_is_limited: newProductIsLimited,
         p_category: newProductCategory || null,
         p_end_time: endTimeValue,
@@ -753,8 +758,8 @@ export default function ShopPage() {
       setNewProductName('')
       setNewProductPrice('')
       setNewProductStock('')
-      setNewProductImage(null)
-      setNewProductPreview(null)
+      setNewProductImages([])
+      setNewProductPreviews([])
       setNewProductHasVariants(false)
       setNewProductVariants([{ name: '', stock: '' }])
       setIsAddProductOpen(false)
@@ -1393,63 +1398,116 @@ export default function ShopPage() {
 
       {/* 商品 Modal：管理者 = 管理面板 / 客人 = 喊單面板 */}
       <AnimatePresence>
-        {selectedProduct && (
+        {selectedProduct && (() => {
+          const modalImages = (selectedProduct.image_urls && selectedProduct.image_urls.length > 0)
+            ? selectedProduct.image_urls
+            : selectedProduct.image_url
+              ? [selectedProduct.image_url]
+              : []
+          return (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 bg-black/40"
-            onClick={() => setSelectedProduct(null)}
+            onClick={() => { setSelectedProduct(null); setCarouselIndex(0) }}
           >
             <motion.div
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 25 }}
-              className="absolute bottom-0 left-0 right-0 rounded-t-2xl p-5 safe-bottom"
+              className="absolute inset-x-0 top-12 bottom-0 rounded-t-2xl overflow-y-auto safe-bottom"
               style={{ backgroundColor: '#FFF8F0' }}
               onClick={(e) => e.stopPropagation()}
             >
               {/* 拖曳指示條 */}
-              <div className="w-10 h-1 rounded-full mx-auto mb-4" style={{ backgroundColor: '#D4B896' }} />
+              <div className="sticky top-0 z-10 pt-3 pb-2" style={{ backgroundColor: '#FFF8F0' }}>
+                <div className="w-10 h-1 rounded-full mx-auto" style={{ backgroundColor: '#D4B896' }} />
+              </div>
 
-              {/* 商品資訊（共用） */}
-              <div className="flex gap-4 mb-5">
-                <div className="w-20 h-20 rounded-xl overflow-hidden flex-shrink-0" style={{ backgroundColor: '#F5E0C4' }}>
-                  {selectedProduct.image_url ? (
-                    <Image
-                      src={selectedProduct.image_url}
-                      alt={selectedProduct.name}
-                      width={80}
-                      height={80}
-                      className="object-cover w-full h-full"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <Package className="w-8 h-8" style={{ color: '#C4A882' }} />
+              <div className="px-5 pb-5">
+              {/* 商品大圖 / 輪播 */}
+              <div className="mb-4">
+                {modalImages.length > 0 ? (
+                  <div className="relative">
+                    <div className="overflow-hidden rounded-2xl">
+                      <motion.div
+                        className="flex"
+                        animate={{ x: `-${carouselIndex * 100}%` }}
+                        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                        drag={modalImages.length > 1 ? 'x' : false}
+                        dragConstraints={{ left: 0, right: 0 }}
+                        dragElastic={0.1}
+                        onDragEnd={(_e, info) => {
+                          const threshold = 50
+                          if (info.offset.x < -threshold && carouselIndex < modalImages.length - 1) {
+                            setCarouselIndex(carouselIndex + 1)
+                          } else if (info.offset.x > threshold && carouselIndex > 0) {
+                            setCarouselIndex(carouselIndex - 1)
+                          }
+                        }}
+                      >
+                        {modalImages.map((url, i) => (
+                          <div key={i} className="min-w-full aspect-square relative">
+                            <Image
+                              src={url}
+                              alt={`${selectedProduct.name} ${i + 1}`}
+                              fill
+                              className="object-cover"
+                              sizes="(max-width: 768px) 100vw, 400px"
+                            />
+                          </div>
+                        ))}
+                      </motion.div>
                     </div>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-bold text-base leading-tight line-clamp-2" style={{ color: '#4A2C17' }}>{selectedProduct.name}</h3>
-                  <p className="text-2xl font-bold mt-1" style={{ color: accentColor || '#D94E2B' }}>${selectedProduct.price.toLocaleString()}</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span
-                      className="text-xs px-2 py-0.5 rounded-full font-medium"
-                      style={{
-                        backgroundColor: getProductMode(selectedProduct) === 'stock' ? '#E8F5E2' : '#FEE8D6',
-                        color: getProductMode(selectedProduct) === 'stock' ? '#4A7C3F' : '#B8461B',
-                      }}
-                    >
-                      {getProductMode(selectedProduct) === 'stock'
-                        ? `現貨 (剩 ${selectedProduct.stock})`
-                        : '預購'}
-                    </span>
-                    <span className="text-xs" style={{ color: '#8B6B4A' }}>
-                      已售 {selectedProduct.sold_qty}
-                    </span>
+                    {/* 圓點指示器 */}
+                    {modalImages.length > 1 && (
+                      <div className="flex justify-center gap-1.5 mt-3">
+                        {modalImages.map((_, i) => (
+                          <button
+                            key={i}
+                            className="w-2 h-2 rounded-full transition-all"
+                            style={{
+                              backgroundColor: i === carouselIndex ? (accentColor || '#D94E2B') : '#D4B896',
+                              transform: i === carouselIndex ? 'scale(1.3)' : 'scale(1)',
+                            }}
+                            onClick={() => setCarouselIndex(i)}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
+                ) : (
+                  <div className="w-full aspect-square rounded-2xl flex items-center justify-center" style={{ backgroundColor: '#F5E0C4' }}>
+                    <Package className="w-16 h-16" style={{ color: '#C4A882' }} />
+                  </div>
+                )}
+              </div>
+
+              {/* 商品資訊 */}
+              <div className="mb-5">
+                <h3 className="font-bold text-lg leading-tight" style={{ color: '#4A2C17' }}>{selectedProduct.name}</h3>
+                <p className="text-2xl font-bold mt-1" style={{ color: accentColor || '#D94E2B' }}>${selectedProduct.price.toLocaleString()}</p>
+                <div className="flex items-center gap-2 mt-2">
+                  <span
+                    className="text-xs px-2 py-0.5 rounded-full font-medium"
+                    style={{
+                      backgroundColor: getProductMode(selectedProduct) === 'stock' ? '#E8F5E2' : '#FEE8D6',
+                      color: getProductMode(selectedProduct) === 'stock' ? '#4A7C3F' : '#B8461B',
+                    }}
+                  >
+                    {getProductMode(selectedProduct) === 'stock'
+                      ? `現貨 (剩 ${selectedProduct.stock})`
+                      : '預購'}
+                  </span>
+                  <span className="text-xs" style={{ color: '#8B6B4A' }}>
+                    已售 {selectedProduct.sold_qty}
+                  </span>
                 </div>
+                {selectedProduct.description && (
+                  <p className="text-sm mt-3 leading-relaxed" style={{ color: '#8B6B4A' }}>{selectedProduct.description}</p>
+                )}
               </div>
 
               {isStaff ? (
@@ -1711,9 +1769,11 @@ export default function ShopPage() {
                   </div>
                 </>
               )}
+              </div>{/* end px-5 pb-5 */}
             </motion.div>
           </motion.div>
-        )}
+          )
+        })()}
       </AnimatePresence>
 
       {/* 我的訂單 Drawer */}
@@ -2317,39 +2377,72 @@ export default function ShopPage() {
             >
               <h3 className="text-lg font-bold mb-4">上架新商品</h3>
 
-              {/* 拍照/選圖 */}
+              {/* 拍照/選圖（多張） */}
               <input
                 ref={addProductFileRef}
                 type="file"
                 accept="image/*"
+                multiple
                 className="hidden"
                 onChange={(e) => {
-                  const file = e.target.files?.[0]
-                  if (file) {
-                    setNewProductImage(file)
-                    setNewProductPreview(URL.createObjectURL(file))
+                  const files = Array.from(e.target.files || [])
+                  if (files.length === 0) return
+                  const remaining = 5 - newProductImages.length
+                  const toAdd = files.slice(0, remaining)
+                  if (toAdd.length < files.length) {
+                    toast.error(`最多上傳 5 張圖片`)
                   }
+                  setNewProductImages((prev) => [...prev, ...toAdd])
+                  setNewProductPreviews((prev) => [
+                    ...prev,
+                    ...toAdd.map((f) => URL.createObjectURL(f)),
+                  ])
+                  // Reset input so same file can be re-selected
+                  e.target.value = ''
                 }}
               />
 
-              <div
-                className="w-full h-32 rounded-xl border-2 border-dashed border-muted-foreground/30 flex items-center justify-center mb-4 cursor-pointer overflow-hidden"
-                onClick={() => addProductFileRef.current?.click()}
-              >
-                {newProductPreview ? (
-                  <Image
-                    src={newProductPreview}
-                    alt="預覽"
-                    width={200}
-                    height={128}
-                    className="object-cover w-full h-full"
-                  />
-                ) : (
-                  <div className="text-center text-muted-foreground">
-                    <Camera className="w-8 h-8 mx-auto mb-1" />
-                    <p className="text-sm">拍照或選擇圖片</p>
-                  </div>
-                )}
+              <div className="mb-4">
+                <div className="flex gap-2 overflow-x-auto pb-2">
+                  {newProductPreviews.map((preview, idx) => (
+                    <div key={idx} className="relative flex-shrink-0 w-20 h-20 rounded-xl overflow-hidden border border-muted-foreground/30">
+                      <Image
+                        src={preview}
+                        alt={`預覽 ${idx + 1}`}
+                        width={80}
+                        height={80}
+                        className="object-cover w-full h-full"
+                      />
+                      {idx === 0 && (
+                        <span className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] text-center py-0.5">封面</span>
+                      )}
+                      <button
+                        type="button"
+                        className="absolute top-0.5 right-0.5 w-5 h-5 bg-black/60 rounded-full flex items-center justify-center"
+                        onClick={() => {
+                          setNewProductImages((prev) => prev.filter((_, i) => i !== idx))
+                          setNewProductPreviews((prev) => {
+                            URL.revokeObjectURL(prev[idx])
+                            return prev.filter((_, i) => i !== idx)
+                          })
+                        }}
+                      >
+                        <X className="w-3 h-3 text-white" />
+                      </button>
+                    </div>
+                  ))}
+                  {newProductPreviews.length < 5 && (
+                    <div
+                      className="flex-shrink-0 w-20 h-20 rounded-xl border-2 border-dashed border-muted-foreground/30 flex items-center justify-center cursor-pointer"
+                      onClick={() => addProductFileRef.current?.click()}
+                    >
+                      <div className="text-center text-muted-foreground">
+                        <Camera className="w-5 h-5 mx-auto mb-0.5" />
+                        <p className="text-[10px]">{newProductPreviews.length === 0 ? '拍照/選圖' : `${newProductPreviews.length}/5`}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* 商品名稱 */}
@@ -2556,8 +2649,8 @@ export default function ShopPage() {
                     setNewProductIsLimited(false)
                     setNewProductCategory('')
                     setNewProductEndTime(null)
-                    setNewProductImage(null)
-                    setNewProductPreview(null)
+                    setNewProductImages([])
+                    setNewProductPreviews([])
                   }}
                 >
                   取消

@@ -28,6 +28,7 @@ export interface ProductUpdateData {
   category?: string | null
   description?: string | null
   image_url?: string | null
+  image_urls?: string[] | null
   is_limited?: boolean
   limit_qty?: number | null
   end_time?: string | null

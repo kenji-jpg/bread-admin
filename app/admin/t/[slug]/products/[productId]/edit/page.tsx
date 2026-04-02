@@ -103,9 +103,10 @@ export default function EditProductPage({ params }: { params: Promise<{ productI
     const [variants, setVariants] = useState<EditVariant[]>([])
     const [isLoadingVariants, setIsLoadingVariants] = useState(false)
 
-    // Image state
-    const [imageFile, setImageFile] = useState<File | null>(null)
-    const [imagePreview, setImagePreview] = useState<string | null>(null)
+    // Image state (multi-image support, up to 5)
+    const [imageFiles, setImageFiles] = useState<File[]>([])
+    const [imagePreviews, setImagePreviews] = useState<string[]>([])
+    const [existingImageUrls, setExistingImageUrls] = useState<string[]>([])
     const [isUploading, setIsUploading] = useState(false)
     const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -140,7 +141,12 @@ export default function EditProductPage({ params }: { params: Promise<{ productI
                 setIsLimited(data.is_limited)
                 setEndTime(data.end_time ? new Date(data.end_time).toISOString().slice(0, 16) : '')
                 setShowInShop(data.show_in_shop ?? false)
-                setImagePreview(data.image_url)
+                // Load multi-image: prefer image_urls, fallback to image_url
+                const urls = (data as Record<string, unknown>).image_urls && Array.isArray((data as Record<string, unknown>).image_urls) && ((data as Record<string, unknown>).image_urls as string[]).length > 0
+                    ? (data as Record<string, unknown>).image_urls as string[]
+                    : data.image_url ? [data.image_url] : []
+                setExistingImageUrls(urls)
+                setImagePreviews(urls)
                 setHasVariants(data.has_variants ?? false)
 
                 // Read-only fields
@@ -173,30 +179,58 @@ export default function EditProductPage({ params }: { params: Promise<{ productI
     }, [tenant, tenantLoading, productId, supabase, router])
 
     const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0]
-        if (!file) return
+        const files = Array.from(e.target.files || [])
+        if (files.length === 0) return
 
-        if (!file.type.startsWith('image/')) {
-            toast.error('請選擇圖片檔案')
+        const totalCurrent = existingImageUrls.length + imageFiles.length
+        const maxNew = 5 - totalCurrent
+        if (maxNew <= 0) {
+            toast.error('最多只能上傳 5 張圖片')
             return
         }
 
-        if (file.size > 10 * 1024 * 1024) {
-            toast.error('圖片大小不能超過 10MB')
-            return
+        const validFiles: File[] = []
+        for (const file of files.slice(0, maxNew)) {
+            if (!file.type.startsWith('image/')) {
+                toast.error(`${file.name} 不是圖片檔案，已跳過`)
+                continue
+            }
+            if (file.size > 10 * 1024 * 1024) {
+                toast.error(`${file.name} 超過 10MB，已跳過`)
+                continue
+            }
+            validFiles.push(file)
         }
 
-        setImageFile(file)
-        const reader = new FileReader()
-        reader.onload = (e) => {
-            setImagePreview(e.target?.result as string)
+        if (validFiles.length === 0) return
+
+        if (files.length > maxNew) {
+            toast.warning(`已選取前 ${maxNew} 張，最多共 5 張`)
         }
-        reader.readAsDataURL(file)
+
+        setImageFiles(prev => [...prev, ...validFiles])
+
+        // Generate previews for new files
+        for (const file of validFiles) {
+            const reader = new FileReader()
+            reader.onload = (ev) => {
+                setImagePreviews(prev => [...prev, ev.target?.result as string])
+            }
+            reader.readAsDataURL(file)
+        }
     }
 
-    const removeImage = () => {
-        setImageFile(null)
-        setImagePreview(null)
+    const removeImage = (index: number) => {
+        const totalExisting = existingImageUrls.length
+        if (index < totalExisting) {
+            // Removing an existing image
+            setExistingImageUrls(prev => prev.filter((_, i) => i !== index))
+        } else {
+            // Removing a new file
+            const fileIndex = index - totalExisting
+            setImageFiles(prev => prev.filter((_, i) => i !== fileIndex))
+        }
+        setImagePreviews(prev => prev.filter((_, i) => i !== index))
         if (fileInputRef.current) {
             fileInputRef.current.value = ''
         }
@@ -220,43 +254,44 @@ export default function EditProductPage({ params }: { params: Promise<{ productI
         setIsSubmitting(true)
 
         try {
-            let imageUrl: string | null = imagePreview
-
-            // Upload new image if selected
-            if (imageFile) {
+            // Upload new image files (only the newly added ones)
+            const newUploadedUrls: string[] = []
+            if (imageFiles.length > 0) {
                 setIsUploading(true)
-                try {
-                    const compressedBlob = await compressImage(imageFile)
-                    const compressedFile = new File([compressedBlob], `${sku}.webp`, {
-                        type: 'image/webp',
-                    })
-
-                    const filePath = `${tenant.id}/products/${sku}-${Date.now()}.webp`
-                    const { error: uploadError } = await supabase.storage
-                        .from('product-images')
-                        .upload(filePath, compressedFile, {
-                            cacheControl: '3600',
-                            upsert: true,
+                for (let i = 0; i < imageFiles.length; i++) {
+                    try {
+                        const compressedBlob = await compressImage(imageFiles[i])
+                        const compressedFile = new File([compressedBlob], `${sku}-${i}.webp`, {
+                            type: 'image/webp',
                         })
 
-                    if (uploadError) {
-                        console.error('Upload error:', uploadError)
-                        toast.warning('圖片上傳失敗，保留原圖')
-                    } else {
-                        const { data: { publicUrl } } = supabase.storage
+                        const filePath = `${tenant.id}/products/${sku}-${Date.now()}-${i}.webp`
+                        const { error: uploadError } = await supabase.storage
                             .from('product-images')
-                            .getPublicUrl(filePath)
-                        imageUrl = publicUrl
+                            .upload(filePath, compressedFile, {
+                                cacheControl: '3600',
+                                upsert: true,
+                            })
+
+                        if (uploadError) {
+                            console.error('Upload error:', uploadError)
+                            toast.warning(`第 ${i + 1} 張圖片上傳失敗，已跳過`)
+                        } else {
+                            const { data: { publicUrl } } = supabase.storage
+                                .from('product-images')
+                                .getPublicUrl(filePath)
+                            newUploadedUrls.push(publicUrl)
+                        }
+                    } catch (compressError) {
+                        console.error('Compress error:', compressError)
+                        toast.warning(`第 ${i + 1} 張圖片處理失敗，已跳過`)
                     }
-                } catch (compressError) {
-                    console.error('Compress error:', compressError)
-                    toast.warning('圖片處理失敗，保留原圖')
                 }
                 setIsUploading(false)
-            } else if (!imagePreview) {
-                // Image removed
-                imageUrl = null
             }
+
+            // Combine existing URLs (kept by user) + newly uploaded URLs
+            const finalImageUrls = [...existingImageUrls, ...newUploadedUrls].slice(0, 5)
 
             const result = await updateProduct(supabase, tenant.id, productId, {
                 name: name.trim(),
@@ -268,7 +303,8 @@ export default function EditProductPage({ params }: { params: Promise<{ productI
                 is_limited: isLimited,
                 limit_qty: null,
                 end_time: endTime || null,
-                image_url: imageUrl,
+                image_url: finalImageUrls[0] || null,
+                image_urls: finalImageUrls.length > 0 ? finalImageUrls : null,
                 show_in_shop: showInShop,
             })
 
@@ -688,49 +724,58 @@ export default function EditProductPage({ params }: { params: Promise<{ productI
                         <Card className="border-border/50">
                             <CardHeader>
                                 <CardTitle>商品圖片</CardTitle>
+                                <CardDescription>最多 5 張，第一張為主圖</CardDescription>
                             </CardHeader>
                             <CardContent>
                                 <input
                                     ref={fileInputRef}
                                     type="file"
                                     accept="image/*"
+                                    multiple
                                     onChange={handleImageSelect}
                                     className="hidden"
                                 />
 
-                                {imagePreview ? (
-                                    <div className="relative">
-                                        <div className="aspect-square rounded-xl overflow-hidden border border-border/50">
-                                            <img
-                                                src={imagePreview}
-                                                alt="預覽"
-                                                className="w-full h-full object-cover"
-                                            />
+                                <div className="grid grid-cols-3 gap-3">
+                                    {imagePreviews.map((preview, index) => (
+                                        <div key={index} className="relative group">
+                                            <div className="aspect-square rounded-xl overflow-hidden border border-border/50">
+                                                <img
+                                                    src={preview}
+                                                    alt={`商品圖 ${index + 1}`}
+                                                    className="w-full h-full object-cover"
+                                                />
+                                            </div>
+                                            {index === 0 && (
+                                                <Badge className="absolute top-1 left-1 text-[10px] px-1.5 py-0 h-5">
+                                                    主圖
+                                                </Badge>
+                                            )}
+                                            <Button
+                                                type="button"
+                                                variant="destructive"
+                                                size="icon"
+                                                className="absolute top-1 right-1 h-6 w-6 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                                onClick={() => removeImage(index)}
+                                            >
+                                                <X className="h-3 w-3" />
+                                            </Button>
                                         </div>
-                                        <Button
+                                    ))}
+
+                                    {imagePreviews.length < 5 && (
+                                        <button
                                             type="button"
-                                            variant="destructive"
-                                            size="icon"
-                                            className="absolute top-2 right-2 h-8 w-8 rounded-full"
-                                            onClick={removeImage}
+                                            onClick={() => fileInputRef.current?.click()}
+                                            className="aspect-square rounded-xl border-2 border-dashed border-border hover:border-primary/50 hover:bg-muted/50 transition-colors flex flex-col items-center justify-center gap-1"
                                         >
-                                            <X className="h-4 w-4" />
-                                        </Button>
-                                    </div>
-                                ) : (
-                                    <button
-                                        type="button"
-                                        onClick={() => fileInputRef.current?.click()}
-                                        className="w-full aspect-square rounded-xl border-2 border-dashed border-border hover:border-primary/50 hover:bg-muted/50 transition-colors flex flex-col items-center justify-center gap-3"
-                                    >
-                                        <div className="p-3 bg-muted rounded-full">
-                                            <Upload className="h-6 w-6 text-muted-foreground" />
-                                        </div>
-                                        <div className="text-center">
-                                            <p className="text-sm font-medium">點擊上傳圖片</p>
-                                        </div>
-                                    </button>
-                                )}
+                                            <Upload className="h-5 w-5 text-muted-foreground" />
+                                            <span className="text-xs text-muted-foreground">
+                                                {imagePreviews.length === 0 ? '上傳圖片' : '加更多'}
+                                            </span>
+                                        </button>
+                                    )}
+                                </div>
                             </CardContent>
                         </Card>
 
