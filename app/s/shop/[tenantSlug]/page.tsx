@@ -1329,8 +1329,8 @@ export default function ShopPage() {
 
                   {/* 商品資訊 */}
                   <div className="p-2.5 flex flex-col flex-1">
-                    <p className="text-sm leading-tight line-clamp-2 min-h-[2.5em]" style={{ color: '#4A2C17' }}>{product.name}</p>
-                    <div className="flex items-baseline gap-1 mt-1.5">
+                    <p className="text-sm leading-tight line-clamp-2" style={{ color: '#4A2C17' }}>{product.name}</p>
+                    <div className="flex items-baseline gap-1 mt-0.5">
                       <span className="text-xs" style={{ color: '#8B6B4A' }}>$</span>
                       <span className="text-base font-bold" style={{ color: accentColor || '#8b5e3c' }}>{product.price.toLocaleString()}</span>
                       {mode === 'stock' && product.stock !== null && product.stock > 0 && (
