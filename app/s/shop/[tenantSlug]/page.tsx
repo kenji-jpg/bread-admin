@@ -1243,9 +1243,8 @@ export default function ShopPage() {
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.03 }}
-                  className={`relative rounded-2xl overflow-hidden transition-all shadow-sm hover:shadow-md flex flex-col ${(isUnavailable && !isStaff) ? 'opacity-60' : 'cursor-pointer'
+                  className={`relative rounded-2xl overflow-hidden transition-all flex flex-col ${(isUnavailable && !isStaff) ? 'opacity-60' : 'cursor-pointer'
                     } ${isInactive && isStaff ? 'opacity-50' : ''}`}
-                  style={{ backgroundColor: '#ffffff' }}
                   onClick={() => {
                     if (isStaff) {
                       handleSelectProduct(product)
@@ -1293,7 +1292,7 @@ export default function ShopPage() {
                   </div>
 
                   {/* 商品圖片 */}
-                  <div className="aspect-[3/4] relative overflow-hidden" style={{ backgroundColor: '#F5E0C4' }}>
+                  <div className="aspect-square relative overflow-hidden" style={{ backgroundColor: '#F5E0C4' }}>
                     {product.image_url ? (
                       <Image
                         src={product.image_url}
@@ -1329,7 +1328,7 @@ export default function ShopPage() {
                   </div>
 
                   {/* 商品資訊 */}
-                  <div className="p-2.5 flex flex-col flex-1" style={{ backgroundColor: '#ffffff' }}>
+                  <div className="p-2.5 flex flex-col flex-1">
                     <p className="text-sm leading-tight line-clamp-2 min-h-[2.5em]" style={{ color: '#4A2C17' }}>{product.name}</p>
                     <div className="flex items-baseline gap-1 mt-1.5">
                       <span className="text-xs" style={{ color: '#8B6B4A' }}>$</span>
