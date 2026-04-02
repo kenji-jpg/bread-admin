@@ -1331,18 +1331,6 @@ export default function ShopPage() {
                   {/* 商品資訊 */}
                   <div className="p-2.5 flex flex-col flex-1">
                     <p className="text-sm leading-tight line-clamp-2" style={{ color: '#4A2C17' }}>{product.name}</p>
-                    <div className="flex items-baseline gap-1 mt-0.5">
-                      <span className="text-xs" style={{ color: '#8B6B4A' }}>$</span>
-                      <span className="text-base font-bold" style={{ color: accentColor || '#8b5e3c' }}>{product.price.toLocaleString()}</span>
-                      {mode === 'stock' && product.stock !== null && product.stock > 0 && (
-                        <span className="text-[10px] ml-auto" style={{ color: '#8B6B4A' }}>
-                          剩 {product.stock}
-                        </span>
-                      )}
-                    </div>
-                    {product.is_limited && product.limit_qty && (
-                      <p className="text-[10px] mt-0.5" style={{ color: '#D94E2B' }}>限購 {product.limit_qty}</p>
-                    )}
 
                     {/* 規格標籤 */}
                     {product.has_variants && product.variants && product.variants.length > 0 && (
@@ -1363,6 +1351,19 @@ export default function ShopPage() {
                           )
                         })}
                       </div>
+                    )}
+
+                    <div className="flex items-baseline gap-1 mt-0.5">
+                      <span className="text-xs" style={{ color: '#8B6B4A' }}>$</span>
+                      <span className="text-base font-bold" style={{ color: accentColor || '#8b5e3c' }}>{product.price.toLocaleString()}</span>
+                      {mode === 'stock' && product.stock !== null && product.stock > 0 && (
+                        <span className="text-[10px] ml-auto" style={{ color: '#8B6B4A' }}>
+                          剩 {product.stock}
+                        </span>
+                      )}
+                    </div>
+                    {product.is_limited && product.limit_qty && (
+                      <p className="text-[10px] mt-0.5" style={{ color: '#D94E2B' }}>限購 {product.limit_qty}</p>
                     )}
 
                     {/* 管理員：顯示分配狀態 */}
