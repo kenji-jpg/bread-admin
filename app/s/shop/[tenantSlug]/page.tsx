@@ -909,7 +909,7 @@ export default function ShopPage() {
     <div
       className="min-h-screen max-w-lg mx-auto"
       style={{
-        '--shop-bg': '#FEF0DB',
+        '--shop-bg': '#ffffff',
         '--shop-card': '#ffffff',
         '--shop-card-border': '#F5E0C4',
         '--shop-text': '#4A2C17',
@@ -1319,7 +1319,7 @@ export default function ShopPage() {
                   </div>
 
                   {/* 商品資訊 */}
-                  <div className="p-2.5 flex flex-col flex-1 rounded-b-2xl" style={{ backgroundColor: '#ffffff' }}>
+                  <div className="p-2.5 flex flex-col flex-1">
                     <div className="flex items-start gap-1.5">
                       <span
                         className="shrink-0 px-2 py-0.5 rounded-full text-xs font-medium leading-tight"
@@ -1844,7 +1844,7 @@ export default function ShopPage() {
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 25 }}
               className="absolute top-0 right-0 bottom-0 w-full max-w-sm flex flex-col"
-              style={{ backgroundColor: '#FEF0DB' }}
+              style={{ backgroundColor: '#ffffff' }}
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
