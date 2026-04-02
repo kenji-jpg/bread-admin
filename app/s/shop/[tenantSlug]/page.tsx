@@ -1331,28 +1331,6 @@ export default function ShopPage() {
                   {/* 商品資訊 */}
                   <div className="p-2.5 flex flex-col flex-1">
                     <p className="text-sm leading-tight line-clamp-2" style={{ color: '#4A2C17' }}>{product.name}</p>
-
-                    {/* 規格標籤 */}
-                    {product.has_variants && product.variants && product.variants.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {product.variants.map((v) => {
-                          const isSoldOut = product.is_limited && v.stock <= 0
-                          return (
-                            <span
-                              key={v.name}
-                              className={`text-[10px] px-1.5 py-0.5 rounded-md ${isSoldOut ? 'line-through opacity-40' : ''}`}
-                              style={{
-                                backgroundColor: isSoldOut ? '#E8D5BE' : '#F5E0C4',
-                                color: '#4A2C17',
-                              }}
-                            >
-                              {v.name}
-                            </span>
-                          )
-                        })}
-                      </div>
-                    )}
-
                     <div className="flex items-baseline gap-1 mt-0.5">
                       <span className="text-xs" style={{ color: '#8B6B4A' }}>$</span>
                       <span className="text-base font-bold" style={{ color: accentColor || '#8b5e3c' }}>{product.price.toLocaleString()}</span>
