@@ -1322,7 +1322,7 @@ export default function ShopPage() {
                   <div className="p-2.5 flex flex-col flex-1">
                     <div className="flex items-start gap-1.5">
                       <span
-                        className="shrink-0 mt-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+                        className="shrink-0 px-2 py-0.5 rounded-full text-xs font-medium leading-tight"
                         style={{
                           backgroundColor: mode === 'stock' ? '#6B8E5E' : '#D94E2B',
                           color: '#fff8f0',
@@ -1330,7 +1330,7 @@ export default function ShopPage() {
                       >
                         {mode === 'stock' ? '現貨' : '預購'}
                       </span>
-                      <p className="text-sm leading-tight line-clamp-2" style={{ color: '#4A2C17' }}>{product.name}</p>
+                      <p className="text-sm font-medium leading-tight line-clamp-2" style={{ color: '#4A2C17' }}>{product.name}</p>
                     </div>
                     <div className="flex items-baseline gap-1 mt-0.5">
                       <span className="text-xs" style={{ color: '#8B6B4A' }}>$</span>
