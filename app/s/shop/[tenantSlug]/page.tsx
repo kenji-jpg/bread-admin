@@ -1431,21 +1431,12 @@ export default function ShopPage() {
               <div className="mb-4">
                 {modalImages.length > 0 ? (
                   <div className="relative">
-                    <div className="overflow-hidden rounded-2xl">
-                      <motion.div
+                    <div className="overflow-hidden rounded-2xl relative touch-pan-y">
+                      <div
                         className="flex"
-                        animate={{ x: `-${carouselIndex * 100}%` }}
-                        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                        drag={modalImages.length > 1 ? 'x' : false}
-                        dragConstraints={{ left: 0, right: 0 }}
-                        dragElastic={0.1}
-                        onDragEnd={(_e, info) => {
-                          const threshold = 50
-                          if (info.offset.x < -threshold && carouselIndex < modalImages.length - 1) {
-                            setCarouselIndex(carouselIndex + 1)
-                          } else if (info.offset.x > threshold && carouselIndex > 0) {
-                            setCarouselIndex(carouselIndex - 1)
-                          }
+                        style={{
+                          transform: `translateX(-${carouselIndex * 100}%)`,
+                          transition: 'transform 0.35s cubic-bezier(0.25, 0.1, 0.25, 1)',
                         }}
                       >
                         {modalImages.map((url, i) => (
@@ -1459,7 +1450,26 @@ export default function ShopPage() {
                             />
                           </div>
                         ))}
-                      </motion.div>
+                      </div>
+                      {/* 手勢偵測層 */}
+                      {modalImages.length > 1 && (
+                        <motion.div
+                          key={`drag-${carouselIndex}`}
+                          className="absolute inset-0 z-10"
+                          drag="x"
+                          dragConstraints={{ left: 0, right: 0 }}
+                          dragElastic={0.15}
+                          dragMomentum={false}
+                          onDragEnd={(_e, info) => {
+                            const threshold = 50
+                            if (info.offset.x < -threshold && carouselIndex < modalImages.length - 1) {
+                              setCarouselIndex(prev => prev + 1)
+                            } else if (info.offset.x > threshold && carouselIndex > 0) {
+                              setCarouselIndex(prev => prev - 1)
+                            }
+                          }}
+                        />
+                      )}
                     </div>
                     {/* 圓點指示器 */}
                     {modalImages.length > 1 && (
