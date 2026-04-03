@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
-import { useLiff } from '@/hooks/use-liff'
+import { useLiff, getShopShareUrl, getShopCleanUrl } from '@/hooks/use-liff'
 import liff from '@line/liff'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -29,6 +29,8 @@ import {
   Store,
   Eye,
   EyeOff,
+  Heart,
+  Share2,
   Megaphone,
   CheckCircle,
   Truck,
@@ -191,7 +193,7 @@ export default function ShopPage() {
   const tenantSlug = params.tenantSlug as string
   const supabaseRef = useRef(createClient())
   const supabase = supabaseRef.current
-  const { isReady, isLoggedIn, profile, login, error: liffError } = useLiff()
+  const { isReady, isLoggedIn, isInClient, profile, login, error: liffError } = useLiff()
 
   // Dev mode: ?staff=1 強制開啟管理員模式（僅 localhost）
   const isDevStaff = process.env.NODE_ENV === 'development' && searchParams.get('staff') === '1'
@@ -219,6 +221,7 @@ export default function ShopPage() {
 
   // 我的訂單 Drawer 狀態
   const [isOrderDrawerOpen, setIsOrderDrawerOpen] = useState(false)
+  const [orderIconPulse, setOrderIconPulse] = useState(false)
 
   // 現貨結帳 Modal 狀態
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false)
@@ -232,6 +235,10 @@ export default function ShopPage() {
   // 排序
   const [sortBy, setSortBy] = useState<'newest' | 'price_asc' | 'price_desc' | 'popular'>('newest')
   const [isSortOpen, setIsSortOpen] = useState(false)
+
+  // ========== 收藏 ==========
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set())
+  const [isTogglingFavorite, setIsTogglingFavorite] = useState(false)
 
   // ========== 管理員模式 ==========
   const [isStaff, setIsStaff] = useState(false)
@@ -274,6 +281,14 @@ export default function ShopPage() {
     const interval = setInterval(() => setTick((t) => t + 1), 30000)
     return () => clearInterval(interval)
   }, [])
+
+  // Modal 開啟時鎖定背景滾動
+  useEffect(() => {
+    if (selectedProduct) {
+      document.body.style.overflow = 'hidden'
+      return () => { document.body.style.overflow = '' }
+    }
+  }, [selectedProduct])
 
   // 購物須知
   const [showShoppingNotice, setShowShoppingNotice] = useState(false)
@@ -343,6 +358,23 @@ export default function ShopPage() {
     }
   }, [tenantSlug, profile?.userId, supabase])
 
+  // 載入收藏
+  const loadFavorites = useCallback(async () => {
+    if (!profile?.userId) return
+    try {
+      const { data, error } = await supabase.rpc('get_member_favorites_v1', {
+        p_tenant_slug: tenantSlug,
+        p_line_user_id: profile.userId,
+      })
+      if (error) throw error
+      if (data?.success && data.product_ids) {
+        setFavoriteIds(new Set(data.product_ids))
+      }
+    } catch (err) {
+      console.error('Load favorites error:', err)
+    }
+  }, [tenantSlug, profile?.userId, supabase])
+
   // 載入全部訂單（管理員）
   const loadAllOrders = useCallback(async () => {
     if (!profile?.userId || !isStaff || !tenant) return
@@ -374,12 +406,13 @@ export default function ShopPage() {
     loadShop()
   }, [loadShop])
 
-  // 登入後載入訂單
+  // 登入後載入訂單 + 收藏
   useEffect(() => {
     if (isLoggedIn && profile && tenant) {
       loadMyOrders()
+      loadFavorites()
     }
-  }, [isLoggedIn, profile, tenant, loadMyOrders])
+  }, [isLoggedIn, profile, tenant, loadMyOrders, loadFavorites])
 
   // Dev mode：強制開啟管理員模式
   useEffect(() => {
@@ -557,14 +590,148 @@ export default function ShopPage() {
     }
   }
 
-  // ========== 直接喊單 ==========
-  const handleDirectOrder = async () => {
+  // ========== 收藏 toggle ==========
+  const handleToggleFavorite = async (productId: string) => {
+    if (!isLoggedIn) { login(); return }
+    if (!profile?.userId || isTogglingFavorite) return
+
+    // 樂觀更新
+    const wasFavorited = favoriteIds.has(productId)
+    setFavoriteIds(prev => {
+      const next = new Set(prev)
+      if (wasFavorited) next.delete(productId)
+      else next.add(productId)
+      return next
+    })
+    setIsTogglingFavorite(true)
+
+    try {
+      const { data, error } = await supabase.rpc('toggle_member_favorite_v1', {
+        p_tenant_slug: tenantSlug,
+        p_line_user_id: profile.userId,
+        p_product_id: productId,
+        p_display_name: profile.displayName || '',
+        p_picture_url: profile.pictureUrl || null,
+      })
+      if (error) throw error
+      if (!data?.success) {
+        // 回滾
+        setFavoriteIds(prev => {
+          const next = new Set(prev)
+          if (wasFavorited) next.add(productId)
+          else next.delete(productId)
+          return next
+        })
+        toast.error('收藏失敗')
+      }
+    } catch (err) {
+      console.error('Toggle favorite error:', err)
+      // 回滾
+      setFavoriteIds(prev => {
+        const next = new Set(prev)
+        if (wasFavorited) next.add(productId)
+        else next.delete(productId)
+        return next
+      })
+    } finally {
+      setIsTogglingFavorite(false)
+    }
+  }
+
+  // ========== 分享商品 ==========
+  const handleShareProduct = async () => {
+    if (!selectedProduct || !tenant) return
+
+    const shareUrl = tenant.liff_id
+      ? getShopShareUrl(tenantSlug, tenant.liff_id)
+      : getShopCleanUrl(tenantSlug)
+
+    if (isInClient) {
+      try {
+        const flexContents: Record<string, unknown> = {
+          type: 'bubble',
+          body: {
+            type: 'box',
+            layout: 'vertical',
+            contents: [
+              ...(selectedProduct.image_url ? [{
+                type: 'image',
+                url: selectedProduct.image_url,
+                size: 'full',
+                aspectRatio: '1:1',
+                aspectMode: 'cover',
+              }] : []),
+              {
+                type: 'box',
+                layout: 'vertical',
+                margin: 'lg',
+                spacing: 'sm',
+                contents: [
+                  { type: 'text', text: selectedProduct.name, weight: 'bold', size: 'lg', wrap: true },
+                  { type: 'text', text: `$${selectedProduct.price.toLocaleString()}`, size: 'xl', weight: 'bold', color: accentColor || '#D94E2B' },
+                  { type: 'text', text: tenant.name, size: 'xs', color: '#8B6B4A', margin: 'md' },
+                ],
+              },
+            ],
+          },
+          footer: {
+            type: 'box',
+            layout: 'vertical',
+            spacing: 'sm',
+            contents: [
+              {
+                type: 'button',
+                style: 'primary',
+                color: accentColor || '#D94E2B',
+                action: { type: 'uri', label: '前往商城', uri: shareUrl },
+              },
+            ],
+          },
+        }
+
+        const result = await liff.shareTargetPicker([{
+          type: 'flex',
+          altText: `${tenant.name} — ${selectedProduct.name} $${selectedProduct.price.toLocaleString()}`,
+          contents: flexContents as any,
+        }])
+        if (result) toast.success('已分享！')
+      } catch (err) {
+        console.error('Share error:', err)
+        toast.error('分享失敗')
+      }
+    } else {
+      // 外部瀏覽器
+      if (navigator.share) {
+        try {
+          await navigator.share({
+            title: `${tenant.name} — ${selectedProduct.name}`,
+            text: `來看看 ${selectedProduct.name} $${selectedProduct.price.toLocaleString()}`,
+            url: shareUrl,
+          })
+        } catch { /* user cancelled */ }
+      } else {
+        await navigator.clipboard.writeText(shareUrl)
+        toast.success('連結已複製！')
+      }
+    }
+  }
+
+  // ========== 喊單確認 ==========
+  const [showOrderConfirm, setShowOrderConfirm] = useState(false)
+
+  const handleDirectOrderClick = () => {
     if (!selectedProduct || !profile || !tenant) return
-    // 有規格但沒選 → 擋住
     if (selectedProduct.has_variants && !selectedVariant) {
       toast.error('請先選擇規格')
       return
     }
+    setShowOrderConfirm(true)
+  }
+
+  // ========== 直接喊單 ==========
+  const handleDirectOrder = async () => {
+    if (!selectedProduct || !profile || !tenant) return
+    setShowOrderConfirm(false)
 
     setIsOrdering(true)
     try {
@@ -586,7 +753,13 @@ export default function ShopPage() {
         toast.success(`已喊單：${selectedProduct.name} x${quantity}`)
         setSelectedProduct(null)
         setQuantity(1)
+        setSelectedVariant(null)
         loadMyOrders()
+        // 觸發訂單 icon 動畫
+        setTimeout(() => {
+          setOrderIconPulse(true)
+          setTimeout(() => setOrderIconPulse(false), 2000)
+        }, 300)
       }
     } catch (err) {
       console.error('Direct order error:', err)
@@ -1065,27 +1238,68 @@ export default function ShopPage() {
               )}
               {/* 訂單 */}
               {isLoggedIn && !showStaffUI && (
-                <button
+                <motion.button
                   className="relative flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg transition-colors active:scale-95"
                   style={{ color: 'rgba(255,255,255,0.9)' }}
                   onClick={() => setIsOrderDrawerOpen(true)}
+                  animate={orderIconPulse ? {
+                    scale: [1, 1.4, 1, 1.2, 1],
+                  } : {}}
+                  transition={{ duration: 0.6, ease: 'easeInOut' }}
                 >
+                  {/* 彩帶迸發 */}
+                  {orderIconPulse && (
+                    <>
+                      {[...Array(5)].map((_, i) => {
+                        const angle = (i / 5) * 360
+                        const rad = (angle * Math.PI) / 180
+                        const dist = 30 + Math.random() * 14
+                        const colors = ['#FF6B6B', '#FFD93D', '#6BCB77', '#4D96FF', '#FFA94D']
+                        const color = colors[i % colors.length]
+                        const size = 8 + Math.random() * 4
+                        return (
+                          <motion.div
+                            key={`confetti-${i}`}
+                            className="absolute rounded-full"
+                            style={{
+                              width: size,
+                              height: size,
+                              backgroundColor: color,
+                              top: '50%',
+                              left: '50%',
+                              marginTop: -size / 2,
+                              marginLeft: -size / 2,
+                            }}
+                            initial={{ opacity: 1, x: 0, y: 0, scale: 1 }}
+                            animate={{
+                              opacity: 0,
+                              x: Math.cos(rad) * dist,
+                              y: Math.sin(rad) * dist,
+                              scale: 0,
+                            }}
+                            transition={{ duration: 0.7, delay: i * 0.02, ease: 'easeOut' }}
+                          />
+                        )
+                      })}
+                    </>
+                  )}
                   <div className="relative">
                     <ClipboardList className="w-5 h-5" />
                     {orderItemCount > 0 && (
                       <motion.span
                         key={orderItemCount}
-                        initial={{ scale: 0.5 }}
-                        animate={{ scale: 1 }}
+                        initial={{ scale: 0 }}
+                        animate={{ scale: [0, 1.5, 1] }}
+                        transition={{ duration: 0.4, ease: 'easeOut' }}
                         className="absolute -top-1.5 -right-2.5 min-w-[16px] h-4 text-[10px] font-bold rounded-full flex items-center justify-center px-0.5"
-                        style={{ backgroundColor: '#fff8f0', color: '#D94E2B' }}
+                        style={{ backgroundColor: orderIconPulse ? '#D94E2B' : '#fff8f0', color: orderIconPulse ? '#fff' : '#D94E2B' }}
                       >
                         {orderItemCount}
                       </motion.span>
                     )}
                   </div>
                   <span className="text-[10px] leading-none">訂單</span>
-                </button>
+                </motion.button>
               )}
               {/* 購物車已移除，改為直接喊單 */}
               {/* 未登入：登入按鈕 */}
@@ -1139,7 +1353,9 @@ export default function ShopPage() {
         const orderedCategories = shopCategories.length > 0
           ? shopCategories.map(c => c.name)
           : [...new Set(products.map(p => p.category).filter(Boolean))] as string[]
-        if (orderedCategories.length === 0) return null
+        const hasFavorites = favoriteIds.size > 0
+        const favCount = products.filter(p => favoriteIds.has(p.id)).length
+        if (orderedCategories.length === 0 && !hasFavorites) return null
         const getCategoryCount = (cat: string | null) => cat
           ? products.filter(p => p.category === cat).length
           : products.length
@@ -1159,6 +1375,23 @@ export default function ShopPage() {
             >
               全部 ({getCategoryCount(null)})
             </button>
+            {hasFavorites && favCount > 0 && (
+              <button
+                className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1 ${selectedCategory === '__favorites__' ? 'shadow-sm' : ''}`}
+                style={{
+                  backgroundColor: selectedCategory === '__favorites__'
+                    ? '#EF4444'
+                    : '#FEE2E2',
+                  color: selectedCategory === '__favorites__'
+                    ? '#fff'
+                    : '#DC2626',
+                }}
+                onClick={() => setSelectedCategory(selectedCategory === '__favorites__' ? null : '__favorites__')}
+              >
+                <Heart className="w-3 h-3" fill={selectedCategory === '__favorites__' ? '#fff' : '#DC2626'} />
+                收藏 ({favCount})
+              </button>
+            )}
             {orderedCategories.map(cat => (
               <button
                 key={cat}
@@ -1182,9 +1415,11 @@ export default function ShopPage() {
 
       {/* 排序 & 商品數量 */}
       {(() => {
-        const filteredCount = selectedCategory
-          ? products.filter(p => p.category === selectedCategory).length
-          : products.length
+        const filteredCount = selectedCategory === '__favorites__'
+          ? products.filter(p => favoriteIds.has(p.id)).length
+          : selectedCategory
+            ? products.filter(p => p.category === selectedCategory).length
+            : products.length
         if (filteredCount === 0) return null
         const sortLabels: Record<string, string> = {
           newest: '最新上架',
@@ -1227,7 +1462,11 @@ export default function ShopPage() {
       {/* 商品列表 */}
       <main className="px-3 pb-2">
         <div className="grid grid-cols-2 gap-3">
-          {(selectedCategory ? products.filter(p => p.category === selectedCategory) : products)
+          {(selectedCategory === '__favorites__'
+            ? products.filter(p => favoriteIds.has(p.id))
+            : selectedCategory
+              ? products.filter(p => p.category === selectedCategory)
+              : products)
             .slice()
             .sort((a, b) => {
               const aUnavailable = a.status !== 'active' || a.is_expired || a.is_sold_out || (a.end_time && new Date(a.end_time).getTime() < Date.now()) || (a.is_limited && a.stock !== null && a.stock <= 0)
@@ -1274,18 +1513,17 @@ export default function ShopPage() {
                     handleSelectProduct(product)
                   }}
                 >
-                  {/* 右上 badge：即時銷售 */}
-                  {product.sold_qty > 0 && (
+                  {/* 右上 badge：即時銷售圓形（≥6 才顯示） */}
+                  {isHot && (
                     <motion.div
                       key={product.sold_qty}
                       initial={{ scale: 1.3 }}
                       animate={{ scale: 1 }}
-                      className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-1 rounded-full text-white font-bold"
-                      style={{ backgroundColor: isHot ? '#DC2626' : 'rgba(0,0,0,0.55)' }}
+                      className="absolute top-1.5 right-1.5 z-10 w-[52px] h-[52px] rounded-full flex flex-col items-center justify-center text-white shadow-lg"
+                      style={{ backgroundColor: '#DC2626' }}
                     >
-                      {isHot && <Flame className="w-3.5 h-3.5" />}
-                      <span className="text-sm">+{product.sold_qty}</span>
-                      {isHot && <span className="text-[10px] font-medium">熱銷中</span>}
+                      <span className="text-[10px] font-medium leading-none">已搶購</span>
+                      <span className="text-[17px] font-extrabold leading-tight mt-0.5">+{product.sold_qty}</span>
                     </motion.div>
                   )}
 
@@ -1433,23 +1671,26 @@ export default function ShopPage() {
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 25 }}
-              drag="y"
-              dragConstraints={{ top: 0, bottom: 0 }}
-              dragElastic={{ top: 0, bottom: 0.6 }}
-              onDragEnd={(_e, info) => {
-                if (info.offset.y > 100 || info.velocity.y > 300) {
-                  setSelectedProduct(null)
-                  setCarouselIndex(0)
-                }
-              }}
               className="absolute inset-x-0 top-12 bottom-0 rounded-t-2xl safe-bottom max-w-lg mx-auto flex flex-col"
               style={{ backgroundColor: '#FFF8F0' }}
               onClick={(e) => e.stopPropagation()}
             >
-              {/* 拖曳指示條 */}
-              <div className="pt-3 pb-2 cursor-grab active:cursor-grabbing">
-                <div className="w-10 h-1 rounded-full mx-auto" style={{ backgroundColor: '#D4B896' }} />
-              </div>
+              {/* 拖曳指示條（獨立拖曳區域，加大觸控範圍） */}
+              <motion.div
+                className="pt-2 pb-3 cursor-grab active:cursor-grabbing touch-none flex items-center justify-center"
+                style={{ minHeight: '36px' }}
+                drag="y"
+                dragConstraints={{ top: 0, bottom: 0 }}
+                dragElastic={{ top: 0, bottom: 0.8 }}
+                onDragEnd={(_e, info) => {
+                  if (info.offset.y > 60 || info.velocity.y > 300) {
+                    setSelectedProduct(null)
+                    setCarouselIndex(0)
+                  }
+                }}
+              >
+                <div className="w-12 h-1.5 rounded-full" style={{ backgroundColor: '#D4B896' }} />
+              </motion.div>
 
               <div className="px-5 pb-5 overflow-y-auto flex-1">
               {/* 商品大圖 / 輪播 */}
@@ -1522,11 +1763,30 @@ export default function ShopPage() {
 
               {/* 商品資訊 */}
               <div className="mb-2">
+                {/* 第一行：名稱 + 收藏/分享 icon */}
                 <div className="flex items-start justify-between gap-2">
-                  <h3 className="font-bold text-lg leading-tight" style={{ color: '#4A2C17' }}>{selectedProduct.name}</h3>
-                  <p className="text-xl font-bold shrink-0" style={{ color: accentColor || '#D94E2B' }}>${selectedProduct.price.toLocaleString()}</p>
+                  <h3 className="font-bold text-lg leading-tight min-w-0" style={{ color: '#4A2C17' }}>{selectedProduct.name}</h3>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      className="p-1.5 rounded-full transition-all active:scale-90"
+                      style={{ color: favoriteIds.has(selectedProduct.id) ? '#EF4444' : '#C4A882' }}
+                      onClick={(e) => { e.stopPropagation(); handleToggleFavorite(selectedProduct.id) }}
+                      disabled={isTogglingFavorite}
+                    >
+                      <Heart className="w-5 h-5" fill={favoriteIds.has(selectedProduct.id) ? '#EF4444' : 'none'} />
+                    </button>
+                    <button
+                      className="p-1.5 rounded-full transition-all active:scale-90"
+                      style={{ color: '#C4A882' }}
+                      onClick={(e) => { e.stopPropagation(); handleShareProduct() }}
+                    >
+                      <Share2 className="w-5 h-5" />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 mt-1">
+                {/* 第二行：價格 + badge */}
+                <div className="flex items-center gap-2 mt-0.5">
+                  <p className="text-xl font-bold" style={{ color: accentColor || '#D94E2B' }}>${selectedProduct.price.toLocaleString()}</p>
                   <span
                     className="text-xs px-2 py-0.5 rounded-full font-medium"
                     style={{
@@ -1797,7 +2057,7 @@ export default function ShopPage() {
                     <button
                       className="flex-1 py-2 rounded-xl text-sm font-bold transition-all active:scale-[0.97] disabled:opacity-40"
                       style={{ backgroundColor: accentColor || '#D94E2B', color: '#fff8f0' }}
-                      onClick={handleDirectOrder}
+                      onClick={handleDirectOrderClick}
                       disabled={isOrdering || (selectedProduct.has_variants && !selectedVariant)}
                     >
                       {isOrdering ? (
@@ -1805,7 +2065,7 @@ export default function ShopPage() {
                       ) : selectedProduct.has_variants && !selectedVariant ? (
                         '請先選擇規格'
                       ) : (
-                        `確定喊單 $${(selectedProduct.price * quantity).toLocaleString()}${selectedVariant ? `（${selectedVariant.name}）` : ''}`
+                        `確定喊單${selectedVariant ? `（${selectedVariant.name}）` : ''}`
                       )}
                     </button>
                   </div>
@@ -1815,6 +2075,64 @@ export default function ShopPage() {
           </motion.div>
           )
         })()}
+      </AnimatePresence>
+
+      {/* 喊單確認提醒 */}
+      <AnimatePresence>
+        {showOrderConfirm && selectedProduct && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[70] bg-black/50 flex items-center justify-center px-8"
+            onClick={() => setShowOrderConfirm(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="w-full max-w-sm rounded-2xl p-6 shadow-xl"
+              style={{ backgroundColor: '#FFF8F0' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="text-center mb-4">
+                <div className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ backgroundColor: '#FEE8D6' }}>
+                  <ClipboardList className="w-6 h-6" style={{ color: accentColor || '#D94E2B' }} />
+                </div>
+                <h3 className="text-base font-bold mb-1" style={{ color: '#4A2C17' }}>確認喊單</h3>
+                <p className="text-sm leading-relaxed" style={{ color: '#8B6B4A' }}>
+                  喊單後將無法取消或修改，請確認商品、規格與數量無誤後再送出哦！
+                </p>
+              </div>
+              <div className="rounded-xl p-3 mb-4" style={{ backgroundColor: '#F5E0C4' }}>
+                <div className="flex justify-between text-sm" style={{ color: '#4A2C17' }}>
+                  <span className="font-medium">{selectedProduct.name}</span>
+                  <span className="font-bold">${(selectedProduct.price * quantity).toLocaleString()}</span>
+                </div>
+                {selectedVariant && (
+                  <p className="text-xs mt-0.5" style={{ color: '#8B6B4A' }}>規格：{selectedVariant.name}</p>
+                )}
+                <p className="text-xs mt-0.5" style={{ color: '#8B6B4A' }}>數量：{quantity}</p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  className="flex-1 py-2.5 rounded-xl text-sm font-medium border-2 transition-all active:scale-[0.97]"
+                  style={{ borderColor: '#D4B896', color: '#8B6B4A' }}
+                  onClick={() => setShowOrderConfirm(false)}
+                >
+                  再想想
+                </button>
+                <button
+                  className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-[0.97]"
+                  style={{ backgroundColor: accentColor || '#D94E2B', color: '#fff8f0' }}
+                  onClick={handleDirectOrder}
+                >
+                  確定送出
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
       </AnimatePresence>
 
       {/* 我的訂單 Drawer */}
