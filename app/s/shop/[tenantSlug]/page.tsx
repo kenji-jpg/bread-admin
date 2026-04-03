@@ -237,6 +237,8 @@ export default function ShopPage() {
   const [isStaff, setIsStaff] = useState(false)
   const [staffRole, setStaffRole] = useState<string | null>(null)
   const [staffCheckDone, setStaffCheckDone] = useState(false)
+  const [staffModeActive, setStaffModeActive] = useState(true) // 管理員可切換為客人視角
+  const showStaffUI = isStaff && staffModeActive // UI 顯示用：管理員且開啟管理模式
   const [allOrders, setAllOrders] = useState<StaffOrderItem[]>([])
   const [staffStats, setStaffStats] = useState<StaffStats | null>(null)
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false)
@@ -277,14 +279,14 @@ export default function ShopPage() {
   const [showShoppingNotice, setShowShoppingNotice] = useState(false)
   const [noticeDontShowToday, setNoticeDontShowToday] = useState(false)
   useEffect(() => {
-    if (!tenant?.id || !shopSettings.shopping_notice || isStaff) return
+    if (!tenant?.id || !shopSettings.shopping_notice || showStaffUI) return
     // 檢查今日是否已勾選「今日不再出現」
     const today = new Date().toISOString().slice(0, 10) // YYYY-MM-DD
     const key = `shopping_notice_dismissed_${tenant.id}`
     const dismissedDate = localStorage.getItem(key)
     if (dismissedDate === today) return // 今日已勾選不再顯示
     setShowShoppingNotice(true)
-  }, [tenant?.id, shopSettings.shopping_notice, isStaff])
+  }, [tenant?.id, shopSettings.shopping_notice, showStaffUI])
 
   // 載入商城資料（不依賴 isStaff，避免 staff 判定後重複載入）
   const isStaffRef = useRef(isStaff)
@@ -1025,7 +1027,7 @@ export default function ShopPage() {
                     營業中
                   </span>
                 </div>
-                {isStaff && staffStats && (
+                {showStaffUI && staffStats && (
                   <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.7)' }}>
                     訂單 {staffStats.total_orders - staffStats.cancelled_count} · ${staffStats.total_sales.toLocaleString()}
                   </p>
@@ -1034,6 +1036,19 @@ export default function ShopPage() {
             </div>
             <div className="flex items-center gap-0.5">
               {isStaff && (
+                <button
+                  className="relative p-1.5 rounded-full transition-colors mr-0.5"
+                  style={{ color: 'white', backgroundColor: staffModeActive ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)' }}
+                  onClick={() => {
+                    setStaffModeActive(!staffModeActive)
+                    toast(staffModeActive ? '已切換為客人視角' : '已切換為管理模式', { duration: 1500 })
+                  }}
+                  title={staffModeActive ? '切換客人視角' : '切換管理模式'}
+                >
+                  {staffModeActive ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                </button>
+              )}
+              {showStaffUI && (
                 <>
                   <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 text-[10px] px-1.5 py-0.5 mr-1">
                     <Shield className="w-3 h-3 mr-0.5" />
@@ -1049,7 +1064,7 @@ export default function ShopPage() {
                 </>
               )}
               {/* 訂單 */}
-              {isLoggedIn && !isStaff && (
+              {isLoggedIn && !showStaffUI && (
                 <button
                   className="relative flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg transition-colors active:scale-95"
                   style={{ color: 'rgba(255,255,255,0.9)' }}
@@ -1105,7 +1120,7 @@ export default function ShopPage() {
       )}
 
       {/* 管理員：操作列 */}
-      {isStaff && (
+      {showStaffUI && (
         <div className="px-4 py-2 border-b bg-purple-50 dark:bg-purple-950/20 flex gap-2">
           <Button
             variant="outline"
@@ -1235,7 +1250,7 @@ export default function ShopPage() {
               const isUnavailable = isExpired || isSoldOut || isInactive
               const isHot = product.sold_qty >= 5
               const timeRemaining = product.end_time ? getTimeRemaining(product.end_time) : null
-              const pStats = isStaff ? getProductStats(product.id) : null
+              const pStats = showStaffUI ? getProductStats(product.id) : null
               const mode = getProductMode(product)
 
               return (
@@ -1244,10 +1259,10 @@ export default function ShopPage() {
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.03 }}
-                  className={`relative transition-all flex flex-col ${(isUnavailable && !isStaff) ? 'opacity-60' : 'cursor-pointer'
-                    } ${isInactive && isStaff ? 'opacity-50' : ''}`}
+                  className={`relative transition-all flex flex-col ${(isUnavailable && !showStaffUI) ? 'opacity-60' : 'cursor-pointer'
+                    } ${isInactive && showStaffUI ? 'opacity-50' : ''}`}
                   onClick={() => {
-                    if (isStaff) {
+                    if (showStaffUI) {
                       handleSelectProduct(product)
                       return
                     }
@@ -1311,7 +1326,7 @@ export default function ShopPage() {
                         <span className="text-white text-sm font-bold">已完銷</span>
                       </div>
                     )}
-                    {isInactive && isStaff && !isSoldOut && !isExpired && (
+                    {isInactive && showStaffUI && !isSoldOut && !isExpired && (
                       <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
                         <span className="text-white text-sm font-bold">已下架</span>
                       </div>
@@ -1346,7 +1361,7 @@ export default function ShopPage() {
                     )}
 
                     {/* 管理員：顯示分配狀態 */}
-                    {isStaff && pStats && (
+                    {showStaffUI && pStats && (
                       <div className="mt-1.5 pt-1.5 border-t" style={{ borderColor: '#F5E0C4' }}>
                         <div className="flex items-center justify-between text-[10px] text-muted-foreground">
                           <span>
@@ -1367,7 +1382,7 @@ export default function ShopPage() {
 
         {products.length === 0 && (
           <div className="text-center py-16 text-muted-foreground">
-            {isStaff ? (
+            {showStaffUI ? (
               <div className="flex flex-col items-center">
                 <div className="w-20 h-20 rounded-full bg-purple-50 dark:bg-purple-950/30 flex items-center justify-center mb-4">
                   <Camera className="w-8 h-8 text-purple-400" />
@@ -1441,7 +1456,7 @@ export default function ShopPage() {
               <div className="mb-3">
                 {modalImages.length > 0 ? (
                   <div className="relative">
-                    <div className="overflow-hidden rounded-2xl relative touch-pan-y">
+                    <div className="overflow-hidden rounded-2xl relative touch-pan-y" style={{ maxHeight: '45vh' }}>
                       <div
                         className="flex"
                         style={{
@@ -1450,7 +1465,7 @@ export default function ShopPage() {
                         }}
                       >
                         {modalImages.map((url, i) => (
-                          <div key={i} className="min-w-full aspect-square relative">
+                          <div key={i} className="min-w-full relative" style={{ aspectRatio: '1', maxHeight: '45vh' }}>
                             <Image
                               src={url}
                               alt={`${selectedProduct.name} ${i + 1}`}
@@ -1483,7 +1498,7 @@ export default function ShopPage() {
                     </div>
                     {/* 圓點指示器 */}
                     {modalImages.length > 1 && (
-                      <div className="flex justify-center gap-1.5 mt-3">
+                      <div className="flex justify-center gap-1.5 mt-2">
                         {modalImages.map((_, i) => (
                           <button
                             key={i}
@@ -1499,16 +1514,18 @@ export default function ShopPage() {
                     )}
                   </div>
                 ) : (
-                  <div className="w-full aspect-square rounded-2xl flex items-center justify-center" style={{ backgroundColor: '#F5E0C4' }}>
+                  <div className="w-full rounded-2xl flex items-center justify-center" style={{ backgroundColor: '#F5E0C4', aspectRatio: '1', maxHeight: '45vh' }}>
                     <Package className="w-16 h-16" style={{ color: '#C4A882' }} />
                   </div>
                 )}
               </div>
 
               {/* 商品資訊 */}
-              <div className="mb-3">
-                <h3 className="font-bold text-lg leading-tight" style={{ color: '#4A2C17' }}>{selectedProduct.name}</h3>
-                <p className="text-2xl font-bold mt-0.5" style={{ color: accentColor || '#D94E2B' }}>${selectedProduct.price.toLocaleString()}</p>
+              <div className="mb-2">
+                <div className="flex items-start justify-between gap-2">
+                  <h3 className="font-bold text-lg leading-tight" style={{ color: '#4A2C17' }}>{selectedProduct.name}</h3>
+                  <p className="text-xl font-bold shrink-0" style={{ color: accentColor || '#D94E2B' }}>${selectedProduct.price.toLocaleString()}</p>
+                </div>
                 <div className="flex items-center gap-2 mt-1">
                   <span
                     className="text-xs px-2 py-0.5 rounded-full font-medium"
@@ -1530,7 +1547,7 @@ export default function ShopPage() {
                 )}
               </div>
 
-              {isStaff ? (
+              {showStaffUI ? (
                 /* ===== 管理者模式：管理面板 ===== */
                 (() => {
                   const pStats = getProductStats(selectedProduct.id)
@@ -1671,8 +1688,8 @@ export default function ShopPage() {
                 <>
                   {/* 規格選擇 */}
                   {selectedProduct.has_variants && (
-                    <div className="mb-4">
-                      <span className="text-sm font-medium mb-2 block" style={{ color: '#4A2C17' }}>規格</span>
+                    <div className="mb-2">
+                      <span className="text-sm font-medium mb-1.5 block" style={{ color: '#4A2C17' }}>規格</span>
                       {isLoadingVariants ? (
                         <div className="flex justify-center py-3">
                           <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#D4B896' }} />
@@ -1724,25 +1741,25 @@ export default function ShopPage() {
 
                     return (
                       <>
-                        <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center justify-between mb-2">
                           <span className="text-sm font-medium" style={{ color: '#4A2C17' }}>數量</span>
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2">
                             <button
-                              className="h-10 w-10 rounded-full border-2 flex items-center justify-center transition-colors active:scale-95 disabled:opacity-30"
+                              className="h-8 w-8 rounded-full border-2 flex items-center justify-center transition-colors active:scale-95 disabled:opacity-30"
                               style={{ borderColor: '#D4B896' }}
                               onClick={() => setQuantity(Math.max(1, quantity - 1))}
                               disabled={quantity <= 1}
                             >
-                              <Minus className="w-4 h-4" style={{ color: '#4A2C17' }} />
+                              <Minus className="w-3.5 h-3.5" style={{ color: '#4A2C17' }} />
                             </button>
-                            <span className="text-2xl font-bold w-10 text-center" style={{ color: '#4A2C17' }}>{quantity}</span>
+                            <span className="text-xl font-bold w-8 text-center" style={{ color: '#4A2C17' }}>{quantity}</span>
                             <button
-                              className="h-10 w-10 rounded-full border-2 flex items-center justify-center transition-colors active:scale-95 disabled:opacity-30"
+                              className="h-8 w-8 rounded-full border-2 flex items-center justify-center transition-colors active:scale-95 disabled:opacity-30"
                               style={{ borderColor: '#D4B896' }}
                               onClick={() => setQuantity(Math.min(maxQty, quantity + 1))}
                               disabled={quantity >= maxQty}
                             >
-                              <Plus className="w-4 h-4" style={{ color: '#4A2C17' }} />
+                              <Plus className="w-3.5 h-3.5" style={{ color: '#4A2C17' }} />
                             </button>
                           </div>
                         </div>
@@ -1761,24 +1778,24 @@ export default function ShopPage() {
               </div>{/* end scrollable area */}
 
               {/* 固定底部：小計 + 按鈕（客人模式） */}
-              {!isStaff && (
-                <div className="px-5 pb-5 pt-2 border-t shrink-0" style={{ borderColor: '#E8D5BE', backgroundColor: '#FFF8F0' }}>
-                  <div className="flex items-center justify-between mb-2">
+              {!showStaffUI && (
+                <div className="px-5 pb-4 pt-2 border-t shrink-0" style={{ borderColor: '#E8D5BE', backgroundColor: '#FFF8F0' }}>
+                  <div className="flex items-center justify-between mb-1.5">
                     <span className="text-sm" style={{ color: '#8B6B4A' }}>小計</span>
-                    <span className="text-xl font-bold" style={{ color: accentColor || '#D94E2B' }}>
+                    <span className="text-lg font-bold" style={{ color: accentColor || '#D94E2B' }}>
                       ${(selectedProduct.price * quantity).toLocaleString()}
                     </span>
                   </div>
                   <div className="flex gap-3">
                     <button
-                      className="flex-1 py-2.5 rounded-xl text-sm font-medium border-2 transition-all active:scale-[0.97]"
+                      className="flex-1 py-2 rounded-xl text-sm font-medium border-2 transition-all active:scale-[0.97]"
                       style={{ borderColor: '#D4B896', color: '#8B6B4A' }}
                       onClick={() => { setSelectedProduct(null); setQuantity(1) }}
                     >
                       取消
                     </button>
                     <button
-                      className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-[0.97] disabled:opacity-40"
+                      className="flex-1 py-2 rounded-xl text-sm font-bold transition-all active:scale-[0.97] disabled:opacity-40"
                       style={{ backgroundColor: accentColor || '#D94E2B', color: '#fff8f0' }}
                       onClick={handleDirectOrder}
                       disabled={isOrdering || (selectedProduct.has_variants && !selectedVariant)}
@@ -2262,7 +2279,7 @@ export default function ShopPage() {
 
       {/* ========== 管理員面板 Drawer ========== */}
       <AnimatePresence>
-        {isAdminPanelOpen && isStaff && (
+        {isAdminPanelOpen && showStaffUI && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -2387,7 +2404,7 @@ export default function ShopPage() {
 
       {/* ========== 上架商品 Modal ========== */}
       <AnimatePresence>
-        {isAddProductOpen && isStaff && (
+        {isAddProductOpen && showStaffUI && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -2705,7 +2722,7 @@ export default function ShopPage() {
 
       {/* ========== 補貨 Modal ========== */}
       <AnimatePresence>
-        {restockProduct && isStaff && (
+        {restockProduct && showStaffUI && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
