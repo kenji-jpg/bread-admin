@@ -347,6 +347,7 @@ export default function ShopPage() {
   const isStaffRef = useRef(isStaff)
   isStaffRef.current = isStaff
 
+  const initialLoadDone = useRef(false)
   const loadShop = useCallback(async (forceIncludeInactive?: boolean) => {
     try {
       const { data, error } = await supabase.rpc('get_shop_products_v1', {
@@ -357,10 +358,13 @@ export default function ShopPage() {
       if (error) throw error
 
       if (!data.success) {
-        setError(data.error)
+        // 只在初次載入時顯示錯誤頁，背景刷新失敗靜默處理
+        if (!initialLoadDone.current) setError(data.error)
         return
       }
 
+      initialLoadDone.current = true
+      setError(null) // 清除先前錯誤
       setTenant(data.tenant)
       setProducts(data.products || [])
       setShopSettings(data.shop_settings || {})
@@ -372,7 +376,8 @@ export default function ShopPage() {
       }
     } catch (err) {
       console.error('Load shop error:', err)
-      setError('載入失敗')
+      // 只在初次載入時顯示錯誤頁，Realtime 觸發的重新載入失敗不應覆蓋正常畫面
+      if (!initialLoadDone.current) setError('載入失敗')
     } finally {
       setIsLoading(false)
     }
