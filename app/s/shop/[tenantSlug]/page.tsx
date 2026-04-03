@@ -239,7 +239,7 @@ export default function ShopPage() {
 
   // ========== 收藏 ==========
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set())
-  const [isTogglingFavorite, setIsTogglingFavorite] = useState(false)
+  const togglingFavoriteRef = useRef(false)
 
   // ========== 管理員模式 ==========
   const [isStaff, setIsStaff] = useState(false)
@@ -607,9 +607,10 @@ export default function ShopPage() {
   // ========== 收藏 toggle ==========
   const handleToggleFavorite = async (productId: string) => {
     if (!isLoggedIn) { login(); return }
-    if (!profile?.userId || isTogglingFavorite) return
+    if (!profile?.userId || togglingFavoriteRef.current) return
+    togglingFavoriteRef.current = true
 
-    // 樂觀更新
+    // 樂觀更新（只觸發一次 re-render）
     const wasFavorited = favoriteIds.has(productId)
     setFavoriteIds(prev => {
       const next = new Set(prev)
@@ -617,7 +618,6 @@ export default function ShopPage() {
       else next.add(productId)
       return next
     })
-    setIsTogglingFavorite(true)
 
     try {
       const { data, error } = await supabase.rpc('toggle_member_favorite_v1', {
@@ -648,7 +648,7 @@ export default function ShopPage() {
         return next
       })
     } finally {
-      setIsTogglingFavorite(false)
+      togglingFavoriteRef.current = false
     }
   }
 
@@ -1730,12 +1730,16 @@ export default function ShopPage() {
                   <h3 className="font-bold text-lg leading-tight min-w-0" style={{ color: '#4A2C17' }}>{selectedProduct.name}</h3>
                   <div className="flex items-center gap-1 shrink-0">
                     <button
-                      className="p-1.5 rounded-full active:scale-90"
-                      style={{ color: favoriteIds.has(selectedProduct.id) ? '#EF4444' : '#C4A882', transition: 'transform 0.15s' }}
+                      className="p-1.5 rounded-full"
+                      style={{ WebkitTapHighlightColor: 'transparent' }}
                       onClick={(e) => { e.stopPropagation(); handleToggleFavorite(selectedProduct.id) }}
-                      disabled={isTogglingFavorite}
                     >
-                      <Heart className="w-5 h-5" fill={favoriteIds.has(selectedProduct.id) ? '#EF4444' : 'none'} />
+                      <Heart
+                        className="w-5 h-5"
+                        fill={favoriteIds.has(selectedProduct.id) ? '#EF4444' : 'none'}
+                        stroke={favoriteIds.has(selectedProduct.id) ? '#EF4444' : '#C4A882'}
+                        style={{ transition: 'none' }}
+                      />
                     </button>
                     <button
                       className="p-1.5 rounded-full transition-all active:scale-90"

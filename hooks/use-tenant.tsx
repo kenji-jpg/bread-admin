@@ -11,23 +11,27 @@ export interface DashboardStats {
     member_count: number
     product_count: number
     active_product_count: number
-    // 今日
-    today_orders: number
+    // 今日（結帳單）
+    today_checkouts: number
     today_revenue: number
     today_profit: number
-    // 本月
-    month_orders: number
+    // 今日（喊單）
+    today_orders: number
+    // 本月（結帳單）
+    month_checkouts: number
     month_revenue: number
     month_profit: number
+    // 本月（喊單）
+    month_orders: number
     // 其他
     pending_orders: number
     recent_orders: {
         id: string
-        customer_name: string
-        item_name: string
-        quantity: number
-        unit_price: number
-        cost: number | null
+        checkout_no: string
+        total_amount: number
+        item_count: number
+        payment_status: string
+        shipping_status: string
         created_at: string
     }[]
 }

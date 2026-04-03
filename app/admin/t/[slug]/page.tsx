@@ -23,6 +23,7 @@ import {
     Shield,
     CreditCard,
     PiggyBank,
+    Receipt,
 } from 'lucide-react'
 
 export default function TenantDashboardPage() {
@@ -218,12 +219,12 @@ export default function TenantDashboardPage() {
             {/* 營運數據 — 訂單 & 會員 */}
             <motion.div variants={itemVariants} className="grid gap-4 grid-cols-2 md:grid-cols-4">
                 <StatCard
-                    title="本月訂單"
-                    value={stats?.month_orders || 0}
+                    title="本月結帳"
+                    value={stats?.month_checkouts || 0}
                     icon={ShoppingCart}
                     variant="primary"
-                    description={`今日 ${stats?.today_orders || 0} 筆`}
-                    href={`/admin/t/${tenant.slug}/orders`}
+                    description={`喊單 ${stats?.month_orders || 0} 筆`}
+                    href={`/admin/t/${tenant.slug}/checkouts`}
                 />
                 <StatCard
                     title="待處理"
@@ -251,27 +252,27 @@ export default function TenantDashboardPage() {
 
             {/* Content Grid */}
             <div className="grid gap-6 lg:grid-cols-2">
-                {/* Recent Orders */}
+                {/* 最近結帳 */}
                 <motion.div variants={itemVariants}>
                     <Card className="border-border/50">
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2">
-                                <ShoppingCart className="h-5 w-5 text-primary" />
-                                最近訂單
+                                <Receipt className="h-5 w-5 text-primary" />
+                                最近結帳
                             </CardTitle>
-                            <CardDescription>最新的 5 筆訂單</CardDescription>
+                            <CardDescription>最新的 5 筆結帳單</CardDescription>
                         </CardHeader>
                         <CardContent>
                             {!stats?.recent_orders || stats.recent_orders.length === 0 ? (
                                 <div className="flex flex-col items-center justify-center py-8 text-center">
-                                    <ShoppingCart className="h-10 w-10 text-muted-foreground/50 mb-3" />
-                                    <p className="text-sm text-muted-foreground">尚無訂單</p>
+                                    <Receipt className="h-10 w-10 text-muted-foreground/50 mb-3" />
+                                    <p className="text-sm text-muted-foreground">尚無結帳單</p>
                                 </div>
                             ) : (
                                 <div className="space-y-3">
-                                    {stats.recent_orders.map((order, index) => (
+                                    {stats.recent_orders.map((checkout, index) => (
                                         <motion.div
-                                            key={order.id}
+                                            key={checkout.id}
                                             initial={{ opacity: 0, x: -10 }}
                                             animate={{ opacity: 1, x: 0 }}
                                             transition={{ delay: index * 0.05 }}
@@ -279,23 +280,21 @@ export default function TenantDashboardPage() {
                                         >
                                             <div>
                                                 <p className="font-medium text-sm">
-                                                    {order.item_name || '未命名商品'}
+                                                    #{checkout.checkout_no}
                                                 </p>
                                                 <p className="text-xs text-muted-foreground">
-                                                    {order.customer_name || '匿名'} · {order.quantity} 件
+                                                    {checkout.item_count} 件商品
+                                                    {checkout.shipping_status === 'completed' && ' · ✅ 完成'}
+                                                    {checkout.shipping_status === 'shipped' && ' · 📦 已出貨'}
+                                                    {checkout.shipping_status === 'ordered' && ' · 🏪 已下單'}
                                                 </p>
                                             </div>
                                             <div className="text-right">
                                                 <p className="font-semibold text-sm">
-                                                    ${(order.quantity * order.unit_price).toLocaleString()}
+                                                    ${checkout.total_amount.toLocaleString()}
                                                 </p>
-                                                {order.cost != null && (
-                                                    <p className="text-xs text-emerald-600">
-                                                        利潤 ${(order.quantity * (order.unit_price - order.cost)).toLocaleString()}
-                                                    </p>
-                                                )}
                                                 <p className="text-xs text-muted-foreground">
-                                                    {new Date(order.created_at).toLocaleDateString('zh-TW')}
+                                                    {new Date(checkout.created_at).toLocaleDateString('zh-TW')}
                                                 </p>
                                             </div>
                                         </motion.div>
