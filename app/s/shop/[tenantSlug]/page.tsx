@@ -1427,8 +1427,8 @@ export default function ShopPage() {
                   setCarouselIndex(0)
                 }
               }}
-              className="absolute inset-x-0 bottom-0 rounded-t-2xl safe-bottom max-w-lg mx-auto flex flex-col"
-              style={{ backgroundColor: '#FFF8F0', maxHeight: 'calc(100dvh - 3rem)' }}
+              className="absolute inset-x-0 top-12 bottom-0 rounded-t-2xl safe-bottom max-w-lg mx-auto flex flex-col"
+              style={{ backgroundColor: '#FFF8F0' }}
               onClick={(e) => e.stopPropagation()}
             >
               {/* 拖曳指示條 */}
