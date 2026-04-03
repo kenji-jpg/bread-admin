@@ -1450,7 +1450,7 @@ export default function ShopPage() {
                         }}
                       >
                         {modalImages.map((url, i) => (
-                          <div key={i} className="min-w-full h-48 relative">
+                          <div key={i} className="min-w-full aspect-square relative">
                             <Image
                               src={url}
                               alt={`${selectedProduct.name} ${i + 1}`}
@@ -1499,7 +1499,7 @@ export default function ShopPage() {
                     )}
                   </div>
                 ) : (
-                  <div className="w-full h-48 rounded-2xl flex items-center justify-center" style={{ backgroundColor: '#F5E0C4' }}>
+                  <div className="w-full aspect-square rounded-2xl flex items-center justify-center" style={{ backgroundColor: '#F5E0C4' }}>
                     <Package className="w-16 h-16" style={{ color: '#C4A882' }} />
                   </div>
                 )}
