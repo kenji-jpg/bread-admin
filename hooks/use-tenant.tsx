@@ -11,10 +11,15 @@ export interface DashboardStats {
     member_count: number
     product_count: number
     active_product_count: number
+    // 今日
     today_orders: number
     today_revenue: number
-    today_cost: number
     today_profit: number
+    // 本月
+    month_orders: number
+    month_revenue: number
+    month_profit: number
+    // 其他
     pending_orders: number
     recent_orders: {
         id: string

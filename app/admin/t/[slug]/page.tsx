@@ -190,36 +190,55 @@ export default function TenantDashboardPage() {
                 )
             })()}
 
-            {/* Stats Grid */}
-            <motion.div variants={itemVariants} className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+            {/* 財務摘要 — 本月營收 & 本月利潤 */}
+            <motion.div variants={itemVariants} className="grid gap-4 grid-cols-1 md:grid-cols-2">
                 <StatCard
-                    title="今日訂單"
-                    value={stats?.today_orders || 0}
-                    icon={ShoppingCart}
-                    variant="primary"
-                    href={`/admin/t/${tenant.slug}/orders`}
-                />
-                <StatCard
-                    title="今日營收"
-                    value={`$${(stats?.today_revenue || 0).toLocaleString()}`}
+                    title="本月營收"
+                    value={`$${(stats?.month_revenue || 0).toLocaleString()}`}
                     icon={DollarSign}
                     variant="success"
+                    description={`今日 $${(stats?.today_revenue || 0).toLocaleString()}`}
                     href={`/admin/t/${tenant.slug}/checkouts`}
                 />
                 <StatCard
-                    title="今日利潤"
-                    value={`$${(stats?.today_profit || 0).toLocaleString()}`}
+                    title="本月利潤"
+                    value={`$${(stats?.month_profit || 0).toLocaleString()}`}
                     icon={PiggyBank}
                     variant="success"
-                    description={(stats?.today_revenue ?? 0) > 0 ? `毛利率 ${Math.round(((stats?.today_profit || 0) / (stats?.today_revenue || 1)) * 100)}%` : undefined}
+                    description={(() => {
+                        const mr = stats?.month_revenue || 0
+                        const mp = stats?.month_profit || 0
+                        const margin = mr > 0 ? Math.round((mp / mr) * 100) : 0
+                        const todayStr = `今日 $${(stats?.today_profit || 0).toLocaleString()}`
+                        return mr > 0 ? `${todayStr} · 毛利率 ${margin}%` : todayStr
+                    })()}
+                />
+            </motion.div>
+
+            {/* 營運數據 — 訂單 & 會員 */}
+            <motion.div variants={itemVariants} className="grid gap-4 grid-cols-2 md:grid-cols-4">
+                <StatCard
+                    title="本月訂單"
+                    value={stats?.month_orders || 0}
+                    icon={ShoppingCart}
+                    variant="primary"
+                    description={`今日 ${stats?.today_orders || 0} 筆`}
+                    href={`/admin/t/${tenant.slug}/orders`}
                 />
                 <StatCard
-                    title="待處理訂單"
+                    title="待處理"
                     value={stats?.pending_orders || 0}
                     icon={Clock}
                     variant="warning"
                     description="尚未到貨"
                     href={`/admin/t/${tenant.slug}/orders?status=pending`}
+                />
+                <StatCard
+                    title="上架商品"
+                    value={stats?.active_product_count || 0}
+                    icon={Package}
+                    variant="default"
+                    href={`/admin/t/${tenant.slug}/products`}
                 />
                 <StatCard
                     title="會員數"
