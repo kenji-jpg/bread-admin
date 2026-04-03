@@ -25,6 +25,7 @@ import {
   PackageX,
   Users,
   Camera,
+  Timer,
   TimerOff,
   TimerReset,
   Store,
@@ -188,6 +189,43 @@ interface StaffStats {
   total_sales: number
 }
 
+// 抽出為穩定元件，避免 re-render 造成圖片閃爍
+function OrderCard({ order }: { order: OrderItem }) {
+  return (
+    <div
+      className="flex gap-3 p-3 rounded-xl"
+      style={{ backgroundColor: '#FFF8F0', border: '1px solid #E8D5BE' }}
+    >
+      <div className="w-14 h-14 rounded-lg overflow-hidden flex-shrink-0" style={{ backgroundColor: '#F5E0C4' }}>
+        {order.product_image ? (
+          <Image
+            src={order.product_image}
+            alt={order.product_name}
+            width={56}
+            height={56}
+            className="object-cover w-full h-full"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <Package className="w-5 h-5" style={{ color: '#C4A882' }} />
+          </div>
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="font-medium text-sm truncate" style={{ color: '#4A2C17' }}>
+          {order.product_name}
+          {order.variant_name && (
+            <span className="ml-1 font-normal" style={{ color: '#8B6B4A' }}>({order.variant_name})</span>
+          )}
+        </p>
+        <p className="text-xs mt-0.5" style={{ color: '#8B6B4A' }}>
+          ${order.unit_price.toLocaleString()} × {order.quantity}
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export default function ShopPage() {
   const params = useParams()
   const searchParams = useSearchParams()
@@ -275,6 +313,7 @@ export default function ShopPage() {
 
   // 下架/上架
   const [isToggling, setIsToggling] = useState<string | null>(null)
+  const [showExtendOptions, setShowExtendOptions] = useState<string | null>(null)
 
   // 倒數計時器 tick（每 30 秒更新畫面）
   const [, setTick] = useState(0)
@@ -939,21 +978,21 @@ export default function ShopPage() {
     }
   }
 
-  // 管理員：調整商品截止時間
-  const handleUpdateEndTime = async (productId: string, endTime: Date) => {
+  // 管理員：調整商品截止時間（null = 無限期）
+  const handleUpdateEndTime = async (productId: string, endTime: Date | null) => {
     if (!profile) return
     try {
       const { data, error } = await supabase.rpc('update_product_end_time_v1', {
         p_product_id: productId,
         p_line_user_id: profile.userId,
-        p_end_time: endTime.toISOString(),
+        p_end_time: endTime ? endTime.toISOString() : null,
       })
       if (error) throw error
       if (!data.success) {
         toast.error(data.error)
         return
       }
-      toast.success(endTime > new Date() ? '已延長截止時間' : '已截止')
+      toast.success(endTime === null ? '已開啟不限時' : endTime > new Date() ? '已延長截止時間' : '已截止')
       loadShop()
     } catch (err) {
       console.error('Update end time error:', err)
@@ -1626,7 +1665,7 @@ export default function ShopPage() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 bg-black/40 flex justify-center"
-            onClick={() => { setSelectedProduct(null); setCarouselIndex(0) }}
+            onClick={() => { setSelectedProduct(null); setCarouselIndex(0); setShowExtendOptions(null) }}
           >
             <motion.div
               initial={{ y: '100%' }}
@@ -1825,7 +1864,7 @@ export default function ShopPage() {
                           補貨
                         </button>
 
-                        {/* 截止 / 延長 */}
+                        {/* 截止 / 延長（含選項） */}
                         {!isExpiredProduct ? (
                           <button
                             className="h-12 rounded-xl text-sm font-medium flex items-center justify-center gap-1"
@@ -1838,20 +1877,44 @@ export default function ShopPage() {
                             <TimerOff className="w-4 h-4" />
                             截止收單
                           </button>
+                        ) : showExtendOptions === selectedProduct.id ? (
+                          <>
+                            <button
+                              className="h-12 rounded-xl text-sm font-medium flex items-center justify-center gap-1"
+                              style={{ backgroundColor: '#16A34A', color: '#fff' }}
+                              onClick={() => {
+                                handleUpdateEndTime(
+                                  selectedProduct.id,
+                                  new Date(Date.now() + 60 * 60 * 1000)
+                                )
+                                setShowExtendOptions(null)
+                                setSelectedProduct(null)
+                              }}
+                            >
+                              <TimerReset className="w-4 h-4" />
+                              +1 小時
+                            </button>
+                            <button
+                              className="h-12 rounded-xl text-sm font-medium flex items-center justify-center gap-1"
+                              style={{ backgroundColor: '#2563EB', color: '#fff' }}
+                              onClick={() => {
+                                handleUpdateEndTime(selectedProduct.id, null)
+                                setShowExtendOptions(null)
+                                setSelectedProduct(null)
+                              }}
+                            >
+                              <Timer className="w-4 h-4" />
+                              不限時
+                            </button>
+                          </>
                         ) : (
                           <button
                             className="h-12 rounded-xl text-sm font-medium flex items-center justify-center gap-1"
                             style={{ backgroundColor: '#16A34A', color: '#fff' }}
-                            onClick={() => {
-                              handleUpdateEndTime(
-                                selectedProduct.id,
-                                new Date(Date.now() + 60 * 60 * 1000)
-                              )
-                              setSelectedProduct(null)
-                            }}
+                            onClick={() => setShowExtendOptions(selectedProduct.id)}
                           >
                             <TimerReset className="w-4 h-4" />
-                            延長 1 小時
+                            延長
                           </button>
                         )}
 
@@ -2138,40 +2201,6 @@ export default function ShopPage() {
           const confirmedOrders = orders.filter((o) => (o.status === 'allocated' || o.checkout_id) && o.status !== 'cancelled')
           const failedOrders = orders.filter((o) => o.status === 'cancelled')
 
-          const OrderCard = ({ order }: { order: OrderItem }) => (
-            <div
-              className="flex gap-3 p-3 rounded-xl"
-              style={{ backgroundColor: '#FFF8F0', border: '1px solid #E8D5BE' }}
-            >
-              <div className="w-14 h-14 rounded-lg overflow-hidden flex-shrink-0" style={{ backgroundColor: '#F5E0C4' }}>
-                {order.product_image ? (
-                  <Image
-                    src={order.product_image}
-                    alt={order.product_name}
-                    width={56}
-                    height={56}
-                    className="object-cover w-full h-full"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <Package className="w-5 h-5" style={{ color: '#C4A882' }} />
-                  </div>
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-sm truncate" style={{ color: '#4A2C17' }}>
-                  {order.product_name}
-                  {order.variant_name && (
-                    <span className="ml-1 font-normal" style={{ color: '#8B6B4A' }}>({order.variant_name})</span>
-                  )}
-                </p>
-                <p className="text-xs mt-0.5" style={{ color: '#8B6B4A' }}>
-                  ${order.unit_price.toLocaleString()} × {order.quantity}
-                </p>
-              </div>
-            </div>
-          )
-
           return (
           <motion.div
             initial={{ opacity: 0 }}
@@ -2297,17 +2326,18 @@ export default function ShopPage() {
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="w-full max-w-lg bg-background rounded-t-2xl max-h-[85vh] flex flex-col"
+              className="w-full max-w-lg rounded-t-2xl max-h-[85vh] flex flex-col"
+              style={{ backgroundColor: '#FFF8F0' }}
               onClick={(e) => e.stopPropagation()}
             >
               {/* Modal Header */}
-              <div className="flex items-center justify-between p-4 border-b">
-                <h2 className="text-lg font-bold">
+              <div className="flex items-center justify-between p-4" style={{ borderBottom: '1px solid #E8D5BE' }}>
+                <h2 className="text-lg font-bold" style={{ color: '#4A2C17' }}>
                   {checkoutStep === 'method' && '選擇出貨方式'}
                   {checkoutStep === 'confirm' && '確認結帳'}
                   {checkoutStep === 'success' && '結帳成功'}
                 </h2>
-                <button onClick={closeCheckoutModal} className="p-1 rounded-full hover:bg-muted">
+                <button onClick={closeCheckoutModal} className="p-1 rounded-full" style={{ color: '#8B6B4A' }}>
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -2317,17 +2347,17 @@ export default function ShopPage() {
                 <div className="flex-1 overflow-y-auto">
                   {/* 可結帳商品明細 */}
                   <div className="p-4 space-y-2">
-                    <p className="text-sm font-medium text-muted-foreground mb-2">結帳商品（{checkoutEligibleOrders.length} 項）</p>
+                    <p className="text-sm font-medium mb-2" style={{ color: '#8B6B4A' }}>結帳商品（{checkoutEligibleOrders.length} 項）</p>
                     {checkoutEligibleOrders.map((order) => (
-                      <div key={order.id} className="flex items-center justify-between py-2 border-b last:border-0">
+                      <div key={order.id} className="flex items-center justify-between py-2">
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{order.product_name}</p>
-                          <p className="text-xs text-muted-foreground">${order.unit_price} × {order.quantity}</p>
+                          <p className="text-sm font-medium truncate" style={{ color: '#4A2C17' }}>{order.product_name}</p>
+                          <p className="text-xs" style={{ color: '#8B6B4A' }}>${order.unit_price} × {order.quantity}</p>
                         </div>
-                        <p className="text-sm font-bold ml-2">${order.unit_price * order.quantity}</p>
+                        <p className="text-sm font-bold ml-2" style={{ color: '#4A2C17' }}>${order.unit_price * order.quantity}</p>
                       </div>
                     ))}
-                    <div className="flex justify-between pt-2 font-bold">
+                    <div className="flex justify-between pt-2 font-bold" style={{ borderTop: '2px solid #D4B896', color: '#D94E2B' }}>
                       <span>商品小計</span>
                       <span>${checkoutEligibleTotal}</span>
                     </div>
@@ -2335,70 +2365,76 @@ export default function ShopPage() {
 
                   {/* 出貨方式選擇 */}
                   <div className="p-4 pt-0 space-y-3">
-                    <p className="text-sm font-medium text-muted-foreground">選擇出貨方式</p>
+                    <p className="text-sm font-medium" style={{ color: '#8B6B4A' }}>選擇出貨方式</p>
 
                     {/* 賣貨便 */}
                     <button
                       onClick={() => setSelectedShipping('myship')}
-                      className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${
-                        selectedShipping === 'myship' ? 'border-primary bg-primary/5' : 'border-muted hover:border-muted-foreground/30'
-                      }`}
+                      className="w-full flex items-center gap-3 p-3 rounded-xl transition-all"
+                      style={{
+                        border: `2px solid ${selectedShipping === 'myship' ? (accentColor || '#D94E2B') : '#E8D5BE'}`,
+                        backgroundColor: selectedShipping === 'myship' ? '#F5E6D3' : 'transparent',
+                      }}
                     >
-                      <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center shrink-0">
-                        <Store className="w-5 h-5 text-green-600" />
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: '#E8F5E8' }}>
+                        <Store className="w-5 h-5" style={{ color: '#4CAF50' }} />
                       </div>
                       <div className="flex-1 text-left">
-                        <p className="font-medium">賣貨便</p>
-                        <p className="text-xs text-muted-foreground">7-11 取貨 · 運費 $38（另計）</p>
+                        <p className="font-medium" style={{ color: '#4A2C17' }}>賣貨便</p>
+                        <p className="text-xs" style={{ color: '#8B6B4A' }}>7-11 取貨 · 運費 +$38</p>
                       </div>
-                      {selectedShipping === 'myship' && <CheckCircle className="w-5 h-5 text-primary shrink-0" />}
+                      {selectedShipping === 'myship' && <CheckCircle className="w-5 h-5 shrink-0" style={{ color: accentColor || '#D94E2B' }} />}
                     </button>
 
                     {/* 宅配 */}
                     <button
                       onClick={() => setSelectedShipping('delivery')}
-                      className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${
-                        selectedShipping === 'delivery' ? 'border-primary bg-primary/5' : 'border-muted hover:border-muted-foreground/30'
-                      }`}
+                      className="w-full flex items-center gap-3 p-3 rounded-xl transition-all"
+                      style={{
+                        border: `2px solid ${selectedShipping === 'delivery' ? (accentColor || '#D94E2B') : '#E8D5BE'}`,
+                        backgroundColor: selectedShipping === 'delivery' ? '#F5E6D3' : 'transparent',
+                      }}
                     >
-                      <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
-                        <Truck className="w-5 h-5 text-blue-600" />
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: '#E3F2FD' }}>
+                        <Truck className="w-5 h-5" style={{ color: '#2196F3' }} />
                       </div>
                       <div className="flex-1 text-left">
-                        <p className="font-medium">宅配</p>
-                        <p className="text-xs text-muted-foreground">宅配到府 · 運費 $80</p>
+                        <p className="font-medium" style={{ color: '#4A2C17' }}>宅配</p>
+                        <p className="text-xs" style={{ color: '#8B6B4A' }}>宅配到府 · 運費 $80</p>
                       </div>
-                      {selectedShipping === 'delivery' && <CheckCircle className="w-5 h-5 text-primary shrink-0" />}
+                      {selectedShipping === 'delivery' && <CheckCircle className="w-5 h-5 shrink-0" style={{ color: accentColor || '#D94E2B' }} />}
                     </button>
 
                     {/* 自取 */}
                     <button
                       onClick={() => setSelectedShipping('pickup')}
-                      className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${
-                        selectedShipping === 'pickup' ? 'border-primary bg-primary/5' : 'border-muted hover:border-muted-foreground/30'
-                      }`}
+                      className="w-full flex items-center gap-3 p-3 rounded-xl transition-all"
+                      style={{
+                        border: `2px solid ${selectedShipping === 'pickup' ? (accentColor || '#D94E2B') : '#E8D5BE'}`,
+                        backgroundColor: selectedShipping === 'pickup' ? '#F5E6D3' : 'transparent',
+                      }}
                     >
-                      <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center shrink-0">
-                        <MapPin className="w-5 h-5 text-orange-600" />
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: '#FFF3E0' }}>
+                        <MapPin className="w-5 h-5" style={{ color: '#FF9800' }} />
                       </div>
                       <div className="flex-1 text-left">
-                        <p className="font-medium">自取</p>
-                        <p className="text-xs text-muted-foreground">到店自取 · 免運費</p>
+                        <p className="font-medium" style={{ color: '#4A2C17' }}>自取</p>
+                        <p className="text-xs" style={{ color: '#8B6B4A' }}>到店自取 · 免運費</p>
                       </div>
-                      {selectedShipping === 'pickup' && <CheckCircle className="w-5 h-5 text-primary shrink-0" />}
+                      {selectedShipping === 'pickup' && <CheckCircle className="w-5 h-5 shrink-0" style={{ color: accentColor || '#D94E2B' }} />}
                     </button>
                   </div>
 
                   {/* 下一步按鈕 */}
-                  <div className="p-4 border-t">
-                    <Button
-                      className="w-full rounded-xl"
+                  <div className="p-4" style={{ borderTop: '1px solid #E8D5BE' }}>
+                    <button
+                      className="w-full py-3 rounded-xl text-sm font-bold transition-all active:scale-[0.97] disabled:opacity-50"
                       disabled={!selectedShipping}
                       onClick={() => setCheckoutStep('confirm')}
-                      style={shopSettings.accent_color ? { backgroundColor: shopSettings.accent_color } : undefined}
+                      style={{ backgroundColor: accentColor || '#D94E2B', color: '#fff8f0' }}
                     >
                       下一步
-                    </Button>
+                    </button>
                   </div>
                 </div>
               )}
@@ -2409,28 +2445,28 @@ export default function ShopPage() {
                   <div className="p-4 space-y-4">
                     {/* 金額明細 */}
                     <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
+                      <div className="flex justify-between text-sm" style={{ color: '#4A2C17' }}>
                         <span>商品小計（{checkoutEligibleOrders.length} 項）</span>
                         <span>${checkoutEligibleTotal}</span>
                       </div>
                       {selectedShipping === 'myship' && (
-                        <div className="flex justify-between text-sm text-muted-foreground">
-                          <span>運費 $38（賣貨便另計，不含在結帳金額）</span>
+                        <div className="flex justify-between text-sm" style={{ color: '#8B6B4A' }}>
+                          <span>運費 +$38（不含在結帳金額）</span>
                         </div>
                       )}
                       {selectedShipping === 'delivery' && (
-                        <div className="flex justify-between text-sm">
+                        <div className="flex justify-between text-sm" style={{ color: '#4A2C17' }}>
                           <span>運費（宅配）</span>
                           <span>$80</span>
                         </div>
                       )}
                       {selectedShipping === 'pickup' && (
-                        <div className="flex justify-between text-sm text-muted-foreground">
+                        <div className="flex justify-between text-sm" style={{ color: '#8B6B4A' }}>
                           <span>運費</span>
                           <span>免運</span>
                         </div>
                       )}
-                      <div className="flex justify-between font-bold text-lg pt-2 border-t">
+                      <div className="flex justify-between font-bold text-lg pt-2" style={{ borderTop: '2px solid #D4B896', color: '#D94E2B' }}>
                         <span>結帳金額</span>
                         <span>${selectedShipping === 'delivery' ? checkoutEligibleTotal + 80 : checkoutEligibleTotal}</span>
                       </div>
@@ -2438,8 +2474,8 @@ export default function ShopPage() {
 
                     {/* 出貨方式 */}
                     <div className="flex items-center gap-2 text-sm">
-                      <span className="text-muted-foreground">出貨方式：</span>
-                      <span className="font-medium">
+                      <span style={{ color: '#8B6B4A' }}>出貨方式：</span>
+                      <span className="font-medium" style={{ color: '#4A2C17' }}>
                         {selectedShipping === 'myship' && '賣貨便（7-11 取貨）'}
                         {selectedShipping === 'delivery' && '宅配到府'}
                         {selectedShipping === 'pickup' && '到店自取'}
@@ -2448,12 +2484,12 @@ export default function ShopPage() {
                   </div>
 
                   {/* 確認按鈕 */}
-                  <div className="p-4 border-t space-y-2">
-                    <Button
-                      className="w-full rounded-xl"
+                  <div className="p-4 space-y-2" style={{ borderTop: '1px solid #E8D5BE' }}>
+                    <button
+                      className="w-full py-3 rounded-xl text-sm font-bold transition-all active:scale-[0.97] disabled:opacity-50 flex items-center justify-center"
                       onClick={handleCheckout}
                       disabled={isSubmittingCheckout}
-                      style={shopSettings.accent_color ? { backgroundColor: shopSettings.accent_color } : undefined}
+                      style={{ backgroundColor: accentColor || '#D94E2B', color: '#fff8f0' }}
                     >
                       {isSubmittingCheckout ? (
                         <>
@@ -2463,15 +2499,15 @@ export default function ShopPage() {
                       ) : (
                         '確認結帳'
                       )}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="w-full rounded-xl"
+                    </button>
+                    <button
+                      className="w-full py-3 rounded-xl text-sm font-bold transition-all active:scale-[0.97] disabled:opacity-50"
                       onClick={() => setCheckoutStep('method')}
                       disabled={isSubmittingCheckout}
+                      style={{ border: '1px solid #D4B896', color: '#8B6B4A', backgroundColor: 'transparent' }}
                     >
                       上一步
-                    </Button>
+                    </button>
                   </div>
                 </div>
               )}
@@ -2480,57 +2516,57 @@ export default function ShopPage() {
               {checkoutStep === 'success' && checkoutResult && (
                 <div className="flex-1 overflow-y-auto">
                   <div className="p-6 text-center space-y-4">
-                    <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto">
-                      <CheckCircle className="w-8 h-8 text-green-600" />
+                    <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto" style={{ backgroundColor: '#E8F5E8' }}>
+                      <CheckCircle className="w-8 h-8" style={{ color: '#4CAF50' }} />
                     </div>
                     <div>
-                      <h3 className="text-xl font-bold">結帳成功！</h3>
-                      <p className="text-sm text-muted-foreground mt-1">
+                      <h3 className="text-xl font-bold" style={{ color: '#4A2C17' }}>結帳成功！</h3>
+                      <p className="text-sm mt-1" style={{ color: '#8B6B4A' }}>
                         結帳單號：{checkoutResult.checkout_no}
                       </p>
                     </div>
 
                     {/* 金額摘要 */}
-                    <div className="bg-muted/50 rounded-xl p-4 text-left space-y-2">
-                      <div className="flex justify-between text-sm">
+                    <div className="rounded-xl p-4 text-left space-y-2" style={{ backgroundColor: '#F5E6D3' }}>
+                      <div className="flex justify-between text-sm" style={{ color: '#4A2C17' }}>
                         <span>商品數量</span>
                         <span>{checkoutResult.item_count} 項</span>
                       </div>
-                      <div className="flex justify-between font-bold">
+                      <div className="flex justify-between font-bold" style={{ color: '#D94E2B' }}>
                         <span>結帳金額</span>
                         <span>${checkoutResult.total_amount}</span>
                       </div>
                     </div>
 
                     {/* 出貨方式專屬提示 */}
-                    <div className="bg-blue-50 rounded-xl p-4 text-left">
+                    <div className="rounded-xl p-4 text-left" style={{ backgroundColor: '#F5E6D3', border: '1px solid #E8D5BE' }}>
                       {checkoutResult.shipping_method === 'myship' && (
                         <div className="space-y-1">
-                          <p className="text-sm font-medium text-blue-800 flex items-center gap-2">
+                          <p className="text-sm font-medium flex items-center gap-2" style={{ color: '#4A2C17' }}>
                             <Store className="w-4 h-4" /> 賣貨便取貨
                           </p>
-                          <p className="text-sm text-blue-700">
+                          <p className="text-sm" style={{ color: '#8B6B4A' }}>
                             請等待賣貨便賣場連結回傳，届時會透過 LINE 通知您取貨資訊。
                           </p>
                         </div>
                       )}
                       {checkoutResult.shipping_method === 'delivery' && (
                         <div className="space-y-1">
-                          <p className="text-sm font-medium text-blue-800 flex items-center gap-2">
+                          <p className="text-sm font-medium flex items-center gap-2" style={{ color: '#4A2C17' }}>
                             <Truck className="w-4 h-4" /> 宅配到府
                           </p>
-                          <p className="text-sm text-blue-700">
-                            請依匯款資訊轉帳，匯款完成後等待店家確認出貨。
+                          <p className="text-sm" style={{ color: '#8B6B4A' }}>
+                            請依匯款資訊轉帳，匯款完成後請私訊官方帳號通知。
                           </p>
                         </div>
                       )}
                       {checkoutResult.shipping_method === 'pickup' && (
                         <div className="space-y-1">
-                          <p className="text-sm font-medium text-blue-800 flex items-center gap-2">
+                          <p className="text-sm font-medium flex items-center gap-2" style={{ color: '#4A2C17' }}>
                             <MapPin className="w-4 h-4" /> 到店自取
                           </p>
-                          <p className="text-sm text-blue-700">
-                            請依匯款資訊轉帳，店家確認後安排取貨。
+                          <p className="text-sm" style={{ color: '#8B6B4A' }}>
+                            請依匯款資訊轉帳，匯款完成後請私訊官方帳號通知。
                           </p>
                         </div>
                       )}
@@ -2538,35 +2574,36 @@ export default function ShopPage() {
 
                     {/* 匯款資訊（宅配/自取） */}
                     {checkoutResult.shipping_method !== 'myship' && tenant?.payment_info && (
-                      <div className="bg-muted/50 rounded-xl p-4 space-y-3">
-                        <p className="text-sm font-medium">匯款資訊</p>
+                      <div className="rounded-xl p-4 space-y-3" style={{ backgroundColor: '#F5E6D3' }}>
+                        <p className="text-sm font-medium" style={{ color: '#4A2C17' }}>匯款資訊</p>
                         {tenant.payment_info.bank && (
                           <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">銀行</span>
-                            <span>{tenant.payment_info.bank}</span>
+                            <span style={{ color: '#8B6B4A' }}>銀行</span>
+                            <span style={{ color: '#4A2C17' }}>{tenant.payment_info.bank}</span>
                           </div>
                         )}
                         {tenant.payment_info.account && (
                           <div className="flex items-center justify-between text-sm">
-                            <span className="text-muted-foreground">帳號</span>
+                            <span style={{ color: '#8B6B4A' }}>帳號</span>
                             <div className="flex items-center gap-1.5">
-                              <span className="font-mono">{tenant.payment_info.account}</span>
+                              <span className="font-mono" style={{ color: '#4A2C17' }}>{tenant.payment_info.account}</span>
                               <button
                                 onClick={() => {
                                   navigator.clipboard.writeText(tenant.payment_info!.account!)
                                   toast.success('已複製帳號')
                                 }}
-                                className="p-1 rounded-md hover:bg-muted active:scale-95 transition-transform"
+                                className="p-1 rounded-md active:scale-95 transition-transform"
+                                style={{ color: '#8B6B4A' }}
                               >
-                                <Copy className="w-3.5 h-3.5 text-muted-foreground" />
+                                <Copy className="w-3.5 h-3.5" />
                               </button>
                             </div>
                           </div>
                         )}
                         {tenant.payment_info.name && (
                           <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">戶名</span>
-                            <span>{tenant.payment_info.name}</span>
+                            <span style={{ color: '#8B6B4A' }}>戶名</span>
+                            <span style={{ color: '#4A2C17' }}>{tenant.payment_info.name}</span>
                           </div>
                         )}
                       </div>
@@ -2574,14 +2611,14 @@ export default function ShopPage() {
                   </div>
 
                   {/* 關閉按鈕 */}
-                  <div className="p-4 border-t">
-                    <Button
-                      className="w-full rounded-xl"
+                  <div className="p-4" style={{ borderTop: '1px solid #E8D5BE' }}>
+                    <button
+                      className="w-full py-3 rounded-xl text-sm font-bold transition-all active:scale-[0.97]"
                       onClick={closeCheckoutModal}
-                      style={shopSettings.accent_color ? { backgroundColor: shopSettings.accent_color } : undefined}
+                      style={{ backgroundColor: accentColor || '#D94E2B', color: '#fff8f0' }}
                     >
                       關閉
-                    </Button>
+                    </button>
                   </div>
                 </div>
               )}
