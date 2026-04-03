@@ -414,6 +414,19 @@ export default function ShopPage() {
     }
   }, [isLoggedIn, profile, tenant, loadMyOrders, loadFavorites])
 
+  // URL 帶 ?p=productId 時自動開啟該商品
+  const autoOpenDone = useRef(false)
+  useEffect(() => {
+    if (autoOpenDone.current || products.length === 0) return
+    const productId = searchParams.get('p')
+    if (!productId) return
+    const product = products.find(p => p.id === productId)
+    if (product) {
+      autoOpenDone.current = true
+      handleSelectProduct(product)
+    }
+  }, [products, searchParams])
+
   // Dev mode：強制開啟管理員模式
   useEffect(() => {
     if (isDevStaff && tenant && !staffCheckDone) {
@@ -642,12 +655,11 @@ export default function ShopPage() {
   const handleShareProduct = async () => {
     if (!selectedProduct || !tenant) return
 
-    const shareUrl = tenant.liff_id
-      ? getShopShareUrl(tenantSlug, tenant.liff_id)
-      : getShopCleanUrl(tenantSlug)
-    const shareText = `${tenant.name} — ${selectedProduct.name} $${selectedProduct.price.toLocaleString()}\n${shareUrl}`
+    // 用 /share/ 路由（有 OG 縮圖），會自動 redirect 到商城
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://www.plushub.cc'
+    const productUrl = `${origin}/share/${tenantSlug}/${selectedProduct.id}`
+    const shareText = `${selectedProduct.name} $${selectedProduct.price.toLocaleString()}\n${productUrl}`
 
-    // 優先用 LINE URL scheme 分享（LINE 內外都能用）
     if (isInClient) {
       const lineShareUrl = `https://line.me/R/share?text=${encodeURIComponent(shareText)}`
       window.location.href = lineShareUrl
@@ -656,11 +668,11 @@ export default function ShopPage() {
         await navigator.share({
           title: `${tenant.name} — ${selectedProduct.name}`,
           text: `來看看 ${selectedProduct.name} $${selectedProduct.price.toLocaleString()}`,
-          url: shareUrl,
+          url: productUrl,
         })
       } catch { /* user cancelled */ }
     } else {
-      await navigator.clipboard.writeText(shareUrl)
+      await navigator.clipboard.writeText(productUrl)
       toast.success('連結已複製！')
     }
   }
