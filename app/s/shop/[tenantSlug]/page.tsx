@@ -736,7 +736,7 @@ export default function ShopPage() {
 
   // ========== 直接喊單 ==========
   const handleDirectOrder = async () => {
-    if (!selectedProduct || !profile || !tenant) return
+    if (!selectedProduct || !profile || !tenant || isOrdering) return
     setShowOrderConfirm(false)
 
     setIsOrdering(true)
@@ -2186,11 +2186,12 @@ export default function ShopPage() {
                   再想想
                 </button>
                 <button
-                  className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-[0.97]"
+                  className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-[0.97] disabled:opacity-50"
                   style={{ backgroundColor: accentColor || '#D94E2B', color: '#fff8f0' }}
                   onClick={handleDirectOrder}
+                  disabled={isOrdering}
                 >
-                  確定送出
+                  {isOrdering ? '送出中...' : '確定送出'}
                 </button>
               </div>
             </motion.div>
