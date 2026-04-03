@@ -645,74 +645,23 @@ export default function ShopPage() {
     const shareUrl = tenant.liff_id
       ? getShopShareUrl(tenantSlug, tenant.liff_id)
       : getShopCleanUrl(tenantSlug)
+    const shareText = `${tenant.name} — ${selectedProduct.name} $${selectedProduct.price.toLocaleString()}\n${shareUrl}`
 
+    // 優先用 LINE URL scheme 分享（LINE 內外都能用）
     if (isInClient) {
+      const lineShareUrl = `https://line.me/R/share?text=${encodeURIComponent(shareText)}`
+      window.location.href = lineShareUrl
+    } else if (navigator.share) {
       try {
-        const flexContents: Record<string, unknown> = {
-          type: 'bubble',
-          body: {
-            type: 'box',
-            layout: 'vertical',
-            contents: [
-              ...(selectedProduct.image_url ? [{
-                type: 'image',
-                url: selectedProduct.image_url,
-                size: 'full',
-                aspectRatio: '1:1',
-                aspectMode: 'cover',
-              }] : []),
-              {
-                type: 'box',
-                layout: 'vertical',
-                margin: 'lg',
-                spacing: 'sm',
-                contents: [
-                  { type: 'text', text: selectedProduct.name, weight: 'bold', size: 'lg', wrap: true },
-                  { type: 'text', text: `$${selectedProduct.price.toLocaleString()}`, size: 'xl', weight: 'bold', color: accentColor || '#D94E2B' },
-                  { type: 'text', text: tenant.name, size: 'xs', color: '#8B6B4A', margin: 'md' },
-                ],
-              },
-            ],
-          },
-          footer: {
-            type: 'box',
-            layout: 'vertical',
-            spacing: 'sm',
-            contents: [
-              {
-                type: 'button',
-                style: 'primary',
-                color: accentColor || '#D94E2B',
-                action: { type: 'uri', label: '前往商城', uri: shareUrl },
-              },
-            ],
-          },
-        }
-
-        const result = await liff.shareTargetPicker([{
-          type: 'flex',
-          altText: `${tenant.name} — ${selectedProduct.name} $${selectedProduct.price.toLocaleString()}`,
-          contents: flexContents as any,
-        }])
-        if (result) toast.success('已分享！')
-      } catch (err) {
-        console.error('Share error:', err)
-        toast.error('分享失敗')
-      }
+        await navigator.share({
+          title: `${tenant.name} — ${selectedProduct.name}`,
+          text: `來看看 ${selectedProduct.name} $${selectedProduct.price.toLocaleString()}`,
+          url: shareUrl,
+        })
+      } catch { /* user cancelled */ }
     } else {
-      // 外部瀏覽器
-      if (navigator.share) {
-        try {
-          await navigator.share({
-            title: `${tenant.name} — ${selectedProduct.name}`,
-            text: `來看看 ${selectedProduct.name} $${selectedProduct.price.toLocaleString()}`,
-            url: shareUrl,
-          })
-        } catch { /* user cancelled */ }
-      } else {
-        await navigator.clipboard.writeText(shareUrl)
-        toast.success('連結已複製！')
-      }
+      await navigator.clipboard.writeText(shareUrl)
+      toast.success('連結已複製！')
     }
   }
 
@@ -1768,8 +1717,8 @@ export default function ShopPage() {
                   <h3 className="font-bold text-lg leading-tight min-w-0" style={{ color: '#4A2C17' }}>{selectedProduct.name}</h3>
                   <div className="flex items-center gap-1 shrink-0">
                     <button
-                      className="p-1.5 rounded-full transition-all active:scale-90"
-                      style={{ color: favoriteIds.has(selectedProduct.id) ? '#EF4444' : '#C4A882' }}
+                      className="p-1.5 rounded-full active:scale-90"
+                      style={{ color: favoriteIds.has(selectedProduct.id) ? '#EF4444' : '#C4A882', transition: 'transform 0.15s' }}
                       onClick={(e) => { e.stopPropagation(); handleToggleFavorite(selectedProduct.id) }}
                       disabled={isTogglingFavorite}
                     >
