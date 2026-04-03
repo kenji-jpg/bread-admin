@@ -1450,7 +1450,7 @@ export default function ShopPage() {
                         }}
                       >
                         {modalImages.map((url, i) => (
-                          <div key={i} className="min-w-full aspect-[4/3] relative">
+                          <div key={i} className="min-w-full h-48 relative">
                             <Image
                               src={url}
                               alt={`${selectedProduct.name} ${i + 1}`}
@@ -1499,7 +1499,7 @@ export default function ShopPage() {
                     )}
                   </div>
                 ) : (
-                  <div className="w-full aspect-[4/3] rounded-2xl flex items-center justify-center" style={{ backgroundColor: '#F5E0C4' }}>
+                  <div className="w-full h-48 rounded-2xl flex items-center justify-center" style={{ backgroundColor: '#F5E0C4' }}>
                     <Package className="w-16 h-16" style={{ color: '#C4A882' }} />
                   </div>
                 )}
@@ -1526,7 +1526,7 @@ export default function ShopPage() {
                   </span>
                 </div>
                 {selectedProduct.description && (
-                  <p className="text-sm mt-3 leading-relaxed" style={{ color: '#8B6B4A' }}>{selectedProduct.description}</p>
+                  <p className="text-xs mt-1 leading-relaxed line-clamp-2" style={{ color: '#8B6B4A' }}>{selectedProduct.description}</p>
                 )}
               </div>
 
@@ -1756,24 +1756,29 @@ export default function ShopPage() {
                     )
                   })()}
 
-                  {/* 小計 */}
-                  <div className="flex items-center justify-between py-3 mb-4 border-t" style={{ borderColor: '#E8D5BE' }}>
+                </>
+              )}
+              </div>{/* end scrollable area */}
+
+              {/* 固定底部：小計 + 按鈕（客人模式） */}
+              {!isStaff && (
+                <div className="px-5 pb-5 pt-2 border-t shrink-0" style={{ borderColor: '#E8D5BE', backgroundColor: '#FFF8F0' }}>
+                  <div className="flex items-center justify-between mb-2">
                     <span className="text-sm" style={{ color: '#8B6B4A' }}>小計</span>
                     <span className="text-xl font-bold" style={{ color: accentColor || '#D94E2B' }}>
                       ${(selectedProduct.price * quantity).toLocaleString()}
                     </span>
                   </div>
-
                   <div className="flex gap-3">
                     <button
-                      className="flex-1 py-3 rounded-xl text-sm font-medium border-2 transition-all active:scale-[0.97]"
+                      className="flex-1 py-2.5 rounded-xl text-sm font-medium border-2 transition-all active:scale-[0.97]"
                       style={{ borderColor: '#D4B896', color: '#8B6B4A' }}
                       onClick={() => { setSelectedProduct(null); setQuantity(1) }}
                     >
                       取消
                     </button>
                     <button
-                      className="flex-1 py-3 rounded-xl text-sm font-bold transition-all active:scale-[0.97] disabled:opacity-40"
+                      className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-[0.97] disabled:opacity-40"
                       style={{ backgroundColor: accentColor || '#D94E2B', color: '#fff8f0' }}
                       onClick={handleDirectOrder}
                       disabled={isOrdering || (selectedProduct.has_variants && !selectedVariant)}
@@ -1787,9 +1792,8 @@ export default function ShopPage() {
                       )}
                     </button>
                   </div>
-                </>
+                </div>
               )}
-              </div>{/* end px-5 pb-5 */}
             </motion.div>
           </motion.div>
           )
