@@ -37,14 +37,23 @@ export async function middleware(request: NextRequest) {
     if (pathname.startsWith('/shop/') && pathname !== '/shop/') {
         const userAgent = request.headers.get('user-agent') || ''
         const isLine = /Line\//i.test(userAgent)
+        // LINE URL 預覽爬蟲的 UA 也帶 Line/，但不應被 redirect
+        // 讓爬蟲走 rewrite 才能讀到 OG meta tags
+        const isBot = /bot|crawler|spider|preview|facebookexternalhit|Twitterbot|LinkedInBot|Slackbot|WhatsApp|Discordbot/i.test(userAgent)
 
-        if (isLine) {
-            const slug = pathname.split('/shop/')[1]?.split('?')[0]
-            const liffId = process.env.NEXT_PUBLIC_LIFF_ID
-            if (liffId && slug) {
-                return NextResponse.redirect(
-                    new URL(`https://liff.line.me/${liffId}/s/shop/${slug}`)
-                )
+        if (isLine && !isBot) {
+            // 額外檢查：真人瀏覽器會帶 Sec-Fetch-Mode，爬蟲不會
+            const secFetchMode = request.headers.get('sec-fetch-mode')
+            const isLikelyHuman = !!secFetchMode
+
+            if (isLikelyHuman) {
+                const slug = pathname.split('/shop/')[1]?.split('?')[0]
+                const liffId = process.env.NEXT_PUBLIC_LIFF_ID
+                if (liffId && slug) {
+                    return NextResponse.redirect(
+                        new URL(`https://liff.line.me/${liffId}/s/shop/${slug}`)
+                    )
+                }
             }
         }
 
