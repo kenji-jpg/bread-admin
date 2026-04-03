@@ -1418,18 +1418,27 @@ export default function ShopPage() {
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 25 }}
-              className="absolute inset-x-0 top-12 bottom-0 rounded-t-2xl overflow-y-auto safe-bottom max-w-lg mx-auto"
-              style={{ backgroundColor: '#FFF8F0' }}
+              drag="y"
+              dragConstraints={{ top: 0, bottom: 0 }}
+              dragElastic={{ top: 0, bottom: 0.6 }}
+              onDragEnd={(_e, info) => {
+                if (info.offset.y > 100 || info.velocity.y > 300) {
+                  setSelectedProduct(null)
+                  setCarouselIndex(0)
+                }
+              }}
+              className="absolute inset-x-0 bottom-0 rounded-t-2xl safe-bottom max-w-lg mx-auto flex flex-col"
+              style={{ backgroundColor: '#FFF8F0', maxHeight: 'calc(100dvh - 3rem)' }}
               onClick={(e) => e.stopPropagation()}
             >
               {/* 拖曳指示條 */}
-              <div className="sticky top-0 z-10 pt-3 pb-2" style={{ backgroundColor: '#FFF8F0' }}>
+              <div className="pt-3 pb-2 cursor-grab active:cursor-grabbing">
                 <div className="w-10 h-1 rounded-full mx-auto" style={{ backgroundColor: '#D4B896' }} />
               </div>
 
-              <div className="px-5 pb-5">
+              <div className="px-5 pb-5 overflow-y-auto flex-1">
               {/* 商品大圖 / 輪播 */}
-              <div className="mb-4">
+              <div className="mb-3">
                 {modalImages.length > 0 ? (
                   <div className="relative">
                     <div className="overflow-hidden rounded-2xl relative touch-pan-y">
@@ -1441,7 +1450,7 @@ export default function ShopPage() {
                         }}
                       >
                         {modalImages.map((url, i) => (
-                          <div key={i} className="min-w-full aspect-square relative">
+                          <div key={i} className="min-w-full aspect-[4/3] relative">
                             <Image
                               src={url}
                               alt={`${selectedProduct.name} ${i + 1}`}
@@ -1490,17 +1499,17 @@ export default function ShopPage() {
                     )}
                   </div>
                 ) : (
-                  <div className="w-full aspect-square rounded-2xl flex items-center justify-center" style={{ backgroundColor: '#F5E0C4' }}>
+                  <div className="w-full aspect-[4/3] rounded-2xl flex items-center justify-center" style={{ backgroundColor: '#F5E0C4' }}>
                     <Package className="w-16 h-16" style={{ color: '#C4A882' }} />
                   </div>
                 )}
               </div>
 
               {/* 商品資訊 */}
-              <div className="mb-5">
+              <div className="mb-3">
                 <h3 className="font-bold text-lg leading-tight" style={{ color: '#4A2C17' }}>{selectedProduct.name}</h3>
-                <p className="text-2xl font-bold mt-1" style={{ color: accentColor || '#D94E2B' }}>${selectedProduct.price.toLocaleString()}</p>
-                <div className="flex items-center gap-2 mt-2">
+                <p className="text-2xl font-bold mt-0.5" style={{ color: accentColor || '#D94E2B' }}>${selectedProduct.price.toLocaleString()}</p>
+                <div className="flex items-center gap-2 mt-1">
                   <span
                     className="text-xs px-2 py-0.5 rounded-full font-medium"
                     style={{
