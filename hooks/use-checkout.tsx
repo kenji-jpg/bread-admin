@@ -13,6 +13,7 @@ export interface CheckoutItemDetail {
     sku: string | null
     unit_price: number
     subtotal: number
+    cost?: number | null
     price_source?: 'product' | 'manual' | 'promotion'
     order_item_id?: string
     original_price?: number | null
@@ -104,6 +105,7 @@ export interface CheckoutDetailResult {
         quantity: number
         unit_price: number
         subtotal: number
+        cost?: number | null
     }>
     error?: string
     message?: string

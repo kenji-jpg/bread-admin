@@ -22,6 +22,7 @@ import {
     CalendarDays,
     Shield,
     CreditCard,
+    PiggyBank,
 } from 'lucide-react'
 
 export default function TenantDashboardPage() {
@@ -190,7 +191,7 @@ export default function TenantDashboardPage() {
             })()}
 
             {/* Stats Grid */}
-            <motion.div variants={itemVariants} className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <motion.div variants={itemVariants} className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
                 <StatCard
                     title="今日訂單"
                     value={stats?.today_orders || 0}
@@ -204,6 +205,13 @@ export default function TenantDashboardPage() {
                     icon={DollarSign}
                     variant="success"
                     href={`/admin/t/${tenant.slug}/checkouts`}
+                />
+                <StatCard
+                    title="今日利潤"
+                    value={`$${(stats?.today_profit || 0).toLocaleString()}`}
+                    icon={PiggyBank}
+                    variant="success"
+                    description={(stats?.today_revenue ?? 0) > 0 ? `毛利率 ${Math.round(((stats?.today_profit || 0) / (stats?.today_revenue || 1)) * 100)}%` : undefined}
                 />
                 <StatCard
                     title="待處理訂單"
@@ -262,6 +270,11 @@ export default function TenantDashboardPage() {
                                                 <p className="font-semibold text-sm">
                                                     ${(order.quantity * order.unit_price).toLocaleString()}
                                                 </p>
+                                                {order.cost != null && (
+                                                    <p className="text-xs text-emerald-600">
+                                                        利潤 ${(order.quantity * (order.unit_price - order.cost)).toLocaleString()}
+                                                    </p>
+                                                )}
                                                 <p className="text-xs text-muted-foreground">
                                                     {new Date(order.created_at).toLocaleDateString('zh-TW')}
                                                 </p>

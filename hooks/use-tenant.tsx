@@ -13,6 +13,8 @@ export interface DashboardStats {
     active_product_count: number
     today_orders: number
     today_revenue: number
+    today_cost: number
+    today_profit: number
     pending_orders: number
     recent_orders: {
         id: string
@@ -20,6 +22,7 @@ export interface DashboardStats {
         item_name: string
         quantity: number
         unit_price: number
+        cost: number | null
         created_at: string
     }[]
 }

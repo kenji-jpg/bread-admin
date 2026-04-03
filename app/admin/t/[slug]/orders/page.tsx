@@ -750,6 +750,7 @@ export default function OrdersPage() {
                                         <TableHead className="text-right">數量</TableHead>
                                         <TableHead className="text-right">單價</TableHead>
                                         <TableHead className="text-right">小計</TableHead>
+                                        <TableHead className="text-right">利潤</TableHead>
                                         <TableHead>狀態</TableHead>
                                         <TableHead className="pr-5">時間</TableHead>
                                     </TableRow>
@@ -819,6 +820,15 @@ export default function OrdersPage() {
                                             <TableCell className="text-right">${order.unit_price}</TableCell>
                                             <TableCell className="text-right font-medium">
                                                 ${(order.quantity * order.unit_price).toLocaleString()}
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                {order.product?.cost != null && order.product.cost > 0 ? (
+                                                    <span className={`text-sm font-medium ${(order.unit_price - order.product.cost) >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                                                        ${(order.quantity * (order.unit_price - order.product.cost)).toLocaleString()}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-muted-foreground text-xs">-</span>
+                                                )}
                                             </TableCell>
                                             <TableCell>{getStatusBadge(order)}</TableCell>
                                             <TableCell className="text-muted-foreground text-sm pr-5">

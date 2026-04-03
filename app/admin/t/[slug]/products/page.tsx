@@ -272,6 +272,20 @@ const ProductRow = ({
                 </TableCell>
                 <TableCell onClick={handleRowClick} className="text-right">${group.price}</TableCell>
                 <TableCell onClick={handleRowClick} className="text-right">
+                    {group.mainProduct?.cost != null && group.mainProduct.cost > 0 ? (
+                        (() => {
+                            const margin = Math.round(((group.price - group.mainProduct.cost) / group.price) * 100)
+                            return (
+                                <Badge variant="outline" className={`text-xs ${margin >= 30 ? 'text-emerald-600 border-emerald-300' : margin >= 10 ? 'text-amber-600 border-amber-300' : 'text-red-600 border-red-300'}`}>
+                                    {margin}%
+                                </Badge>
+                            )
+                        })()
+                    ) : (
+                        <span className="text-muted-foreground text-xs">-</span>
+                    )}
+                </TableCell>
+                <TableCell onClick={handleRowClick} className="text-right">
                     <span className={group.totalStock < 0 ? 'text-red-500 font-medium' : ''}>
                         {group.totalStock}
                     </span>
@@ -381,6 +395,9 @@ const ProductRow = ({
                     </TableCell>
                     <TableCell onClick={() => onEdit(variant)}></TableCell>
                     <TableCell onClick={() => onEdit(variant)} className="text-right">${variant.price}</TableCell>
+                    <TableCell onClick={() => onEdit(variant)} className="text-right">
+                        <span className="text-muted-foreground text-xs">-</span>
+                    </TableCell>
                     <TableCell onClick={() => onEdit(variant)} className="text-right">
                         <span className={variant.stock < 0 ? 'text-red-500 font-medium' : ''}>
                             {variant.stock}
@@ -926,6 +943,7 @@ export default function ProductsPage() {
                                         <TableHead>名稱</TableHead>
                                         <TableHead className="w-[80px]">分類</TableHead>
                                         <TableHead className="w-[80px] text-right">價格</TableHead>
+                                        <TableHead className="w-[80px] text-right">毛利</TableHead>
                                         <TableHead className="w-[60px] text-right">庫存</TableHead>
                                         <TableHead className="w-[60px] text-right">已售</TableHead>
                                         <TableHead className="w-[100px]">限購</TableHead>

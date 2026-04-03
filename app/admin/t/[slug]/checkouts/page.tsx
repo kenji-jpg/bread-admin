@@ -1510,6 +1510,37 @@ export default function CheckoutsPage() {
                                                 ${((checkoutDetail.checkout?.total_amount ?? 0) + (checkoutDetail.checkout?.shipping_method !== 'myship' ? (checkoutDetail.checkout?.shipping_fee ?? 0) : 0)).toLocaleString()}
                                             </TableCell>
                                         </TableRow>
+                                        {/* 成本摘要（僅有成本資料時顯示） */}
+                                        {(() => {
+                                            const items = checkoutDetail.items || []
+                                            const totalCost = items.reduce((sum, item) => {
+                                                if (item.cost != null && item.cost > 0) return sum + item.quantity * item.cost
+                                                return sum
+                                            }, 0)
+                                            const hasCost = items.some(item => item.cost != null && item.cost > 0)
+                                            if (!hasCost) return null
+                                            const totalRevenue = (checkoutDetail.checkout?.total_amount ?? 0)
+                                            const profit = totalRevenue - totalCost
+                                            const margin = totalRevenue > 0 ? Math.round((profit / totalRevenue) * 100) : 0
+                                            return (
+                                                <>
+                                                    <TableRow>
+                                                        <TableCell colSpan={4} className="text-right text-muted-foreground">成本合計</TableCell>
+                                                        <TableCell className="text-right text-muted-foreground">
+                                                            ${totalCost.toLocaleString()}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                    <TableRow className="bg-emerald-50 dark:bg-emerald-950/20">
+                                                        <TableCell colSpan={4} className="text-right font-bold text-emerald-700 dark:text-emerald-400">
+                                                            預估利潤 <span className="font-normal text-sm ml-1">（毛利 {margin}%）</span>
+                                                        </TableCell>
+                                                        <TableCell className={`text-right font-bold text-lg ${profit >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-500'}`}>
+                                                            ${profit.toLocaleString()}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                </>
+                                            )
+                                        })()}
                                     </TableBody>
                                 </Table>
 
