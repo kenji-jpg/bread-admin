@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { Metadata } from 'next'
 import ShareRedirect from './redirect'
 
@@ -7,7 +7,8 @@ interface Props {
 }
 
 async function getProductData(tenantSlug: string, productId: string) {
-  const supabase = await createClient()
+  // 用 service role 繞過 RLS（爬蟲沒有 auth cookies）
+  const supabase = createAdminClient()
 
   // 查租戶
   const { data: tenant } = await supabase
