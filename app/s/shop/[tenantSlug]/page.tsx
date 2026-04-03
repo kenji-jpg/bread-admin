@@ -22,6 +22,7 @@ import {
   Loader2,
   Shield,
   PackagePlus,
+  PackageX,
   Users,
   Camera,
   TimerOff,
@@ -1795,7 +1796,7 @@ export default function ShopPage() {
                       </div>
 
                       {/* 操作按鈕 */}
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-3 gap-2">
                         {/* 補貨 */}
                         <button
                           className="h-12 rounded-xl text-sm font-medium flex items-center justify-center gap-1"
@@ -1890,6 +1891,35 @@ export default function ShopPage() {
                             )}
                           </button>
                         )}
+
+                        {/* 關閉配貨 */}
+                        <button
+                          className="h-12 rounded-xl text-sm font-medium flex items-center justify-center gap-1"
+                          style={{ backgroundColor: '#F97316', color: '#fff' }}
+                          onClick={async () => {
+                            const productName = selectedProduct.name
+                            if (!confirm(`確定要關閉「${productName}」的配貨？\n\n所有等待配貨的訂單將標記為「配貨失敗」，客人會在訂單中看到此狀態。`)) return
+                            try {
+                              const { data, error } = await supabase.rpc('close_product_allocation_v1', {
+                                p_tenant_slug: tenantSlug,
+                                p_product_id: selectedProduct.id,
+                                p_line_user_id: profile?.userId,
+                              })
+                              if (error) throw error
+                              if (!data?.success) {
+                                toast.error(data?.error || '關閉配貨失敗')
+                                return
+                              }
+                              toast.success(`已關閉配貨，${data.cancelled_count} 筆訂單標記為配貨失敗`)
+                              setSelectedProduct(null)
+                            } catch (err: any) {
+                              toast.error('關閉配貨失敗：' + (err.message || '未知錯誤'))
+                            }
+                          }}
+                        >
+                          <PackageX className="w-4 h-4" />
+                          關閉配貨
+                        </button>
 
                         {/* 關閉 */}
                         <button

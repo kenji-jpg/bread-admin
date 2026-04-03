@@ -189,16 +189,23 @@ export default function OrdersPage() {
                 memberNickname.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 order.sku?.toLowerCase().includes(searchQuery.toLowerCase())
 
+            // 隱藏已取消訂單（除非篩選 cancelled）
+            if (statusFilter !== 'cancelled' && statusFilter !== 'all' && order.status === 'cancelled') {
+                return false
+            }
+
             let statusMatch = true
             const arrivedQty = order.arrived_qty ?? 0
             if (statusFilter === 'pending') {
-                statusMatch = !order.is_arrived && arrivedQty === 0 && !order.checkout_id
+                statusMatch = order.status !== 'cancelled' && !order.is_arrived && arrivedQty === 0 && !order.checkout_id
             } else if (statusFilter === 'partial') {
-                statusMatch = !order.is_arrived && arrivedQty > 0 && arrivedQty < order.quantity && !order.checkout_id
+                statusMatch = order.status !== 'cancelled' && !order.is_arrived && arrivedQty > 0 && arrivedQty < order.quantity && !order.checkout_id
             } else if (statusFilter === 'ready') {
-                statusMatch = order.is_arrived && !order.checkout_id
+                statusMatch = order.status !== 'cancelled' && order.is_arrived && !order.checkout_id
             } else if (statusFilter === 'completed') {
                 statusMatch = !!order.checkout_id
+            } else if (statusFilter === 'cancelled') {
+                statusMatch = order.status === 'cancelled'
             }
 
             return searchMatch && statusMatch
@@ -218,6 +225,9 @@ export default function OrdersPage() {
     }, [searchQuery, statusFilter, showCompleted, pageSize])
 
     const getStatusBadge = (order: OrderWithDetails) => {
+        if (order.status === 'cancelled') {
+            return <Badge className="bg-destructive/20 text-destructive border-destructive/30">配貨失敗</Badge>
+        }
         if (order.checkout_id) {
             return <Badge className="bg-success/20 text-success border-success/30">已結帳</Badge>
         }
@@ -692,6 +702,7 @@ export default function OrdersPage() {
                                 <SelectItem value="partial">部分到貨</SelectItem>
                                 <SelectItem value="ready">可結帳</SelectItem>
                                 <SelectItem value="completed">已結帳</SelectItem>
+                                <SelectItem value="cancelled">配貨失敗</SelectItem>
                             </SelectContent>
                         </Select>
                         <label className="flex items-center gap-2 cursor-pointer select-none">

@@ -136,6 +136,8 @@ export interface OrderItem {
   customer_name: string | null
   is_arrived: boolean
   is_completed: boolean
+  status: string // 'pending' | 'allocated' | 'partial' | 'cancelled'
+  cancelled_at: string | null
   note: string | null
   created_at: string
   updated_at: string
