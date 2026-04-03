@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
 import { Metadata } from 'next'
+import ShareRedirect from './redirect'
 
 interface Props {
   params: Promise<{ tenantSlug: string; productId: string }>
@@ -53,14 +53,21 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       siteName: 'PlusHub',
       type: 'website',
     },
+    // LINE 也會讀 twitter card meta
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description,
+      ...(product.image_url ? { images: [product.image_url] } : {}),
+    },
   }
 }
 
+// 不用 redirect()，渲染 HTML 讓爬蟲讀到 OG meta
+// 真人用戶透過 client component 跳轉
 export default async function ShareProductPage({ params }: Props) {
   const { tenantSlug, productId } = await params
-
-  // 產生目標 URL（帶 ?p= 自動開啟商品）
   const shopUrl = `/s/shop/${tenantSlug}?p=${productId}`
 
-  redirect(shopUrl)
+  return <ShareRedirect url={shopUrl} />
 }
