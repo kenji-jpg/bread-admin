@@ -1542,16 +1542,18 @@ export default function ShopPage() {
                   )}
 
                   {/* 商品圖片 */}
-                  <div className="aspect-square relative overflow-hidden rounded-2xl" style={{ backgroundColor: '#F5E0C4' }}>
+                  <div className="aspect-square relative overflow-hidden rounded-2xl" style={{ backgroundColor: '#F5E0C4', WebkitTouchCallout: 'none', userSelect: 'none' }}>
                     {product.image_url ? (
                       <Image
                         src={product.image_url}
                         alt={product.name}
                         fill
-                        className="object-cover"
+                        className="object-cover pointer-events-none"
                         sizes="(max-width: 768px) 50vw, 200px"
                         loading={index < 4 ? 'eager' : 'lazy'}
                         priority={index < 4}
+                        draggable={false}
+                        onContextMenu={(e) => e.preventDefault()}
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
@@ -1712,13 +1714,15 @@ export default function ShopPage() {
                         }}
                       >
                         {modalImages.map((url, i) => (
-                          <div key={i} className="min-w-full relative" style={{ aspectRatio: '1', maxHeight: '45vh' }}>
+                          <div key={i} className="min-w-full relative" style={{ aspectRatio: '1', maxHeight: '45vh', WebkitTouchCallout: 'none', userSelect: 'none' }}>
                             <Image
                               src={url}
                               alt={`${selectedProduct.name} ${i + 1}`}
                               fill
-                              className="object-cover"
+                              className="object-cover pointer-events-none"
                               sizes="(max-width: 768px) 100vw, 400px"
+                              draggable={false}
+                              onContextMenu={(e) => e.preventDefault()}
                             />
                           </div>
                         ))}
