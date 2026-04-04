@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { directRpc } from '@/lib/supabase/direct-rpc'
 import { LiffProvider } from '@/hooks/use-liff'
+import { Toaster } from 'sonner'
 
 /**
  * 從多個來源提取 tenantSlug
@@ -101,6 +102,17 @@ export default function ShopLayout({
     <LiffProvider key={liffKey} liffId={tenantLiffId}>
       <div className="min-h-screen bg-background">
         {children}
+        <Toaster
+          position="top-center"
+          toastOptions={{
+            style: {
+              background: '#FFF8F0',
+              border: '1px solid #E8D5BE',
+              color: '#4A2C17',
+              fontSize: '14px',
+            },
+          }}
+        />
       </div>
     </LiffProvider>
   )
