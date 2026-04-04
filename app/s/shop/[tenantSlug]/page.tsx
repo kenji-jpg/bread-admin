@@ -41,6 +41,8 @@ import {
   Search,
   ChevronDown,
   ArrowUpDown,
+  Pencil,
+  Check,
 } from 'lucide-react'
 import Image from 'next/image'
 
@@ -314,6 +316,8 @@ export default function ShopPage() {
   // 下架/上架
   const [isToggling, setIsToggling] = useState<string | null>(null)
   const [showExtendOptions, setShowExtendOptions] = useState<string | null>(null)
+  const [editingPrice, setEditingPrice] = useState<string | null>(null)
+  const [editPriceValue, setEditPriceValue] = useState('')
 
   // 倒數計時器 tick（每 30 秒更新畫面）
   const [, setTick] = useState(0)
@@ -1001,6 +1005,34 @@ export default function ShopPage() {
       loadShop()
     } catch (err) {
       console.error('Update end time error:', err)
+      toast.error('操作失敗')
+    }
+  }
+
+  // 管理員：修改商品價格
+  const handleUpdatePrice = async (productId: string) => {
+    if (!profile) return
+    const price = parseInt(editPriceValue)
+    if (!price || price <= 0) {
+      toast.error('價格必須大於 0')
+      return
+    }
+    try {
+      const { data, error } = await supabase.rpc('update_product_price_v1', {
+        p_product_id: productId,
+        p_line_user_id: profile.userId,
+        p_price: price,
+      })
+      if (error) throw error
+      if (!data.success) {
+        toast.error(data.error)
+        return
+      }
+      toast.success('價格已更新')
+      setEditingPrice(null)
+      loadShop()
+    } catch (err) {
+      console.error('Update price error:', err)
       toast.error('操作失敗')
     }
   }
@@ -1800,7 +1832,52 @@ export default function ShopPage() {
                 </div>
                 {/* 第二行：價格 + badge */}
                 <div className="flex items-center gap-2 mt-0.5">
-                  <p className="text-xl font-bold" style={{ color: accentColor || '#D94E2B' }}>${selectedProduct.price.toLocaleString()}</p>
+                  {showStaffUI && editingPrice === selectedProduct.id ? (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xl font-bold" style={{ color: accentColor || '#D94E2B' }}>$</span>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        value={editPriceValue}
+                        onChange={(e) => setEditPriceValue(e.target.value)}
+                        autoFocus
+                        className="w-20 text-xl font-bold border-b-2 bg-transparent outline-none"
+                        style={{ color: accentColor || '#D94E2B', borderColor: '#E8D5BE' }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleUpdatePrice(selectedProduct.id)
+                          if (e.key === 'Escape') setEditingPrice(null)
+                        }}
+                      />
+                      <button
+                        className="p-1 rounded-full active:scale-90"
+                        style={{ color: '#16A34A' }}
+                        onClick={() => handleUpdatePrice(selectedProduct.id)}
+                      >
+                        <Check className="w-5 h-5" />
+                      </button>
+                      <button
+                        className="p-1 rounded-full active:scale-90"
+                        style={{ color: '#8B6B4A' }}
+                        onClick={() => setEditingPrice(null)}
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <p
+                      className="text-xl font-bold flex items-center gap-1"
+                      style={{ color: accentColor || '#D94E2B' }}
+                      onClick={() => {
+                        if (showStaffUI) {
+                          setEditingPrice(selectedProduct.id)
+                          setEditPriceValue(String(selectedProduct.price))
+                        }
+                      }}
+                    >
+                      ${selectedProduct.price.toLocaleString()}
+                      {showStaffUI && <Pencil className="w-3.5 h-3.5 ml-0.5" style={{ color: '#8B6B4A' }} />}
+                    </p>
+                  )}
                   <span
                     className="text-xs px-2 py-0.5 rounded-full font-medium"
                     style={{
