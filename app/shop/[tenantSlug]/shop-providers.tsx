@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import { LineAuthProvider } from '@/hooks/use-line-auth'
 import { Toaster } from 'sonner'
@@ -12,9 +13,15 @@ export default function ShopProviders({
   const params = useParams()
   const tenantSlug = params.tenantSlug as string
 
+  useEffect(() => {
+    const prev = document.body.style.backgroundColor
+    document.body.style.backgroundColor = '#FFFBF7'
+    return () => { document.body.style.backgroundColor = prev }
+  }, [])
+
   return (
     <LineAuthProvider tenantSlug={tenantSlug}>
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen" style={{ backgroundColor: '#FFFBF7' }}>
         {children}
         <Toaster
           position="top-center"
