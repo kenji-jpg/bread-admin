@@ -979,7 +979,7 @@ export default function ShopPage() {
         return
       }
 
-      toast.success(action === 'deactivate' ? '已下架' : '已上架')
+      toast.success(action === 'deactivate' ? '已關閉商城顯示' : '已開啟商城顯示')
       loadShop()
     } catch (err) {
       console.error('Toggle product error:', err)
@@ -2043,7 +2043,7 @@ export default function ShopPage() {
                           </button>
                         )}
 
-                        {/* 上架 / 下架 */}
+                        {/* 商城顯示 ON/OFF */}
                         {selectedProduct.status !== 'active' ? (
                           <button
                             className="h-12 rounded-xl text-sm font-medium flex items-center justify-center gap-1 disabled:opacity-40"
@@ -2059,7 +2059,7 @@ export default function ShopPage() {
                             ) : (
                               <>
                                 <Eye className="w-4 h-4" />
-                                上架
+                                商城顯示 ON
                               </>
                             )}
                           </button>
@@ -2078,7 +2078,7 @@ export default function ShopPage() {
                             ) : (
                               <>
                                 <EyeOff className="w-4 h-4" />
-                                下架
+                                商城顯示 OFF
                               </>
                             )}
                           </button>
