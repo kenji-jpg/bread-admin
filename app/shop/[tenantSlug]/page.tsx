@@ -1679,7 +1679,7 @@ export default function ShopPage() {
                   </div>
 
                   {/* 商品資訊 */}
-                  <div className="p-2.5 lg:p-4 flex flex-col flex-1">
+                  <div className="p-2.5 flex flex-col flex-1">
                     <div className="flex items-start gap-1.5">
                       <span
                         className="shrink-0 px-2 py-0.5 rounded-full text-xs font-medium leading-tight"
