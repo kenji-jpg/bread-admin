@@ -462,6 +462,13 @@ export default function ShopPage() {
     loadShop()
   }, [loadShop])
 
+  // 未登入 → 自動觸發 LINE Login（等商城載入完再跳轉，避免空白頁）
+  useEffect(() => {
+    if (isReady && !isLoggedIn && tenant) {
+      login()
+    }
+  }, [isReady, isLoggedIn, tenant, login])
+
   // 登入後載入訂單 + 收藏
   useEffect(() => {
     if (isLoggedIn && profile && tenant) {
@@ -1313,6 +1320,27 @@ export default function ShopPage() {
                   </button>
                 </>
               )}
+              {/* 用戶頭貼 + 名稱 */}
+              {isLoggedIn && profile && !showStaffUI && (
+                <div className="flex items-center gap-1.5 mr-1">
+                  {profile.pictureUrl ? (
+                    <Image
+                      src={profile.pictureUrl}
+                      alt={profile.displayName}
+                      width={24}
+                      height={24}
+                      className="w-6 h-6 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold" style={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white' }}>
+                      {profile.displayName.charAt(0)}
+                    </div>
+                  )}
+                  <span className="text-[11px] font-medium max-w-[60px] truncate" style={{ color: 'rgba(255,255,255,0.9)' }}>
+                    {profile.displayName}
+                  </span>
+                </div>
+              )}
               {/* 訂單 */}
               {isLoggedIn && !showStaffUI && (
                 <motion.button
@@ -1378,17 +1406,7 @@ export default function ShopPage() {
                   <span className="text-[10px] leading-none">訂單</span>
                 </motion.button>
               )}
-              {/* 購物車已移除，改為直接喊單 */}
-              {/* 未登入：登入按鈕 */}
-              {!isLoggedIn && (
-                <button
-                  className="rounded-full h-7 px-3 text-[10px] font-medium transition-all active:scale-95"
-                  style={{ backgroundColor: '#D94E2B', color: '#fff8f0' }}
-                  onClick={login}
-                >
-                  登入
-                </button>
-              )}
+              {/* 未登入時自動跳轉 LINE Login，不顯示按鈕 */}
             </div>
           </div>
         </div>
