@@ -318,6 +318,8 @@ export default function ShopPage() {
   const [showExtendOptions, setShowExtendOptions] = useState<string | null>(null)
   const [editingPrice, setEditingPrice] = useState<string | null>(null)
   const [editPriceValue, setEditPriceValue] = useState('')
+  const [editingName, setEditingName] = useState<string | null>(null)
+  const [editNameValue, setEditNameValue] = useState('')
 
   // 倒數計時器 tick（每 30 秒更新畫面）
   const [, setTick] = useState(0)
@@ -1009,30 +1011,32 @@ export default function ShopPage() {
     }
   }
 
-  // 管理員：修改商品價格
-  const handleUpdatePrice = async (productId: string) => {
+  // 管理員：修改商品價格或名稱
+  const handleUpdateProductField = async (productId: string, field: 'price' | 'name') => {
     if (!profile) return
-    const price = parseInt(editPriceValue)
-    if (!price || price <= 0) {
-      toast.error('價格必須大於 0')
-      return
+    const params: Record<string, unknown> = {
+      p_product_id: productId,
+      p_line_user_id: profile.userId,
+    }
+    if (field === 'price') {
+      const price = parseInt(editPriceValue)
+      if (!price || price <= 0) { toast.error('價格必須大於 0'); return }
+      params.p_price = price
+    } else {
+      const name = editNameValue.trim()
+      if (!name) { toast.error('名稱不可為空'); return }
+      params.p_name = name
     }
     try {
-      const { data, error } = await supabase.rpc('update_product_price_v1', {
-        p_product_id: productId,
-        p_line_user_id: profile.userId,
-        p_price: price,
-      })
+      const { data, error } = await supabase.rpc('update_product_price_v1', params)
       if (error) throw error
-      if (!data.success) {
-        toast.error(data.error)
-        return
-      }
-      toast.success('價格已更新')
-      setEditingPrice(null)
+      if (!data.success) { toast.error(data.error); return }
+      toast.success(field === 'price' ? '價格已更新' : '名稱已更新')
+      if (field === 'price') setEditingPrice(null)
+      else setEditingName(null)
       loadShop()
     } catch (err) {
-      console.error('Update price error:', err)
+      console.error('Update product error:', err)
       toast.error('操作失敗')
     }
   }
@@ -1807,7 +1811,42 @@ export default function ShopPage() {
               <div className="mb-2">
                 {/* 第一行：名稱 + 收藏/分享 icon */}
                 <div className="flex items-start justify-between gap-2">
-                  <h3 className="font-bold text-lg leading-tight min-w-0" style={{ color: '#4A2C17' }}>{selectedProduct.name}</h3>
+                  {showStaffUI && editingName === selectedProduct.id ? (
+                    <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                      <input
+                        type="text"
+                        value={editNameValue}
+                        onChange={(e) => setEditNameValue(e.target.value)}
+                        autoFocus
+                        className="flex-1 font-bold text-lg bg-transparent outline-none border-b-2 min-w-0"
+                        style={{ color: '#4A2C17', borderColor: '#E8D5BE' }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleUpdateProductField(selectedProduct.id, 'name')
+                          if (e.key === 'Escape') setEditingName(null)
+                        }}
+                      />
+                      <button className="p-1 rounded-full active:scale-90 shrink-0" style={{ color: '#16A34A' }} onClick={() => handleUpdateProductField(selectedProduct.id, 'name')}>
+                        <Check className="w-5 h-5" />
+                      </button>
+                      <button className="p-1 rounded-full active:scale-90 shrink-0" style={{ color: '#8B6B4A' }} onClick={() => setEditingName(null)}>
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <h3
+                      className="font-bold text-lg leading-tight min-w-0 flex items-center gap-1"
+                      style={{ color: '#4A2C17' }}
+                      onClick={() => {
+                        if (showStaffUI) {
+                          setEditingName(selectedProduct.id)
+                          setEditNameValue(selectedProduct.name)
+                        }
+                      }}
+                    >
+                      {selectedProduct.name}
+                      {showStaffUI && <Pencil className="w-3.5 h-3.5 shrink-0" style={{ color: '#8B6B4A' }} />}
+                    </h3>
+                  )}
                   <div className="flex items-center gap-1 shrink-0">
                     <button
                       className="p-1.5 rounded-full"
@@ -1844,14 +1883,14 @@ export default function ShopPage() {
                         className="w-20 text-xl font-bold border-b-2 bg-transparent outline-none"
                         style={{ color: accentColor || '#D94E2B', borderColor: '#E8D5BE' }}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleUpdatePrice(selectedProduct.id)
+                          if (e.key === 'Enter') handleUpdateProductField(selectedProduct.id, 'price')
                           if (e.key === 'Escape') setEditingPrice(null)
                         }}
                       />
                       <button
                         className="p-1 rounded-full active:scale-90"
                         style={{ color: '#16A34A' }}
-                        onClick={() => handleUpdatePrice(selectedProduct.id)}
+                        onClick={() => handleUpdateProductField(selectedProduct.id, 'price')}
                       >
                         <Check className="w-5 h-5" />
                       </button>
