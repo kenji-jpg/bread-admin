@@ -272,6 +272,16 @@ export default function ShopPage() {
 
   // 分類篩選
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+  // 桌面版判斷
+  const [isDesktop, setIsDesktop] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 640px)')
+    setIsDesktop(mq.matches)
+    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
+
   // 排序
   const [sortBy, setSortBy] = useState<'newest' | 'price_asc' | 'price_desc' | 'popular'>('newest')
   const [isSortOpen, setIsSortOpen] = useState(false)
@@ -1170,9 +1180,9 @@ export default function ShopPage() {
 
   return (
     <div
-      className="min-h-screen max-w-lg sm:max-w-2xl mx-auto"
+      className="min-h-screen max-w-lg sm:max-w-2xl lg:max-w-5xl xl:max-w-6xl mx-auto"
       style={{
-        '--shop-bg': '#ffffff',
+        '--shop-bg': '#FFFBF7',
         '--shop-card': '#ffffff',
         '--shop-card-border': '#F5E0C4',
         '--shop-text': '#4A2C17',
@@ -1265,7 +1275,7 @@ export default function ShopPage() {
         ) : (
           <div className="absolute inset-0" style={{ backgroundColor: '#D94E2B' }} />
         )}
-        <div className="px-4 sm:px-6 py-3 relative z-10">
+        <div className="px-4 sm:px-6 py-3 sm:py-6 lg:py-10 relative z-10">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5 min-w-0">
               <div
@@ -1455,7 +1465,7 @@ export default function ShopPage() {
           ? products.filter(p => p.category === cat).length
           : products.length
         return (
-          <div className="px-3 pt-2.5 pb-0 flex gap-2 overflow-x-auto scrollbar-hide">
+          <div className="px-3 pt-2.5 pb-0 flex gap-2 overflow-x-auto scrollbar-hide sm:flex-wrap sm:overflow-x-visible">
             <button
               className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${selectedCategory === null ? 'shadow-sm' : ''}`}
               style={{
@@ -1555,8 +1565,8 @@ export default function ShopPage() {
       })()}
 
       {/* 商品列表 */}
-      <main className="px-3 sm:px-6 pb-2" style={{ backgroundColor: '#ffffff' }}>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-3">
+      <main className="px-3 sm:px-6 pb-2" style={{ backgroundColor: '#FFFBF7' }}>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-3">
           {(selectedCategory === '__favorites__'
             ? products.filter(p => favoriteIds.has(p.id))
             : selectedCategory
@@ -1593,7 +1603,7 @@ export default function ShopPage() {
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.03 }}
-                  className={`relative transition-all flex flex-col ${(isUnavailable && !showStaffUI) ? 'opacity-60' : 'cursor-pointer'
+                  className={`relative transition-all duration-200 flex flex-col group shadow-sm ${(isUnavailable && !showStaffUI) ? 'opacity-60' : 'cursor-pointer hover:-translate-y-1 hover:shadow-xl'
                     } ${isInactive && showStaffUI ? 'opacity-50' : ''}`}
                   onClick={() => {
                     if (showStaffUI) {
@@ -1637,8 +1647,8 @@ export default function ShopPage() {
                         src={product.image_url}
                         alt={product.name}
                         fill
-                        className="object-cover pointer-events-none"
-                        sizes="(max-width: 768px) 50vw, 200px"
+                        className="object-cover pointer-events-none group-hover:scale-105 transition-transform duration-300"
+                        sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
                         loading={index < 4 ? 'eager' : 'lazy'}
                         priority={index < 4}
                         draggable={false}
@@ -1669,7 +1679,7 @@ export default function ShopPage() {
                   </div>
 
                   {/* 商品資訊 */}
-                  <div className="p-2.5 flex flex-col flex-1">
+                  <div className="p-2.5 lg:p-4 flex flex-col flex-1">
                     <div className="flex items-start gap-1.5">
                       <span
                         className="shrink-0 px-2 py-0.5 rounded-full text-xs font-medium leading-tight"
@@ -1764,10 +1774,10 @@ export default function ShopPage() {
             onClick={() => { setSelectedProduct(null); setCarouselIndex(0); setShowExtendOptions(null) }}
           >
             <motion.div
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
-              transition={{ type: 'spring', damping: 25 }}
+              initial={isDesktop ? { opacity: 0, scale: 0.96 } : { y: '100%' }}
+              animate={isDesktop ? { opacity: 1, scale: 1 } : { y: 0 }}
+              exit={isDesktop ? { opacity: 0, scale: 0.96 } : { y: '100%' }}
+              transition={isDesktop ? { duration: 0.2, ease: 'easeOut' } : { type: 'spring', damping: 25 }}
               className="absolute inset-x-0 top-12 bottom-0 rounded-t-2xl safe-bottom max-w-lg mx-auto flex flex-col sm:static sm:max-w-lg sm:rounded-b-2xl sm:rounded-t-2xl sm:max-h-[80vh] sm:overflow-y-auto"
               style={{ backgroundColor: '#FFF8F0' }}
               onClick={(e) => e.stopPropagation()}
