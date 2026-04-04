@@ -1275,7 +1275,7 @@ export default function ShopPage() {
         ) : (
           <div className="absolute inset-0" style={{ backgroundColor: '#D94E2B' }} />
         )}
-        <div className="px-4 sm:px-6 py-3 sm:py-6 lg:py-10 relative z-10">
+        <div className="px-4 sm:px-6 py-3 relative z-10">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5 min-w-0">
               <div
