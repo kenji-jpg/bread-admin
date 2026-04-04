@@ -1234,7 +1234,7 @@ export default function ShopPage() {
                 <div className="flex items-center gap-1.5">
                   <h1 className="text-base font-bold truncate" style={{ color: 'white' }}>{tenant.name}</h1>
                   <span className="inline-flex items-center gap-1 text-[10px]" style={{ color: 'rgba(255,255,255,0.8)' }}>
-                    <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: '#bbf7d0' }} />
+                    <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: '#4ADE80' }} />
                     營業中
                   </span>
                 </div>
