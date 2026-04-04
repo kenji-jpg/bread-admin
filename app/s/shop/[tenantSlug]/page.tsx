@@ -2295,7 +2295,7 @@ export default function ShopPage() {
                 )}
               </div>
 
-              {/* 底部：現貨結帳按鈕 */}
+              {/* 底部：現貨結帳按鈕（暫時停用，以後再實現）
               {checkoutEligibleOrders.length > 0 && (
                 <div className="px-5 py-4 safe-bottom" style={{ borderTop: '1px solid #E8D5BE' }}>
                   <button
@@ -2309,7 +2309,7 @@ export default function ShopPage() {
                     現貨結帳（{checkoutEligibleOrders.length} 項 · ${checkoutEligibleTotal.toLocaleString()}）
                   </button>
                 </div>
-              )}
+              )} */}
             </motion.div>
             </div>
           </motion.div>
