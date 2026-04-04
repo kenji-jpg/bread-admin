@@ -627,6 +627,32 @@ export default function ShopPage() {
     }
   }, [tenant?.id, tenant?.plan, isStaff, supabase, loadShop])
 
+  // Presence — 追蹤在線人數（所有訪客，不限方案）
+  useEffect(() => {
+    if (!tenant?.id) return
+
+    const presenceChannel = supabase.channel(`presence-shop-${tenant.id}`, {
+      config: { presence: { key: profile?.userId || `anon-${Math.random().toString(36).slice(2)}` } },
+    })
+
+    presenceChannel
+      .on('presence', { event: 'sync' }, () => {
+        // 不需在 LIFF 端處理，僅用於 admin 訂閱
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await presenceChannel.track({
+            online_at: new Date().toISOString(),
+            user_id: profile?.userId || 'anonymous',
+          })
+        }
+      })
+
+    return () => {
+      supabase.removeChannel(presenceChannel)
+    }
+  }, [tenant?.id, profile?.userId, supabase])
+
   // 已移除 30 秒輪詢 — Realtime 訂閱已處理商品即時同步
 
   // ========== 選擇商品（載入規格）==========

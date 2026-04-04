@@ -137,6 +137,9 @@ export default function ShopManagePage() {
     // LIFF URL copy
     const [copied, setCopied] = useState(false)
 
+    // 在線人數
+    const [onlineCount, setOnlineCount] = useState(0)
+
     // Load settings
     const loadSettings = useCallback(async () => {
         if (!tenant?.id) return
@@ -163,6 +166,25 @@ export default function ShopManagePage() {
     useEffect(() => {
         if (tenant?.id) loadSettings()
     }, [tenant?.id, loadSettings])
+
+    // 訂閱 Presence — 即時在線人數
+    useEffect(() => {
+        if (!tenant?.id) return
+
+        const presenceChannel = supabase.channel(`presence-shop-${tenant.id}`)
+
+        presenceChannel
+            .on('presence', { event: 'sync' }, () => {
+                const state = presenceChannel.presenceState()
+                const count = Object.keys(state).length
+                setOnlineCount(count)
+            })
+            .subscribe()
+
+        return () => {
+            supabase.removeChannel(presenceChannel)
+        }
+    }, [tenant?.id, supabase])
 
     // Banner upload handler
     const handleBannerUpload = async (file: File) => {
@@ -379,6 +401,15 @@ export default function ShopManagePage() {
                     <h1 className="text-2xl font-bold flex items-center gap-2">
                         <Store className="h-6 w-6 text-primary" />
                         商城管理
+                        {onlineCount > 0 && (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                                <span className="relative flex h-2 w-2">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+                                </span>
+                                {onlineCount} 人在線
+                            </span>
+                        )}
                     </h1>
                     <p className="text-sm text-muted-foreground mt-1">
                         設定 LIFF 商城的外觀、分類排序和視覺效果
