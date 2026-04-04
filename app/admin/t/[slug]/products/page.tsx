@@ -73,6 +73,8 @@ import {
     Clock,
     Hash,
     Store,
+    Eye,
+    EyeOff,
 } from 'lucide-react'
 import { CopyOrderButton } from './copy-order-button'
 
@@ -777,7 +779,12 @@ export default function ProductsPage() {
             return product?.status === 'active'
         }).length
         const inactiveCount = selectedProducts.size - activeCount
-        return { activeCount, inactiveCount }
+        const shopVisibleCount = Array.from(selectedProducts).filter(id => {
+            const product = products.find(p => p.id === id)
+            return product?.show_in_shop === true
+        }).length
+        const shopHiddenCount = selectedProducts.size - shopVisibleCount
+        return { activeCount, inactiveCount, shopVisibleCount, shopHiddenCount }
     }, [selectedProducts, products])
 
     // 批量刪除
@@ -834,6 +841,32 @@ export default function ProductsPage() {
             console.error(error)
         } finally {
             setIsDeleting(false)
+        }
+    }
+
+    // 批量商城顯示/隱藏
+    const handleBatchShowInShop = async (show: boolean) => {
+        if (selectedProducts.size === 0 || !tenant) return
+        try {
+            const ids = Array.from(selectedProducts)
+            const { error } = await supabase
+                .from('products')
+                .update({ show_in_shop: show })
+                .eq('tenant_id', tenant.id)
+                .in('id', ids)
+
+            if (error) {
+                toast.error(`批量${show ? '顯示' : '隱藏'}失敗：` + error.message)
+                return
+            }
+
+            setProducts(prev =>
+                prev.map(p => selectedProducts.has(p.id) ? { ...p, show_in_shop: show } : p)
+            )
+            toast.success(`已${show ? '開啟' : '關閉'}商城顯示：${ids.length} 個商品`)
+            setSelectedProducts(new Set())
+        } catch (error: any) {
+            toast.error(`批量${show ? '顯示' : '隱藏'}失敗`)
         }
     }
 
@@ -1282,6 +1315,29 @@ export default function ProductsPage() {
                                         下架 ({selectedStats.activeCount})
                                     </Button>
                                 )}
+                                <div className="h-4 w-px bg-border" />
+                                {selectedStats.shopHiddenCount > 0 && (
+                                    <Button
+                                        onClick={() => handleBatchShowInShop(true)}
+                                        size="sm"
+                                        className="bg-blue-600 hover:bg-blue-700 text-white rounded-full h-7 px-3 text-xs"
+                                    >
+                                        <Eye className="mr-1 h-3 w-3" />
+                                        商城顯示 ({selectedStats.shopHiddenCount})
+                                    </Button>
+                                )}
+                                {selectedStats.shopVisibleCount > 0 && (
+                                    <Button
+                                        onClick={() => handleBatchShowInShop(false)}
+                                        variant="outline"
+                                        size="sm"
+                                        className="rounded-full h-7 px-3 text-xs"
+                                    >
+                                        <EyeOff className="mr-1 h-3 w-3" />
+                                        商城隱藏 ({selectedStats.shopVisibleCount})
+                                    </Button>
+                                )}
+                                <div className="h-4 w-px bg-border" />
                                 <Button
                                     onClick={() => setDeleteDialogOpen(true)}
                                     variant="destructive"
