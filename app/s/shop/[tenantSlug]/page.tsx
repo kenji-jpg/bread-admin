@@ -1466,7 +1466,7 @@ export default function ShopPage() {
       })()}
 
       {/* 商品列表 */}
-      <main className="px-3 pb-2">
+      <main className="px-3 pb-2" style={{ backgroundColor: '#ffffff' }}>
         <div className="grid grid-cols-2 gap-3">
           {(selectedCategory === '__favorites__'
             ? products.filter(p => favoriteIds.has(p.id))
