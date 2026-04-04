@@ -68,7 +68,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 // 真人用戶透過 client component 跳轉
 export default async function ShareProductPage({ params }: Props) {
   const { tenantSlug, productId } = await params
-  const shopUrl = `/s/shop/${tenantSlug}?p=${productId}`
+  const shopUrl = `/shop/${tenantSlug}?p=${productId}`
 
   return <ShareRedirect url={shopUrl} />
 }

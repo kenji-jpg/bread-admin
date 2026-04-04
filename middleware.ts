@@ -31,40 +31,21 @@ export async function middleware(request: NextRequest) {
 
     const pathname = request.nextUrl.pathname
 
-    // === /shop/* 智慧路由：乾淨 URL 入口 ===
-    // LINE 瀏覽器 → 跳轉 LIFF URL（無縫登入）
-    // 外部瀏覽器 → rewrite 到 /s/shop/*（URL 維持 /shop/*）
-    if (pathname.startsWith('/shop/') && pathname !== '/shop/') {
-        const userAgent = request.headers.get('user-agent') || ''
-        const isLine = /Line\//i.test(userAgent)
-        // LINE URL 預覽爬蟲的 UA 也帶 Line/，但不應被 redirect
-        // 讓爬蟲走 rewrite 才能讀到 OG meta tags
-        const isBot = /bot|crawler|spider|preview|facebookexternalhit|Twitterbot|LinkedInBot|Slackbot|WhatsApp|Discordbot/i.test(userAgent)
-
-        if (isLine && !isBot) {
-            // 額外檢查：真人瀏覽器會帶 Sec-Fetch-Mode，爬蟲不會
-            const secFetchMode = request.headers.get('sec-fetch-mode')
-            const isLikelyHuman = !!secFetchMode
-
-            if (isLikelyHuman) {
-                const slug = pathname.split('/shop/')[1]?.split('?')[0]
-                const liffId = process.env.NEXT_PUBLIC_LIFF_ID
-                if (liffId && slug) {
-                    return NextResponse.redirect(
-                        new URL(`https://liff.line.me/${liffId}/s/shop/${slug}`)
-                    )
-                }
-            }
-        }
-
-        // 外部瀏覽器：內部 rewrite 到 /s/shop/*，瀏覽器 URL 不變
+    // === /s/shop/* → /shop/* 301 永久重定向（向後相容 LIFF URL）===
+    if (pathname.startsWith('/s/shop/')) {
+        const rest = pathname.replace('/s/shop/', '')
         const url = request.nextUrl.clone()
-        url.pathname = '/s' + pathname // /shop/x → /s/shop/x
-        return NextResponse.rewrite(url)
+        url.pathname = `/shop/${rest}`
+        return NextResponse.redirect(url, 301)
+    }
+
+    // /shop/* 直接放行（新的純網頁商城）
+    if (pathname.startsWith('/shop/') && pathname !== '/shop/') {
+        return supabaseResponse
     }
 
     // 不需要 auth 檢查的路由（避免循環或干擾 LIFF）
-    const skipAuthPaths = ['/auth/redirect', '/auth/callback', '/s', '/shop']
+    const skipAuthPaths = ['/auth/redirect', '/auth/callback', '/s', '/shop', '/api/line']
     const shouldSkipAuth = skipAuthPaths.some(path =>
         pathname === path || pathname.startsWith(`${path}/`)
     )
