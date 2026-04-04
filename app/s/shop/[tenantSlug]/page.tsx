@@ -364,6 +364,12 @@ export default function ShopPage() {
       if (error) throw error
 
       if (!data.success) {
+        // 維護模式：即使背景刷新也要顯示
+        if (data.error === 'maintenance') {
+          if (data.tenant) setTenant(data.tenant)
+          setError('maintenance')
+          return
+        }
         // 只在初次載入時顯示錯誤頁，背景刷新失敗靜默處理
         if (!initialLoadDone.current) setError(data.error)
         return
@@ -1101,6 +1107,30 @@ export default function ShopPage() {
           <Store className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
           <p className="text-muted-foreground mb-2">{liffError}</p>
           <p className="text-xs text-muted-foreground">請聯繫店家管理員設定 LINE Login</p>
+        </div>
+      </div>
+    )
+  }
+
+  // 維護模式
+  if (error === 'maintenance') {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: '#FFF8F0' }}>
+        <div className="text-center">
+          <div className="text-5xl mb-4">🔧</div>
+          <h2 className="text-xl font-bold mb-2" style={{ color: '#4A2C17' }}>
+            {tenant?.name || '商城'}暫時休息中
+          </h2>
+          <p className="text-sm mb-6" style={{ color: '#8B7355' }}>
+            我們正在進行維護，請稍後再回來
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-6 py-2.5 rounded-xl text-sm font-medium"
+            style={{ backgroundColor: '#E8D5BE', color: '#4A2C17' }}
+          >
+            重新整理
+          </button>
         </div>
       </div>
     )

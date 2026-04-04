@@ -93,6 +93,7 @@ interface ShopSettings {
     shopping_notice?: string | null
     accent_color?: string | null
     product_sort?: 'created_at' | 'sold_qty' | 'manual'
+    maintenance?: boolean
 }
 
 interface ShopCategory {
@@ -140,6 +141,10 @@ export default function ShopManagePage() {
     // 在線人數
     const [onlineCount, setOnlineCount] = useState(0)
 
+    // 維護模式
+    const [isMaintenance, setIsMaintenance] = useState(false)
+    const [isTogglingMaintenance, setIsTogglingMaintenance] = useState(false)
+
     // Load settings
     const loadSettings = useCallback(async () => {
         if (!tenant?.id) return
@@ -154,6 +159,7 @@ export default function ShopManagePage() {
             if (data?.success) {
                 setSettings(data.settings || {})
                 setCategories(data.categories || [])
+                setIsMaintenance(data.settings?.maintenance === true)
             }
         } catch (err) {
             console.error('Load shop settings error:', err)
@@ -340,6 +346,32 @@ export default function ShopManagePage() {
         setBannerPreview(null)
     }
 
+    // 維護模式開關
+    const handleToggleMaintenance = async () => {
+        if (!tenant?.id) return
+        setIsTogglingMaintenance(true)
+        try {
+            const newValue = !isMaintenance
+            const { error } = await supabase.rpc('update_shop_settings_v1', {
+                p_tenant_id: tenant.id,
+                p_line_user_id: '',
+                p_settings: {
+                    ...settings,
+                    maintenance: newValue,
+                },
+            })
+            if (error) throw error
+            setIsMaintenance(newValue)
+            setSettings(prev => ({ ...prev, maintenance: newValue } as ShopSettings))
+            toast.success(newValue ? '商城已暫停，顧客將看到維護中頁面' : '商城已恢復營業')
+        } catch (err) {
+            console.error('Toggle maintenance error:', err)
+            toast.error('操作失敗')
+        } finally {
+            setIsTogglingMaintenance(false)
+        }
+    }
+
     // Get display banner URL
     const displayBannerUrl = bannerPreview || settings.banner_url
 
@@ -395,6 +427,16 @@ export default function ShopManagePage() {
             animate={{ opacity: 1, y: 0 }}
             className="p-6 max-w-7xl mx-auto"
         >
+            {/* 維護模式 Banner */}
+            {isMaintenance && (
+                <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 dark:bg-amber-950/30 dark:border-amber-800 flex items-center gap-2">
+                    <Lock className="h-4 w-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                    <span className="text-sm font-medium text-amber-700 dark:text-amber-300">
+                        商城目前處於維護模式，顧客無法進入商城
+                    </span>
+                </div>
+            )}
+
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
                 <div>
@@ -416,6 +458,22 @@ export default function ShopManagePage() {
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
+                    <Button
+                        variant={isMaintenance ? 'default' : 'destructive'}
+                        size="sm"
+                        onClick={handleToggleMaintenance}
+                        disabled={isTogglingMaintenance}
+                        className="gap-1.5"
+                    >
+                        {isTogglingMaintenance ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : isMaintenance ? (
+                            <Eye className="h-4 w-4" />
+                        ) : (
+                            <Lock className="h-4 w-4" />
+                        )}
+                        {isMaintenance ? '恢復營業' : '暫停商城'}
+                    </Button>
                     <Button
                         variant="outline"
                         size="sm"
