@@ -2090,6 +2090,39 @@ export default function ShopPage() {
                     )}
                   </button>
                 )}
+                {/* 管理員：圖片管理列（刪除/設封面） */}
+                {showStaffUI && modalImages.length > 0 && (
+                  <div className="mt-2 flex gap-1.5 overflow-x-auto pb-1">
+                    {modalImages.map((url, idx) => (
+                      <div key={idx} className="relative shrink-0 w-14 h-14 rounded-lg overflow-hidden border" style={{ borderColor: idx === 0 ? (accentColor || '#D94E2B') : '#E5E7EB' }}>
+                        <Image src={url} alt={`圖${idx + 1}`} width={56} height={56} className="w-full h-full object-cover" />
+                        {idx === 0 && (
+                          <span className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[8px] text-center leading-tight py-px">封面</span>
+                        )}
+                        <button
+                          className="absolute top-0 right-0 w-4 h-4 bg-black/60 rounded-bl-md flex items-center justify-center"
+                          onClick={async (e) => {
+                            e.stopPropagation()
+                            if (modalImages.length <= 1) { toast.error('至少保留一張圖片'); return }
+                            const newUrls = modalImages.filter((_, i) => i !== idx)
+                            try {
+                              const { error } = await supabase
+                                .from('products')
+                                .update({ image_url: newUrls[0], image_urls: newUrls })
+                                .eq('id', selectedProduct.id)
+                              if (error) throw error
+                              toast.success('圖片已刪除')
+                              setSelectedProduct(null)
+                              loadShop()
+                            } catch { toast.error('刪除失敗') }
+                          }}
+                        >
+                          <X className="w-2.5 h-2.5 text-white" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* 商品資訊 */}
