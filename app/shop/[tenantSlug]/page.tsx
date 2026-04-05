@@ -1229,9 +1229,10 @@ export default function ShopPage() {
   // 管理員：每個商品的訂單統計
   const getProductStats = (productId: string) => {
     const productOrders = allOrders.filter((o) => o.product_id === productId)
-    const pending = productOrders.filter((o) => o.status === 'pending').length
-    const allocated = productOrders.filter((o) => o.status === 'allocated').length
-    return { pending, allocated, total: productOrders.length }
+    const pendingQty = productOrders.filter((o) => o.status === 'pending').reduce((sum, o) => sum + o.quantity, 0)
+    const allocatedQty = productOrders.filter((o) => o.status === 'allocated').reduce((sum, o) => sum + o.quantity, 0)
+    const totalQty = productOrders.reduce((sum, o) => sum + o.quantity, 0)
+    return { pending: pendingQty, allocated: allocatedQty, total: totalQty }
   }
 
   // 判斷商品模式：is_limited=true → 現貨模式，is_limited=false 但 stock>0 → 有現貨，否則 → 預購模式
@@ -1842,10 +1843,10 @@ export default function ShopPage() {
                       <div className="mt-1.5 pt-1.5 border-t" style={{ borderColor: '#F5E0C4' }}>
                         <div className="flex items-center justify-between text-[10px] text-muted-foreground">
                           <span>
-                            已配 {pStats.allocated}/{pStats.total}
+                            需 {pStats.total} 件（已配 {pStats.allocated}）
                           </span>
                           {pStats.pending > 0 && (
-                            <span className="text-orange-600 font-medium">{pStats.pending} 待處理</span>
+                            <span className="text-orange-600 font-medium">缺 {pStats.pending} 件</span>
                           )}
                         </div>
                       </div>
