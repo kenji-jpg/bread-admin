@@ -2045,15 +2045,21 @@ export default function ShopPage() {
                   )}
                   <div className="flex items-center gap-1 shrink-0">
                     <button
-                      className="p-1.5 rounded-full"
+                      className="p-1.5 rounded-full active:scale-90"
                       style={{ WebkitTapHighlightColor: 'transparent' }}
-                      onClick={(e) => { e.stopPropagation(); handleToggleFavorite(selectedProduct.id) }}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        const btn = e.currentTarget
+                        btn.style.transform = 'scale(1.3)'
+                        setTimeout(() => { btn.style.transform = '' }, 200)
+                        handleToggleFavorite(selectedProduct.id)
+                      }}
                     >
                       <Heart
                         className="w-5 h-5"
                         fill={favoriteIds.has(selectedProduct.id) ? '#EF4444' : 'none'}
                         stroke={favoriteIds.has(selectedProduct.id) ? '#EF4444' : '#C4A882'}
-                        style={{ transition: 'none' }}
+                        strokeWidth={2}
                       />
                     </button>
                     <button
