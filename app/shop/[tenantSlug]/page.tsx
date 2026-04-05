@@ -1176,12 +1176,7 @@ export default function ShopPage() {
     return `${minutes}m`
   }
 
-  // Loading 狀態（商品資料到就顯示）
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-white" />
-    )
-  }
+  // Loading 時不阻擋整個頁面，只在商品區顯示 loading
 
   // 維護模式
   if (error === 'maintenance') {
@@ -1219,10 +1214,10 @@ export default function ShopPage() {
     )
   }
 
-  // 商城不存在
-  if (!tenant) {
+  // 商城不存在（載入完成後才判斷）
+  if (!isLoading && !tenant) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4">
+      <div className="min-h-screen flex items-center justify-center p-4 bg-white">
         <p className="text-muted-foreground">商城不存在</p>
       </div>
     )
@@ -1388,12 +1383,12 @@ export default function ShopPage() {
         <div className="flex items-center gap-2.5">
           <Image
             src="/shop-logo.jpg"
-            alt={tenant.name}
+            alt={tenant?.name || ''}
             width={36}
             height={36}
             className="w-9 h-9 rounded-full object-cover shrink-0"
           />
-          <h1 className="text-lg font-bold" style={{ color: 'white' }}>{tenant.name}</h1>
+          <h1 className="text-lg font-bold" style={{ color: 'white' }}>{tenant?.name || ''}</h1>
           <span className="inline-flex items-center gap-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.8)' }}>
             <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: '#4ADE80' }} />
             營業中
@@ -1491,14 +1486,14 @@ export default function ShopPage() {
             <div className="flex items-center gap-2.5 min-w-0">
               <Image
                 src="/shop-logo.jpg"
-                alt={tenant.name}
+                alt={tenant?.name || ''}
                 width={32}
                 height={32}
                 className="w-8 h-8 rounded-full object-cover shrink-0"
               />
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <h1 className="text-base font-bold truncate" style={{ color: 'white' }}>{tenant.name}</h1>
+                  <h1 className="text-base font-bold truncate" style={{ color: 'white' }}>{tenant?.name || ''}</h1>
                   <span className="inline-flex items-center gap-1 text-[10px]" style={{ color: 'rgba(255,255,255,0.8)' }}>
                     <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: '#4ADE80' }} />
                     營業中
@@ -1697,7 +1692,11 @@ export default function ShopPage() {
       {/* 商品列表 */}
       <main className="px-3 sm:px-6 lg:px-24 pb-4 max-w-7xl mx-auto" style={{ backgroundColor: '#ffffff' }}>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5 lg:gap-8">
-          {(selectedCategory === '__favorites__'
+          {isLoading ? (
+            [...Array(8)].map((_, i) => (
+              <div key={i} className="bg-gray-100 rounded-2xl animate-pulse" style={{ aspectRatio: '5/4' }} />
+            ))
+          ) : (selectedCategory === '__favorites__'
             ? products.filter(p => favoriteIds.has(p.id))
             : selectedCategory
               ? products.filter(p => p.category === selectedCategory)
@@ -1885,7 +1884,7 @@ export default function ShopPage() {
               </div>
             )}
           </div>
-        )}
+        ))}
       </main>
 
       {/* 底部 Bar 已移除 — 操作按鈕統一在 Header */}
