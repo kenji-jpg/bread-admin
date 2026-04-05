@@ -15,21 +15,21 @@ export default function ShopProviders({
 
   useEffect(() => {
     const prev = document.body.style.backgroundColor
-    document.body.style.backgroundColor = '#FFFBF7'
+    document.body.style.backgroundColor = '#ffffff'
     return () => { document.body.style.backgroundColor = prev }
   }, [])
 
   return (
     <LineAuthProvider tenantSlug={tenantSlug}>
-      <div className="min-h-screen" style={{ backgroundColor: '#FFFBF7' }}>
+      <div className="min-h-screen" style={{ backgroundColor: '#ffffff' }}>
         {children}
         <Toaster
-          position="top-center"
+          position="bottom-center"
           toastOptions={{
             style: {
-              background: '#FFF8F0',
-              border: '1px solid #E8D5BE',
-              color: '#4A2C17',
+              background: '#ffffff',
+              border: '1px solid #E5E7EB',
+              color: '#374151',
               fontSize: '14px',
             },
           }}
