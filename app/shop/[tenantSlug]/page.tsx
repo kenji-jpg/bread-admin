@@ -1561,7 +1561,7 @@ export default function ShopPage() {
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             placeholder="搜尋商品..."
-            className="w-full pl-8 pr-8 py-2 rounded-full text-sm outline-none transition-all"
+            className="w-full pl-8 pr-8 py-2 rounded-full text-[16px] sm:text-sm outline-none transition-all"
             style={{
               backgroundColor: '#F7D9B4',
               color: '#5C3D1E',
@@ -2417,7 +2417,7 @@ export default function ShopPage() {
 
               {/* 固定底部：小計 + 按鈕（客人模式） */}
               {!showStaffUI && (
-                <div className="px-5 pb-4 pt-2 border-t shrink-0" style={{ borderColor: '#E8D5BE', backgroundColor: '#FFF8F0' }}>
+                <div className="px-5 pb-8 pt-2 border-t shrink-0" style={{ borderColor: '#E8D5BE', backgroundColor: '#FFF8F0' }}>
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-sm" style={{ color: '#8B6B4A' }}>小計</span>
                     <span className="text-lg font-bold" style={{ color: accentColor || '#D94E2B' }}>
