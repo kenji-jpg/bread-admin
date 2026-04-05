@@ -45,6 +45,8 @@ import {
   Check,
 } from 'lucide-react'
 import Image from 'next/image'
+import Cropper from 'react-easy-crop'
+import type { Area } from 'react-easy-crop'
 
 // 壓縮圖片
 async function compressImage(file: File, maxWidth = 400, quality = 0.7): Promise<Blob> {
@@ -84,6 +86,33 @@ async function compressImage(file: File, maxWidth = 400, quality = 0.7): Promise
     }
     img.onerror = reject
     img.src = URL.createObjectURL(file)
+  })
+}
+
+// 裁切圖片
+async function getCroppedImg(imageSrc: string, pixelCrop: Area): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const img = new window.Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = pixelCrop.width
+      canvas.height = pixelCrop.height
+      const ctx = canvas.getContext('2d')
+      if (!ctx) { reject(new Error('No canvas context')); return }
+      ctx.drawImage(
+        img,
+        pixelCrop.x, pixelCrop.y, pixelCrop.width, pixelCrop.height,
+        0, 0, pixelCrop.width, pixelCrop.height
+      )
+      canvas.toBlob(
+        (blob) => blob ? resolve(blob) : reject(new Error('Crop failed')),
+        'image/jpeg',
+        0.92
+      )
+    }
+    img.onerror = reject
+    img.src = imageSrc
   })
 }
 
@@ -276,6 +305,7 @@ export default function ShopPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isLineFriend, setIsLineFriend] = useState<boolean | null>(null) // null = 尚未檢查
+  const [productTypeFilter, setProductTypeFilter] = useState<'all' | 'stock' | 'preorder'>('all')
   const [isCheckingFriend, setIsCheckingFriend] = useState(false)
   // 桌面版判斷
   const [isDesktop, setIsDesktop] = useState(false)
@@ -321,6 +351,13 @@ export default function ShopPage() {
   const [newProductCategory, setNewProductCategory] = useState('')
   const [newProductEndTime, setNewProductEndTime] = useState<number | null>(null) // null=不限時, 30/60/120=分鐘
   const [newProductImages, setNewProductImages] = useState<File[]>([])
+  // 裁切狀態
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null)
+  const [cropPendingFiles, setCropPendingFiles] = useState<File[]>([])
+  const [cropCurrentIndex, setCropCurrentIndex] = useState(0)
+  const [crop, setCrop] = useState({ x: 0, y: 0 })
+  const [cropZoom, setCropZoom] = useState(1)
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null)
   const [newProductPreviews, setNewProductPreviews] = useState<string[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const [newProductHasVariants, setNewProductHasVariants] = useState(false)
@@ -495,6 +532,11 @@ export default function ShopPage() {
   // 登入後檢查 LINE 好友狀態
   const checkLineFriendship = useCallback(async () => {
     if (!tenant?.id || !profile?.userId) return
+    // Staff 和 dev 模式跳過檢查
+    if (isStaff || isDevStaff) {
+      setIsLineFriend(true)
+      return
+    }
     setIsCheckingFriend(true)
     try {
       const res = await fetch(
@@ -506,14 +548,16 @@ export default function ShopPage() {
         }
       )
       const data = await res.json()
+      console.log('[好友檢查]', { userId: profile.userId, result: data })
       setIsLineFriend(data.isFriend === true)
-    } catch {
+    } catch (err) {
+      console.error('[好友檢查] 失敗:', err)
       // 檢查失敗時不阻擋（寬容處理）
       setIsLineFriend(true)
     } finally {
       setIsCheckingFriend(false)
     }
-  }, [tenant?.id, profile?.userId])
+  }, [tenant?.id, profile?.userId, isStaff, isDevStaff])
 
   useEffect(() => {
     if (isLoggedIn && profile && tenant && isLineFriend === null) {
@@ -1490,7 +1534,7 @@ export default function ShopPage() {
               )}
               {showStaffUI && (
                 <>
-                  <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 text-[10px] px-1.5 py-0.5 mr-1">
+                  <Badge className="bg-white/20 text-white text-[10px] px-1.5 py-0.5 mr-1">
                     <Shield className="w-3 h-3 mr-0.5" />
                     管理
                   </Badge>
@@ -1565,7 +1609,7 @@ export default function ShopPage() {
 
 
       {/* Announcement Banner */}
-      {shopSettings.announcement && (
+      {shopSettings.announcement && !showStaffUI && (
         <div className="px-4 sm:px-6 lg:px-24 pt-3 max-w-7xl mx-auto">
           <div
             className="px-2 py-1 rounded-lg text-[11px]"
@@ -1590,11 +1634,12 @@ export default function ShopPage() {
 
       {/* 管理員：操作列 */}
       {showStaffUI && (
-        <div className="px-4 py-2 border-b bg-purple-50 dark:bg-purple-950/20 flex gap-2">
+        <div className="px-4 py-2 border-b flex gap-2" style={{ backgroundColor: '#FFF5EE' }}>
           <Button
             variant="outline"
             size="sm"
-            className="flex-1 rounded-lg border-purple-200 text-purple-700 dark:border-purple-800 dark:text-purple-400"
+            className="flex-1 rounded-lg"
+            style={{ borderColor: accentColor || '#D94E2B', color: accentColor || '#D94E2B' }}
             onClick={() => setIsAddProductOpen(true)}
           >
             <Camera className="w-3 h-3 mr-1" />
@@ -1611,9 +1656,12 @@ export default function ShopPage() {
           : selectedCategory
             ? products.filter(p => p.category === selectedCategory)
             : products
-        const filteredCount = searchQuery.trim()
-          ? baseProducts.filter(p => p.name.toLowerCase().includes(searchQuery.trim().toLowerCase())).length
-          : baseProducts.length
+        const afterSearch = searchQuery.trim()
+          ? baseProducts.filter(p => p.name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
+          : baseProducts
+        const filteredCount = productTypeFilter === 'all'
+          ? afterSearch.length
+          : afterSearch.filter(p => productTypeFilter === 'stock' ? p.is_limited : !p.is_limited).length
         if (filteredCount === 0) return null
         const sortLabels: Record<string, string> = {
           newest: '最新上架',
@@ -1662,6 +1710,7 @@ export default function ShopPage() {
               ? products.filter(p => p.category === selectedCategory)
               : products)
             .filter(p => !searchQuery.trim() || p.name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
+            .filter(p => productTypeFilter === 'all' || (productTypeFilter === 'stock' ? p.is_limited : !p.is_limited))
             .slice()
             .sort((a, b) => {
               const aUnavailable = a.status !== 'active' || a.is_expired || a.is_sold_out || (a.end_time && new Date(a.end_time).getTime() < Date.now()) || (a.is_limited && a.stock !== null && a.stock <= 0)
@@ -1819,13 +1868,14 @@ export default function ShopPage() {
           <div className="text-center py-16 text-muted-foreground">
             {showStaffUI ? (
               <div className="flex flex-col items-center">
-                <div className="w-20 h-20 rounded-full bg-purple-50 dark:bg-purple-950/30 flex items-center justify-center mb-4">
-                  <Camera className="w-8 h-8 text-purple-400" />
+                <div className="w-20 h-20 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: '#FFF5EE' }}>
+                  <Camera className="w-8 h-8" style={{ color: accentColor || '#D94E2B' }} />
                 </div>
                 <p className="text-sm font-medium mb-1">還沒有商品</p>
                 <p className="text-xs mb-4">上架第一個商品開始營業吧！</p>
                 <Button
-                  className="bg-purple-600 hover:bg-purple-700 rounded-xl"
+                  className="hover:opacity-90 rounded-xl text-white"
+                  style={{ backgroundColor: accentColor || '#D94E2B' }}
                   onClick={() => setIsAddProductOpen(true)}
                 >
                   <Camera className="w-4 h-4 mr-1" />
@@ -2522,6 +2572,26 @@ export default function ShopPage() {
                   )}
                 </div>
 
+                {/* 商品類型篩選 */}
+                <div className="mb-5">
+                  <p className="text-xs font-medium mb-2" style={{ color: '#8B6B4A' }}>商品類型</p>
+                  <div className="flex gap-2">
+                    {([['all', '全部'], ['stock', '現貨'], ['preorder', '預購']] as const).map(([key, label]) => (
+                      <button
+                        key={key}
+                        className="px-3 py-1.5 rounded-full text-sm font-medium transition-all flex-1"
+                        style={{
+                          backgroundColor: productTypeFilter === key ? (accentColor || '#8b5e3c') : '#F3F4F6',
+                          color: productTypeFilter === key ? '#fff' : '#374151',
+                        }}
+                        onClick={() => { setProductTypeFilter(key); setIsMenuOpen(false) }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {/* 分類標籤 */}
                 {(() => {
                   const orderedCategories = shopCategories.length > 0
@@ -3196,12 +3266,12 @@ export default function ShopPage() {
                   if (toAdd.length < files.length) {
                     toast.error(`最多上傳 5 張圖片`)
                   }
-                  setNewProductImages((prev) => [...prev, ...toAdd])
-                  setNewProductPreviews((prev) => [
-                    ...prev,
-                    ...toAdd.map((f) => URL.createObjectURL(f)),
-                  ])
-                  // Reset input so same file can be re-selected
+                  // 開啟裁切流程
+                  setCropPendingFiles(toAdd)
+                  setCropCurrentIndex(0)
+                  setCropImageSrc(URL.createObjectURL(toAdd[0]))
+                  setCrop({ x: 0, y: 0 })
+                  setCropZoom(1)
                   e.target.value = ''
                 }}
               />
@@ -3381,7 +3451,7 @@ export default function ShopPage() {
                     <button
                       type="button"
                       className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${!newProductCategory
-                        ? 'bg-purple-500 text-white'
+                        ? 'bg-[#D94E2B] text-white'
                         : 'bg-muted text-muted-foreground'
                         }`}
                       onClick={() => setNewProductCategory('')}
@@ -3393,7 +3463,7 @@ export default function ShopPage() {
                         key={cat.id}
                         type="button"
                         className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${newProductCategory === cat.name
-                          ? 'bg-purple-500 text-white'
+                          ? 'bg-[#D94E2B] text-white'
                           : 'bg-muted text-muted-foreground'
                           }`}
                         onClick={() => setNewProductCategory(cat.name)}
@@ -3460,7 +3530,8 @@ export default function ShopPage() {
                   取消
                 </Button>
                 <Button
-                  className="flex-1 bg-purple-600 hover:bg-purple-700"
+                  className="flex-1 hover:opacity-90 text-white"
+                  style={{ backgroundColor: accentColor || '#D94E2B' }}
                   onClick={handleAddProduct}
                   disabled={!newProductName.trim() || !newProductPrice || isUploading}
                 >
@@ -3475,6 +3546,98 @@ export default function ShopPage() {
                 </Button>
               </div>
             </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ========== 圖片裁切 Modal ========== */}
+      <AnimatePresence>
+        {cropImageSrc && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[110] bg-black/80 flex flex-col"
+          >
+            {/* 裁切區域 */}
+            <div className="relative flex-1">
+              <Cropper
+                image={cropImageSrc}
+                crop={crop}
+                zoom={cropZoom}
+                aspect={5 / 4}
+                onCropChange={setCrop}
+                onZoomChange={setCropZoom}
+                onCropComplete={(_: Area, croppedPixels: Area) => setCroppedAreaPixels(croppedPixels)}
+              />
+            </div>
+            {/* 控制列 */}
+            <div className="bg-black/90 px-6 py-5 space-y-4">
+              {/* 縮放滑桿 */}
+              <div className="flex items-center gap-3">
+                <span className="text-white/60 text-xs">縮放</span>
+                <input
+                  type="range"
+                  min={1}
+                  max={3}
+                  step={0.05}
+                  value={cropZoom}
+                  onChange={e => setCropZoom(Number(e.target.value))}
+                  className="flex-1 accent-white h-1"
+                />
+              </div>
+              {/* 按鈕 */}
+              <div className="flex gap-3">
+                <button
+                  className="flex-1 py-3 rounded-xl text-sm font-medium border border-white/30 text-white active:scale-[0.97]"
+                  onClick={() => {
+                    if (cropImageSrc) URL.revokeObjectURL(cropImageSrc)
+                    // 跳過這張，繼續下一張或結束
+                    const nextIdx = cropCurrentIndex + 1
+                    if (nextIdx < cropPendingFiles.length) {
+                      setCropCurrentIndex(nextIdx)
+                      setCropImageSrc(URL.createObjectURL(cropPendingFiles[nextIdx]))
+                      setCrop({ x: 0, y: 0 })
+                      setCropZoom(1)
+                    } else {
+                      setCropImageSrc(null)
+                      setCropPendingFiles([])
+                    }
+                  }}
+                >
+                  跳過
+                </button>
+                <button
+                  className="flex-1 py-3 rounded-xl text-sm font-bold text-white active:scale-[0.97]"
+                  style={{ backgroundColor: accentColor || '#D94E2B' }}
+                  onClick={async () => {
+                    if (!croppedAreaPixels || !cropImageSrc) return
+                    try {
+                      const croppedBlob = await getCroppedImg(cropImageSrc, croppedAreaPixels)
+                      const croppedFile = new File([croppedBlob], cropPendingFiles[cropCurrentIndex].name, { type: 'image/jpeg' })
+                      setNewProductImages(prev => [...prev, croppedFile])
+                      setNewProductPreviews(prev => [...prev, URL.createObjectURL(croppedBlob)])
+                    } catch {
+                      toast.error('裁切失敗')
+                    }
+                    URL.revokeObjectURL(cropImageSrc)
+                    // 下一張或結束
+                    const nextIdx = cropCurrentIndex + 1
+                    if (nextIdx < cropPendingFiles.length) {
+                      setCropCurrentIndex(nextIdx)
+                      setCropImageSrc(URL.createObjectURL(cropPendingFiles[nextIdx]))
+                      setCrop({ x: 0, y: 0 })
+                      setCropZoom(1)
+                    } else {
+                      setCropImageSrc(null)
+                      setCropPendingFiles([])
+                    }
+                  }}
+                >
+                  確認裁切 {cropPendingFiles.length > 1 ? `(${cropCurrentIndex + 1}/${cropPendingFiles.length})` : ''}
+                </button>
+              </div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -3515,7 +3678,7 @@ export default function ShopPage() {
                         key={v.id}
                         className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                           restockSelectedVariant?.id === v.id
-                            ? 'bg-purple-600 text-white'
+                            ? 'bg-[#D94E2B] text-white'
                             : 'bg-muted hover:bg-muted/80'
                         }`}
                         onClick={() => setRestockSelectedVariant(v)}
@@ -3542,7 +3705,8 @@ export default function ShopPage() {
                   取消
                 </Button>
                 <Button
-                  className="flex-1 bg-purple-600 hover:bg-purple-700"
+                  className="flex-1 hover:opacity-90 text-white"
+                  style={{ backgroundColor: accentColor || '#D94E2B' }}
                   onClick={handleRestock}
                   disabled={!restockQty || isRestocking || (restockProduct.has_variants && !restockSelectedVariant)}
                 >
