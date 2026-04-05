@@ -275,6 +275,8 @@ export default function ShopPage() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [isLineFriend, setIsLineFriend] = useState<boolean | null>(null) // null = 尚未檢查
+  const [isCheckingFriend, setIsCheckingFriend] = useState(false)
   // 桌面版判斷
   const [isDesktop, setIsDesktop] = useState(false)
   useEffect(() => {
@@ -489,6 +491,35 @@ export default function ShopPage() {
       loadFavorites()
     }
   }, [isLoggedIn, profile, tenant, loadMyOrders, loadFavorites])
+
+  // 登入後檢查 LINE 好友狀態
+  const checkLineFriendship = useCallback(async () => {
+    if (!tenant?.id || !profile?.userId) return
+    setIsCheckingFriend(true)
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/check-line-friendship`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY! },
+          body: JSON.stringify({ tenant_id: tenant.id, line_user_id: profile.userId }),
+        }
+      )
+      const data = await res.json()
+      setIsLineFriend(data.isFriend === true)
+    } catch {
+      // 檢查失敗時不阻擋（寬容處理）
+      setIsLineFriend(true)
+    } finally {
+      setIsCheckingFriend(false)
+    }
+  }, [tenant?.id, profile?.userId])
+
+  useEffect(() => {
+    if (isLoggedIn && profile && tenant && isLineFriend === null) {
+      checkLineFriendship()
+    }
+  }, [isLoggedIn, profile, tenant, isLineFriend, checkLineFriendship])
 
   // URL 帶 ?p=productId 時自動開啟該商品
   const autoOpenDone = useRef(false)
@@ -1196,6 +1227,61 @@ export default function ShopPage() {
         color: 'var(--shop-text)',
       } as React.CSSProperties}
     >
+      {/* LINE 好友檢查 Modal（阻擋式） */}
+      <AnimatePresence>
+        {isLoggedIn && isLineFriend === false && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm px-6"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl text-center"
+            >
+              <div
+                className="py-8 px-6"
+                style={{ backgroundColor: accentColor || '#D94E2B' }}
+              >
+                <div className="w-20 h-20 rounded-full mx-auto mb-3 overflow-hidden border-3 border-white/30">
+                  <Image src="/shop-logo.jpg" alt={tenant?.name || ''} width={80} height={80} className="w-full h-full object-cover" />
+                </div>
+                <h2 className="text-xl font-bold text-white">{tenant?.name}</h2>
+                <p className="text-sm text-white/80 mt-1">歡迎光臨 ✨</p>
+              </div>
+              <div className="px-6 py-6">
+                <p className="text-sm mb-1 font-medium" style={{ color: '#4A2C17' }}>
+                  為了讓您收到訂單和出貨通知
+                </p>
+                <p className="text-sm mb-5" style={{ color: '#8B6B4A' }}>
+                  請先加入我們的 LINE 好友
+                </p>
+                <a
+                  href="https://line.me/R/ti/p/@530rmasi"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block w-full py-3 rounded-xl text-sm font-bold text-white transition-all active:scale-[0.97]"
+                  style={{ backgroundColor: '#06C755' }}
+                >
+                  加入 LINE 好友
+                </a>
+                <button
+                  className="w-full mt-3 py-3 rounded-xl text-sm font-medium transition-all active:scale-[0.97] disabled:opacity-50"
+                  style={{ backgroundColor: '#F3F4F6', color: '#374151' }}
+                  onClick={checkLineFriendship}
+                  disabled={isCheckingFriend}
+                >
+                  {isCheckingFriend ? '確認中...' : '我已加好友 ✓'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* 購物須知 Modal */}
       <AnimatePresence>
         {showShoppingNotice && (
