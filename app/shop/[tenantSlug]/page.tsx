@@ -1885,7 +1885,7 @@ export default function ShopPage() {
               </div>
             )}
           </div>
-        ))}
+        )}
       </main>
 
       {/* 底部 Bar 已移除 — 操作按鈕統一在 Header */}
