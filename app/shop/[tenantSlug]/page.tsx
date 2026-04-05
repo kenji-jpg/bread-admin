@@ -2049,6 +2049,15 @@ export default function ShopPage() {
                       style={{ WebkitTapHighlightColor: 'transparent' }}
                       onClick={(e) => {
                         e.stopPropagation()
+                        // 先用 DOM 操作即時更新視覺，再觸發 state 更新
+                        const svg = e.currentTarget.querySelector('svg')
+                        if (svg) {
+                          const willBeFav = !favoriteIds.has(selectedProduct.id)
+                          svg.style.fill = willBeFav ? '#EF4444' : 'none'
+                          svg.style.stroke = willBeFav ? '#EF4444' : '#C4A882'
+                          svg.style.transform = 'scale(1.2)'
+                          setTimeout(() => { svg.style.transform = 'scale(1)' }, 200)
+                        }
                         handleToggleFavorite(selectedProduct.id)
                       }}
                     >
@@ -2056,8 +2065,7 @@ export default function ShopPage() {
                         style={{
                           fill: favoriteIds.has(selectedProduct.id) ? '#EF4444' : 'none',
                           stroke: favoriteIds.has(selectedProduct.id) ? '#EF4444' : '#C4A882',
-                          transition: 'fill 0.2s ease, stroke 0.2s ease, transform 0.2s ease',
-                          transform: favoriteIds.has(selectedProduct.id) ? 'scale(1.1)' : 'scale(1)',
+                          transition: 'fill 0.3s, stroke 0.3s, transform 0.2s',
                         }}
                       >
                         <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
