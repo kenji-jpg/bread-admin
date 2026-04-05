@@ -2045,22 +2045,23 @@ export default function ShopPage() {
                   )}
                   <div className="flex items-center gap-1 shrink-0">
                     <button
-                      className="p-1.5 rounded-full active:scale-90"
+                      className="p-1.5 rounded-full"
                       style={{ WebkitTapHighlightColor: 'transparent' }}
                       onClick={(e) => {
                         e.stopPropagation()
-                        const btn = e.currentTarget
-                        btn.style.transform = 'scale(1.3)'
-                        setTimeout(() => { btn.style.transform = '' }, 200)
                         handleToggleFavorite(selectedProduct.id)
                       }}
                     >
-                      <Heart
-                        className="w-5 h-5"
-                        fill={favoriteIds.has(selectedProduct.id) ? '#EF4444' : 'none'}
-                        stroke={favoriteIds.has(selectedProduct.id) ? '#EF4444' : '#C4A882'}
-                        strokeWidth={2}
-                      />
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                        style={{
+                          fill: favoriteIds.has(selectedProduct.id) ? '#EF4444' : 'none',
+                          stroke: favoriteIds.has(selectedProduct.id) ? '#EF4444' : '#C4A882',
+                          transition: 'fill 0.2s ease, stroke 0.2s ease, transform 0.2s ease',
+                          transform: favoriteIds.has(selectedProduct.id) ? 'scale(1.1)' : 'scale(1)',
+                        }}
+                      >
+                        <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+                      </svg>
                     </button>
                     <button
                       className="p-1.5 rounded-full transition-all active:scale-90"
