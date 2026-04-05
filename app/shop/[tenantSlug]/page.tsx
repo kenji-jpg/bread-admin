@@ -40,6 +40,7 @@ import {
   Search,
   ChevronDown,
   ArrowUpDown,
+  Menu,
   Pencil,
   Check,
 } from 'lucide-react'
@@ -195,7 +196,7 @@ function OrderCard({ order }: { order: OrderItem }) {
   return (
     <div
       className="flex gap-3 p-3 rounded-xl"
-      style={{ backgroundColor: '#FFF8F0', border: '1px solid #E8D5BE' }}
+      style={{ backgroundColor: '#ffffff', border: '1px solid #E8D5BE' }}
     >
       <div className="w-14 h-14 rounded-lg overflow-hidden flex-shrink-0" style={{ backgroundColor: '#F5E0C4' }}>
         {order.product_image ? (
@@ -273,6 +274,7 @@ export default function ShopPage() {
   // 分類篩選
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
   // 桌面版判斷
   const [isDesktop, setIsDesktop] = useState(false)
   useEffect(() => {
@@ -1116,7 +1118,7 @@ export default function ShopPage() {
   // 維護模式
   if (error === 'maintenance') {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: '#FFF8F0' }}>
+      <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: '#ffffff' }}>
         <div className="text-center">
           <div className="text-5xl mb-4">🔧</div>
           <h2 className="text-xl font-bold mb-2" style={{ color: '#4A2C17' }}>
@@ -1183,7 +1185,7 @@ export default function ShopPage() {
     <div
       className="min-h-screen"
       style={{
-        '--shop-bg': '#FFFBF7',
+        '--shop-bg': '#ffffff',
         '--shop-card': '#ffffff',
         '--shop-card-border': '#F5E0C4',
         '--shop-text': '#4A2C17',
@@ -1259,7 +1261,7 @@ export default function ShopPage() {
       </AnimatePresence>
 
       {/* 桌面版 Top Bar（sticky） */}
-      <nav className="hidden lg:flex items-center justify-between sticky top-0 z-50 bg-white border-b px-6 py-3">
+      <nav className="hidden lg:flex items-center justify-between sticky top-0 z-50 border-b px-6 py-3" style={{ backgroundColor: accentColor || '#D94E2B' }}>
         <div className="flex items-center gap-2.5">
           <Image
             src="/shop-logo.jpg"
@@ -1268,41 +1270,22 @@ export default function ShopPage() {
             height={36}
             className="w-9 h-9 rounded-full object-cover shrink-0"
           />
-          <h1 className="text-lg font-bold" style={{ color: '#2c2c2c' }}>{tenant.name}</h1>
-          <span className="inline-flex items-center gap-1 text-[11px]" style={{ color: '#6B7280' }}>
+          <h1 className="text-lg font-bold" style={{ color: 'white' }}>{tenant.name}</h1>
+          <span className="inline-flex items-center gap-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.8)' }}>
             <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: '#4ADE80' }} />
             營業中
           </span>
           {showStaffUI && staffStats && (
-            <span className="text-[11px] ml-1" style={{ color: '#9CA3AF' }}>
+            <span className="text-[11px] ml-1" style={{ color: 'rgba(255,255,255,0.7)' }}>
               訂單 {staffStats.total_orders - staffStats.cancelled_count} · ${staffStats.total_sales.toLocaleString()}
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          {/* 桌面版搜尋框 */}
-          <div className="relative mr-2">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: '#9CA3AF' }} />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder="搜尋商品..."
-              className="w-52 pl-9 pr-8 py-2 rounded-full text-sm outline-none transition-all"
-              style={{ backgroundColor: '#F3F4F6', color: '#374151', border: '1.5px solid transparent' }}
-              onFocus={e => { e.currentTarget.style.borderColor = accentColor || '#D94E2B'; e.currentTarget.style.width = '280px' }}
-              onBlur={e => { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.width = '208px' }}
-            />
-            {searchQuery && (
-              <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2">
-                <X className="w-3.5 h-3.5" style={{ color: '#9CA3AF' }} />
-              </button>
-            )}
-          </div>
+        <div className="flex items-center gap-1">
           {isStaff && (
             <button
-              className="relative p-2 rounded-full transition-colors mr-0.5"
-              style={{ color: accentColor || '#D94E2B', backgroundColor: staffModeActive ? '#FEE2E2' : '#F3F4F6' }}
+              className="relative p-2 rounded-full transition-colors"
+              style={{ color: 'white', backgroundColor: staffModeActive ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)' }}
               onClick={() => {
                 setStaffModeActive(!staffModeActive)
                 toast(staffModeActive ? '已切換為客人視角' : '已切換為管理模式', { duration: 1500 })
@@ -1314,43 +1297,23 @@ export default function ShopPage() {
           )}
           {showStaffUI && (
             <>
-              <Badge className="bg-purple-100 text-purple-700 text-[10px] px-1.5 py-0.5 mr-1">
+              <Badge className="bg-white/20 text-white text-[10px] px-1.5 py-0.5 mr-1">
                 <Shield className="w-3 h-3 mr-0.5" />
                 管理
               </Badge>
               <button
-                className="relative p-2 rounded-full transition-colors hover:bg-gray-100"
-                style={{ color: '#6B7280' }}
+                className="relative p-2 rounded-full transition-colors"
+                style={{ color: 'white', backgroundColor: 'rgba(255,255,255,0.1)' }}
                 onClick={() => { loadAllOrders(); setIsAdminPanelOpen(true) }}
               >
                 <Users className="w-5 h-5" />
               </button>
             </>
           )}
-          {isLoggedIn && profile && !showStaffUI && (
-            <div className="flex items-center gap-2 mr-2 px-2 py-1 rounded-full" style={{ backgroundColor: '#F3F4F6' }}>
-              {profile.pictureUrl ? (
-                <Image
-                  src={profile.pictureUrl}
-                  alt={profile.displayName}
-                  width={28}
-                  height={28}
-                  className="w-7 h-7 rounded-full object-cover"
-                />
-              ) : (
-                <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold" style={{ backgroundColor: accentColor || '#D94E2B', color: 'white' }}>
-                  {profile.displayName.charAt(0)}
-                </div>
-              )}
-              <span className="text-sm font-medium max-w-[80px] truncate" style={{ color: '#374151' }}>
-                {profile.displayName}
-              </span>
-            </div>
-          )}
           {isLoggedIn && !showStaffUI && (
             <motion.button
-              className="relative flex items-center gap-1.5 px-3 py-2 rounded-full transition-colors hover:bg-gray-100 active:scale-95"
-              style={{ color: '#374151' }}
+              className="relative p-2 rounded-full transition-colors active:scale-95"
+              style={{ color: 'white' }}
               onClick={() => setIsOrderDrawerOpen(true)}
               animate={orderIconPulse ? { scale: [1, 1.4, 1, 1.2, 1] } : {}}
               transition={{ duration: 0.6, ease: 'easeInOut' }}
@@ -1364,15 +1327,21 @@ export default function ShopPage() {
                     animate={{ scale: [0, 1.5, 1] }}
                     transition={{ duration: 0.4, ease: 'easeOut' }}
                     className="absolute -top-1.5 -right-2.5 min-w-[16px] h-4 text-[10px] font-bold rounded-full flex items-center justify-center px-0.5"
-                    style={{ backgroundColor: accentColor || '#D94E2B', color: '#fff' }}
+                    style={{ backgroundColor: '#fff', color: accentColor || '#D94E2B' }}
                   >
                     {orderItemCount}
                   </motion.span>
                 )}
               </div>
-              <span className="text-sm font-medium">訂單</span>
             </motion.button>
           )}
+          <button
+            className="relative p-2 rounded-full transition-colors"
+            style={{ color: 'white', backgroundColor: 'rgba(255,255,255,0.1)' }}
+            onClick={() => setIsMenuOpen(true)}
+          >
+            <Menu className="w-5 h-5" />
+          </button>
         </div>
       </nav>
 
@@ -1397,12 +1366,13 @@ export default function ShopPage() {
         <div className="px-4 sm:px-6 py-3 relative z-10">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5 min-w-0">
-              <div
-                className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
-                style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}
-              >
-                <Store className="w-4 h-4" style={{ color: 'white' }} />
-              </div>
+              <Image
+                src="/shop-logo.jpg"
+                alt={tenant.name}
+                width={32}
+                height={32}
+                className="w-8 h-8 rounded-full object-cover shrink-0"
+              />
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
                   <h1 className="text-base font-bold truncate" style={{ color: 'white' }}>{tenant.name}</h1>
@@ -1446,26 +1416,6 @@ export default function ShopPage() {
                     <Users className="w-5 h-5" />
                   </button>
                 </>
-              )}
-              {isLoggedIn && profile && !showStaffUI && (
-                <div className="flex items-center gap-1.5 mr-1">
-                  {profile.pictureUrl ? (
-                    <Image
-                      src={profile.pictureUrl}
-                      alt={profile.displayName}
-                      width={24}
-                      height={24}
-                      className="w-6 h-6 rounded-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold" style={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white' }}>
-                      {profile.displayName.charAt(0)}
-                    </div>
-                  )}
-                  <span className="text-[11px] font-medium max-w-[60px] truncate" style={{ color: 'rgba(255,255,255,0.9)' }}>
-                    {profile.displayName}
-                  </span>
-                </div>
               )}
               {isLoggedIn && !showStaffUI && (
                 <motion.button
@@ -1515,6 +1465,13 @@ export default function ShopPage() {
                   <span className="text-[10px] leading-none">訂單</span>
                 </motion.button>
               )}
+              <button
+                className="relative p-1.5 rounded-full transition-colors"
+                style={{ color: 'white', backgroundColor: 'rgba(255,255,255,0.1)' }}
+                onClick={() => setIsMenuOpen(true)}
+              >
+                <Menu className="w-5 h-5" />
+              </button>
             </div>
           </div>
         </div>
@@ -1523,16 +1480,24 @@ export default function ShopPage() {
 
       {/* Announcement Banner */}
       {shopSettings.announcement && (
-        <div
-          className="px-4 sm:px-6 py-3 text-sm font-medium"
-          style={{
-            background: `linear-gradient(135deg, ${accentColor || '#D94E2B'}, ${accentColor ? accentColor + 'dd' : '#C44425'})`,
-            color: '#fff8f0',
-          }}
-        >
-          <div className="flex items-start gap-2">
-            <Megaphone className="w-4 h-4 shrink-0 mt-0.5 opacity-90" />
-            <span className="leading-relaxed">{shopSettings.announcement}</span>
+        <div className="px-4 sm:px-6 lg:px-24 pt-3 max-w-7xl mx-auto">
+          <div
+            className="px-2 py-1 rounded-lg text-[11px]"
+            style={{
+              backgroundColor: `${accentColor || '#D94E2B'}12`,
+              color: accentColor || '#D94E2B',
+              border: `1px solid ${accentColor || '#D94E2B'}25`,
+            }}
+          >
+            <div className="flex items-center gap-2 overflow-hidden">
+              <Megaphone className="w-3 h-3 shrink-0 opacity-70" />
+              <div className="overflow-hidden flex-1">
+                <div className="whitespace-nowrap animate-[marquee_15s_linear_infinite] hover:[animation-play-state:paused]">
+                  <span className="inline-block pr-16">{shopSettings.announcement}</span>
+                  <span className="inline-block pr-16">{shopSettings.announcement}</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -1552,99 +1517,6 @@ export default function ShopPage() {
         </div>
       )}
 
-      {/* 搜尋框（手機版） */}
-      <div className="px-3 sm:px-6 pt-3 pb-1 lg:hidden">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: '#C4A882' }} />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="搜尋商品..."
-            className="w-full pl-8 pr-8 py-2 rounded-full text-[16px] sm:text-sm outline-none transition-all"
-            style={{
-              backgroundColor: '#F7D9B4',
-              color: '#5C3D1E',
-              border: '1.5px solid transparent',
-            }}
-            onFocus={e => { e.currentTarget.style.borderColor = accentColor || '#D94E2B' }}
-            onBlur={e => { e.currentTarget.style.borderColor = 'transparent' }}
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2"
-            >
-              <X className="w-3.5 h-3.5" style={{ color: '#C4A882' }} />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* 分類標籤篩選 */}
-      {(() => {
-        const orderedCategories = shopCategories.length > 0
-          ? shopCategories.map(c => c.name)
-          : [...new Set(products.map(p => p.category).filter(Boolean))] as string[]
-        const hasFavorites = favoriteIds.size > 0
-        const favCount = products.filter(p => favoriteIds.has(p.id)).length
-        if (orderedCategories.length === 0 && !hasFavorites) return null
-        const getCategoryCount = (cat: string | null) => cat
-          ? products.filter(p => p.category === cat).length
-          : products.length
-        return (
-          <div className="px-3 pt-2.5 pb-0 flex gap-2 overflow-x-auto scrollbar-hide sm:flex-wrap sm:overflow-x-visible lg:justify-center lg:pt-4 lg:pb-1 max-w-7xl mx-auto">
-            <button
-              className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${selectedCategory === null ? 'shadow-sm' : ''}`}
-              style={{
-                backgroundColor: selectedCategory === null
-                  ? (accentColor || '#8b5e3c')
-                  : '#F7D9B4',
-                color: selectedCategory === null
-                  ? '#fff8f0'
-                  : '#8B6B4A',
-              }}
-              onClick={() => setSelectedCategory(null)}
-            >
-              全部 ({getCategoryCount(null)})
-            </button>
-            {hasFavorites && favCount > 0 && (
-              <button
-                className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1 ${selectedCategory === '__favorites__' ? 'shadow-sm' : ''}`}
-                style={{
-                  backgroundColor: selectedCategory === '__favorites__'
-                    ? '#EF4444'
-                    : '#FEE2E2',
-                  color: selectedCategory === '__favorites__'
-                    ? '#fff'
-                    : '#DC2626',
-                }}
-                onClick={() => setSelectedCategory(selectedCategory === '__favorites__' ? null : '__favorites__')}
-              >
-                <Heart className="w-3 h-3" fill={selectedCategory === '__favorites__' ? '#fff' : '#DC2626'} />
-                收藏 ({favCount})
-              </button>
-            )}
-            {orderedCategories.map(cat => (
-              <button
-                key={cat}
-                className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${selectedCategory === cat ? 'shadow-sm' : ''}`}
-                style={{
-                  backgroundColor: selectedCategory === cat
-                    ? (accentColor || '#8b5e3c')
-                    : '#F7D9B4',
-                  color: selectedCategory === cat
-                    ? '#fff8f0'
-                    : '#8B6B4A',
-                }}
-                onClick={() => setSelectedCategory(selectedCategory === cat ? null : cat)}
-              >
-                {cat} ({getCategoryCount(cat)})
-              </button>
-            ))}
-          </div>
-        )
-      })()}
 
       {/* 排序 & 商品數量 */}
       {(() => {
@@ -1696,7 +1568,7 @@ export default function ShopPage() {
       })()}
 
       {/* 商品列表 */}
-      <main className="px-3 sm:px-6 lg:px-24 pb-4 max-w-7xl mx-auto" style={{ backgroundColor: '#FFFBF7' }}>
+      <main className="px-3 sm:px-6 lg:px-24 pb-4 max-w-7xl mx-auto" style={{ backgroundColor: '#ffffff' }}>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5 lg:gap-8">
           {(selectedCategory === '__favorites__'
             ? products.filter(p => favoriteIds.has(p.id))
@@ -1911,7 +1783,7 @@ export default function ShopPage() {
               exit={isDesktop ? { opacity: 0, scale: 0.96 } : { y: '100%' }}
               transition={isDesktop ? { duration: 0.2, ease: 'easeOut' } : { type: 'spring', damping: 25 }}
               className="absolute inset-x-0 top-12 bottom-0 rounded-t-2xl safe-bottom max-w-lg mx-auto flex flex-col sm:static sm:rounded-b-2xl sm:rounded-t-2xl sm:max-h-[85vh] sm:overflow-y-auto"
-              style={{ backgroundColor: '#FFF8F0', ...(isDesktop ? { maxWidth: '36rem' } : {}) }}
+              style={{ backgroundColor: '#ffffff', ...(isDesktop ? { maxWidth: '36rem' } : {}) }}
               onClick={(e) => e.stopPropagation()}
             >
               {/* 拖曳指示條（獨立拖曳區域，加大觸控範圍） */}
@@ -2311,7 +2183,7 @@ export default function ShopPage() {
                         {/* 關閉 */}
                         <button
                           className="h-12 rounded-xl text-sm font-medium flex items-center justify-center gap-1"
-                          style={{ border: '1px solid #E8D5BE', backgroundColor: '#FFF8F0', color: '#8B6B4A' }}
+                          style={{ border: '1px solid #E8D5BE', backgroundColor: '#ffffff', color: '#8B6B4A' }}
                           onClick={() => setSelectedProduct(null)}
                         >
                           <X className="w-4 h-4" />
@@ -2417,7 +2289,7 @@ export default function ShopPage() {
 
               {/* 固定底部：小計 + 按鈕（客人模式） */}
               {!showStaffUI && (
-                <div className="px-5 pb-8 pt-2 border-t shrink-0" style={{ borderColor: '#E8D5BE', backgroundColor: '#FFF8F0' }}>
+                <div className="px-5 pb-8 pt-2 border-t shrink-0" style={{ borderColor: '#E8D5BE', backgroundColor: '#ffffff' }}>
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-sm" style={{ color: '#8B6B4A' }}>小計</span>
                     <span className="text-lg font-bold" style={{ color: accentColor || '#D94E2B' }}>
@@ -2470,7 +2342,7 @@ export default function ShopPage() {
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
               className="w-full max-w-sm rounded-2xl p-6 shadow-xl"
-              style={{ backgroundColor: '#FFF8F0' }}
+              style={{ backgroundColor: '#ffffff' }}
               onClick={(e) => e.stopPropagation()}
             >
               <div className="text-center mb-4">
@@ -2514,6 +2386,118 @@ export default function ShopPage() {
         )}
       </AnimatePresence>
 
+      {/* 功能選單 Drawer */}
+      <AnimatePresence>
+        {isMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/40 flex justify-start"
+            onClick={() => setIsMenuOpen(false)}
+          >
+            <motion.div
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', damping: 25 }}
+              className="h-full w-full max-w-sm flex flex-col"
+              style={{ backgroundColor: '#ffffff' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid #E8D5BE' }}>
+                <h2 className="text-lg font-bold" style={{ color: '#4A2C17' }}>篩選 & 搜尋</h2>
+                <button
+                  className="p-1.5 rounded-full transition-colors"
+                  style={{ color: '#8B6B4A' }}
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="px-5 py-4 overflow-y-auto flex-1">
+                {/* 搜尋框 */}
+                <div className="relative mb-5">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: '#C4A882' }} />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    placeholder="搜尋商品..."
+                    className="w-full pl-10 pr-9 py-2.5 rounded-full text-[16px] sm:text-sm outline-none"
+                    style={{ backgroundColor: '#F5F5F5', color: '#374151', border: '1.5px solid #E5E7EB' }}
+                  />
+                  {searchQuery && (
+                    <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <X className="w-4 h-4" style={{ color: '#9CA3AF' }} />
+                    </button>
+                  )}
+                </div>
+
+                {/* 分類標籤 */}
+                {(() => {
+                  const orderedCategories = shopCategories.length > 0
+                    ? shopCategories.map(c => c.name)
+                    : [...new Set(products.map(p => p.category).filter(Boolean))] as string[]
+                  const hasFavorites = favoriteIds.size > 0
+                  const favCount = products.filter(p => favoriteIds.has(p.id)).length
+                  if (orderedCategories.length === 0 && !hasFavorites) return null
+                  const getCategoryCount = (cat: string | null) => cat
+                    ? products.filter(p => p.category === cat).length
+                    : products.length
+                  return (
+                    <div>
+                      <p className="text-xs font-medium mb-2" style={{ color: '#8B6B4A' }}>分類</p>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${selectedCategory === null ? 'shadow-sm' : ''}`}
+                          style={{
+                            backgroundColor: selectedCategory === null ? (accentColor || '#8b5e3c') : '#F3F4F6',
+                            color: selectedCategory === null ? '#fff' : '#374151',
+                          }}
+                          onClick={() => { setSelectedCategory(null); setIsMenuOpen(false) }}
+                        >
+                          全部 ({getCategoryCount(null)})
+                        </button>
+                        {hasFavorites && favCount > 0 && (
+                          <button
+                            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all flex items-center gap-1 ${selectedCategory === '__favorites__' ? 'shadow-sm' : ''}`}
+                            style={{
+                              backgroundColor: selectedCategory === '__favorites__' ? '#EF4444' : '#FEE2E2',
+                              color: selectedCategory === '__favorites__' ? '#fff' : '#DC2626',
+                            }}
+                            onClick={() => { setSelectedCategory(selectedCategory === '__favorites__' ? null : '__favorites__'); setIsMenuOpen(false) }}
+                          >
+                            <Heart className="w-3 h-3" fill={selectedCategory === '__favorites__' ? '#fff' : '#DC2626'} />
+                            收藏 ({favCount})
+                          </button>
+                        )}
+                        {orderedCategories.map(cat => (
+                          <button
+                            key={cat}
+                            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${selectedCategory === cat ? 'shadow-sm' : ''}`}
+                            style={{
+                              backgroundColor: selectedCategory === cat ? (accentColor || '#8b5e3c') : '#F3F4F6',
+                              color: selectedCategory === cat ? '#fff' : '#374151',
+                            }}
+                            onClick={() => { setSelectedCategory(selectedCategory === cat ? null : cat); setIsMenuOpen(false) }}
+                          >
+                            {cat} ({getCategoryCount(cat)})
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })()}
+
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* 我的訂單 Drawer */}
       <AnimatePresence>
         {isOrderDrawerOpen && (() => {
@@ -2542,13 +2526,33 @@ export default function ShopPage() {
               {/* Header */}
               <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid #E8D5BE' }}>
                 <h2 className="text-lg font-bold" style={{ color: '#4A2C17' }}>我的訂單</h2>
-                <button
-                  className="p-1.5 rounded-full transition-colors active:scale-95"
-                  style={{ color: '#8B6B4A' }}
-                  onClick={() => setIsOrderDrawerOpen(false)}
-                >
-                  <X className="w-5 h-5" />
-                </button>
+                <div className="flex items-center gap-2">
+                  {isLoggedIn && profile && (
+                    <div className="flex items-center gap-1.5">
+                      {profile.pictureUrl ? (
+                        <Image
+                          src={profile.pictureUrl}
+                          alt={profile.displayName}
+                          width={22}
+                          height={22}
+                          className="w-[22px] h-[22px] rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-[22px] h-[22px] rounded-full flex items-center justify-center text-[10px] font-bold" style={{ backgroundColor: accentColor || '#D94E2B', color: 'white' }}>
+                          {profile.displayName.charAt(0)}
+                        </div>
+                      )}
+                      <span className="text-xs max-w-[60px] truncate" style={{ color: '#8B6B4A' }}>{profile.displayName}</span>
+                    </div>
+                  )}
+                  <button
+                    className="p-1.5 rounded-full transition-colors active:scale-95"
+                    style={{ color: '#8B6B4A' }}
+                    onClick={() => setIsOrderDrawerOpen(false)}
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
 
               {/* Content */}
@@ -2646,7 +2650,7 @@ export default function ShopPage() {
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
               className="w-full max-w-lg rounded-t-2xl max-h-[85vh] flex flex-col sm:max-w-lg sm:rounded-2xl sm:max-h-[80vh]"
-              style={{ backgroundColor: '#FFF8F0' }}
+              style={{ backgroundColor: '#ffffff' }}
               onClick={(e) => e.stopPropagation()}
             >
               {/* Modal Header */}
