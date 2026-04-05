@@ -2773,7 +2773,7 @@ export default function ShopPage() {
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 25 }}
               className="h-full w-full max-w-sm flex flex-col"
-              style={{ backgroundColor: '#ffffff' }}
+              style={{ backgroundColor: '#ffffff', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
