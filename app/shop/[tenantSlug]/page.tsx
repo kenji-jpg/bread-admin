@@ -1179,14 +1179,7 @@ export default function ShopPage() {
   // Loading 狀態（商品資料到就顯示）
   if (isLoading) {
     return (
-      <div className="min-h-screen p-4">
-        <Skeleton className="h-12 w-48 mb-4" />
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
-          {[...Array(6)].map((_, i) => (
-            <Skeleton key={i} className="aspect-square rounded-xl" />
-          ))}
-        </div>
-      </div>
+      <div className="min-h-screen bg-white" />
     )
   }
 
