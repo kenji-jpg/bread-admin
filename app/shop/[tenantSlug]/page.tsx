@@ -1053,7 +1053,11 @@ export default function ShopPage() {
         p_line_user_id: profile.userId,
         p_name: newProductName.trim(),
         p_price: parseFloat(newProductPrice),
-        p_stock: newProductIsLimited && newProductStock ? parseInt(newProductStock) : 0,
+        p_stock: newProductIsLimited
+          ? newProductHasVariants
+            ? newProductVariants.reduce((sum, v) => sum + (parseInt(v.stock) || 0), 0)
+            : (parseInt(newProductStock) || 0)
+          : 0,
         p_image_url: imageUrls[0] || null,
         p_image_urls: imageUrls.length > 0 ? imageUrls : null,
         p_is_limited: newProductIsLimited,
@@ -3367,7 +3371,7 @@ export default function ShopPage() {
                 </button>
               </div>
 
-              {/* 價格 + 庫存（現貨模式才顯示庫存） */}
+              {/* 價格 + 庫存（現貨+無規格時才顯示主庫存） */}
               <div className="flex gap-2 mb-3">
                 <Input
                   type="number"
@@ -3375,16 +3379,16 @@ export default function ShopPage() {
                   placeholder="價格"
                   value={newProductPrice}
                   onChange={(e) => setNewProductPrice(e.target.value)}
-                  className="flex-1 rounded-xl"
+                  className="flex-1 rounded-xl text-[16px]"
                 />
-                {newProductIsLimited && (
+                {newProductIsLimited && !newProductHasVariants && (
                   <Input
                     type="number"
                     min="1"
                     placeholder="庫存數量"
                     value={newProductStock}
                     onChange={(e) => setNewProductStock(e.target.value)}
-                    className="flex-1 rounded-xl"
+                    className="flex-1 rounded-xl text-[16px]"
                   />
                 )}
               </div>
@@ -3418,7 +3422,7 @@ export default function ShopPage() {
                             arr[idx] = { ...arr[idx], name: e.target.value }
                             setNewProductVariants(arr)
                           }}
-                          className="flex-1 rounded-xl text-sm"
+                          className="flex-1 rounded-xl text-[16px]"
                         />
                         {newProductIsLimited && (
                           <Input
@@ -3431,7 +3435,7 @@ export default function ShopPage() {
                               arr[idx] = { ...arr[idx], stock: e.target.value }
                               setNewProductVariants(arr)
                             }}
-                            className="w-20 rounded-xl text-sm"
+                            className="w-20 rounded-xl text-[16px]"
                           />
                         )}
                         {newProductVariants.length > 1 && (
