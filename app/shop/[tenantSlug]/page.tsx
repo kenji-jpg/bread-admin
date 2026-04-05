@@ -367,6 +367,10 @@ export default function ShopPage() {
   const [newProductHasVariants, setNewProductHasVariants] = useState(false)
   const [newProductVariants, setNewProductVariants] = useState<{ name: string; stock: string }[]>([{ name: '', stock: '' }])
   const addProductFileRef = useRef<HTMLInputElement>(null)
+  const editProductFileRef = useRef<HTMLInputElement>(null)
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false)
+  const [cropMode, setCropMode] = useState<'add' | 'edit'>('add')
+  const editCroppedFilesRef = useRef<File[]>([])
 
   // 下架/上架
   const [isToggling, setIsToggling] = useState<string | null>(null)
@@ -1173,6 +1177,44 @@ export default function ShopPage() {
     }
   }
 
+  // 管理員：更新商品圖片
+  const handleEditProductPhoto = async (files: File[]) => {
+    if (!selectedProduct || !profile || !tenant) return
+    setIsUploadingPhoto(true)
+    try {
+      const imageUrls: string[] = []
+      for (let i = 0; i < files.length; i++) {
+        const sku = `${selectedProduct.id.slice(0, 8)}-${Date.now()}-${i}`
+        const compressedBlob = await compressImage(files[i])
+        const compressedFile = new File([compressedBlob], `${sku}.webp`, { type: 'image/webp' })
+        const path = `${tenant.id}/products/${sku}.webp`
+        const { error: uploadErr } = await supabase.storage.from('product-images').upload(path, compressedFile)
+        if (uploadErr) throw uploadErr
+        const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(path)
+        imageUrls.push(urlData.publicUrl)
+      }
+      // 合併現有圖片 + 新圖片
+      const existingUrls = (selectedProduct.image_urls && selectedProduct.image_urls.length > 0)
+        ? selectedProduct.image_urls
+        : selectedProduct.image_url ? [selectedProduct.image_url] : []
+      const allUrls = [...existingUrls, ...imageUrls]
+      // 更新 DB
+      const { error } = await supabase
+        .from('products')
+        .update({ image_url: allUrls[0], image_urls: allUrls })
+        .eq('id', selectedProduct.id)
+      if (error) throw error
+      toast.success(`已新增 ${files.length} 張圖片`)
+      setSelectedProduct(null)
+      loadShop()
+    } catch (err) {
+      console.error('Upload photo error:', err)
+      toast.error('圖片上傳失敗')
+    } finally {
+      setIsUploadingPhoto(false)
+    }
+  }
+
   // 計算倒數時間
   const getTimeRemaining = (endTime: string) => {
     const diff = new Date(endTime).getTime() - Date.now()
@@ -1941,6 +1983,29 @@ export default function ShopPage() {
                 <div className="w-12 h-1.5 rounded-full" style={{ backgroundColor: '#D4B896' }} />
               </motion.div>
 
+              {/* 管理員：編輯圖片 file input */}
+              {showStaffUI && (
+                <input
+                  ref={editProductFileRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files || [])
+                    if (files.length === 0) return
+                    // 走裁切流程（編輯模式）
+                    setCropMode('edit')
+                    setCropPendingFiles(files)
+                    setCropCurrentIndex(0)
+                    setCropImageSrc(URL.createObjectURL(files[0]))
+                    setCrop({ x: 0, y: 0 })
+                    setCropZoom(1)
+                    e.target.value = ''
+                  }}
+                />
+              )}
+
               <div className="px-5 pb-5 sm:pt-5 overflow-y-auto flex-1">
               {/* 商品大圖 / 輪播 */}
               <div className="mb-3">
@@ -2009,6 +2074,21 @@ export default function ShopPage() {
                   <div className="w-full rounded-2xl flex items-center justify-center" style={{ backgroundColor: '#F5E0C4', aspectRatio: '1', maxHeight: '45vh' }}>
                     <Package className="w-16 h-16" style={{ color: '#C4A882' }} />
                   </div>
+                )}
+                {/* 管理員：新增圖片按鈕 */}
+                {showStaffUI && (
+                  <button
+                    className="w-full mt-2 py-2 rounded-xl text-xs font-medium flex items-center justify-center gap-1 active:scale-[0.97] disabled:opacity-50"
+                    style={{ backgroundColor: '#F3F4F6', color: '#6B7280' }}
+                    onClick={() => editProductFileRef.current?.click()}
+                    disabled={isUploadingPhoto}
+                  >
+                    {isUploadingPhoto ? (
+                      <><Loader2 className="w-3.5 h-3.5 animate-spin" /> 上傳中...</>
+                    ) : (
+                      <><Camera className="w-3.5 h-3.5" /> 新增圖片</>
+                    )}
+                  </button>
                 )}
               </div>
 
@@ -3283,7 +3363,8 @@ export default function ShopPage() {
                   if (toAdd.length < files.length) {
                     toast.error(`最多上傳 5 張圖片`)
                   }
-                  // 開啟裁切流程
+                  // 開啟裁切流程（新增模式）
+                  setCropMode('add')
                   setCropPendingFiles(toAdd)
                   setCropCurrentIndex(0)
                   setCropImageSrc(URL.createObjectURL(toAdd[0]))
@@ -3635,8 +3716,13 @@ export default function ShopPage() {
                     try {
                       const croppedBlob = await getCroppedImg(cropImageSrc, croppedAreaPixels)
                       const croppedFile = new File([croppedBlob], cropPendingFiles[cropCurrentIndex].name, { type: 'image/jpeg' })
-                      setNewProductImages(prev => [...prev, croppedFile])
-                      setNewProductPreviews(prev => [...prev, URL.createObjectURL(croppedBlob)])
+                      if (cropMode === 'add') {
+                        setNewProductImages(prev => [...prev, croppedFile])
+                        setNewProductPreviews(prev => [...prev, URL.createObjectURL(croppedBlob)])
+                      } else {
+                        // edit 模式：收集裁切後的檔案，最後一張完成時上傳
+                        editCroppedFilesRef.current.push(croppedFile)
+                      }
                     } catch {
                       toast.error('裁切失敗')
                     }
@@ -3651,6 +3737,11 @@ export default function ShopPage() {
                     } else {
                       setCropImageSrc(null)
                       setCropPendingFiles([])
+                      // edit 模式：全部裁切完後上傳
+                      if (cropMode === 'edit' && editCroppedFilesRef.current.length > 0) {
+                        handleEditProductPhoto(editCroppedFilesRef.current)
+                        editCroppedFilesRef.current = []
+                      }
                     }
                   }}
                 >
