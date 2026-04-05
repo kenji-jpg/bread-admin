@@ -1181,7 +1181,7 @@ export default function ShopPage() {
 
   return (
     <div
-      className="min-h-screen max-w-lg sm:max-w-2xl lg:max-w-5xl xl:max-w-6xl mx-auto"
+      className="min-h-screen"
       style={{
         '--shop-bg': '#FFFBF7',
         '--shop-card': '#ffffff',
@@ -1258,8 +1258,126 @@ export default function ShopPage() {
         )}
       </AnimatePresence>
 
-      {/* Header */}
-      <header className="sticky top-0 z-40 border-b relative overflow-hidden">
+      {/* 桌面版 Top Bar（sticky） */}
+      <nav className="hidden lg:flex items-center justify-between sticky top-0 z-50 bg-white border-b px-6 py-3">
+        <div className="flex items-center gap-2.5">
+          <Image
+            src="/shop-logo.jpg"
+            alt={tenant.name}
+            width={36}
+            height={36}
+            className="w-9 h-9 rounded-full object-cover shrink-0"
+          />
+          <h1 className="text-lg font-bold" style={{ color: '#2c2c2c' }}>{tenant.name}</h1>
+          <span className="inline-flex items-center gap-1 text-[11px]" style={{ color: '#6B7280' }}>
+            <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: '#4ADE80' }} />
+            營業中
+          </span>
+          {showStaffUI && staffStats && (
+            <span className="text-[11px] ml-1" style={{ color: '#9CA3AF' }}>
+              訂單 {staffStats.total_orders - staffStats.cancelled_count} · ${staffStats.total_sales.toLocaleString()}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {/* 桌面版搜尋框 */}
+          <div className="relative mr-2">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: '#9CA3AF' }} />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="搜尋商品..."
+              className="w-52 pl-9 pr-8 py-2 rounded-full text-sm outline-none transition-all"
+              style={{ backgroundColor: '#F3F4F6', color: '#374151', border: '1.5px solid transparent' }}
+              onFocus={e => { e.currentTarget.style.borderColor = accentColor || '#D94E2B'; e.currentTarget.style.width = '280px' }}
+              onBlur={e => { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.width = '208px' }}
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2">
+                <X className="w-3.5 h-3.5" style={{ color: '#9CA3AF' }} />
+              </button>
+            )}
+          </div>
+          {isStaff && (
+            <button
+              className="relative p-2 rounded-full transition-colors mr-0.5"
+              style={{ color: accentColor || '#D94E2B', backgroundColor: staffModeActive ? '#FEE2E2' : '#F3F4F6' }}
+              onClick={() => {
+                setStaffModeActive(!staffModeActive)
+                toast(staffModeActive ? '已切換為客人視角' : '已切換為管理模式', { duration: 1500 })
+              }}
+              title={staffModeActive ? '切換客人視角' : '切換管理模式'}
+            >
+              {staffModeActive ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+            </button>
+          )}
+          {showStaffUI && (
+            <>
+              <Badge className="bg-purple-100 text-purple-700 text-[10px] px-1.5 py-0.5 mr-1">
+                <Shield className="w-3 h-3 mr-0.5" />
+                管理
+              </Badge>
+              <button
+                className="relative p-2 rounded-full transition-colors hover:bg-gray-100"
+                style={{ color: '#6B7280' }}
+                onClick={() => { loadAllOrders(); setIsAdminPanelOpen(true) }}
+              >
+                <Users className="w-5 h-5" />
+              </button>
+            </>
+          )}
+          {isLoggedIn && profile && !showStaffUI && (
+            <div className="flex items-center gap-2 mr-2 px-2 py-1 rounded-full" style={{ backgroundColor: '#F3F4F6' }}>
+              {profile.pictureUrl ? (
+                <Image
+                  src={profile.pictureUrl}
+                  alt={profile.displayName}
+                  width={28}
+                  height={28}
+                  className="w-7 h-7 rounded-full object-cover"
+                />
+              ) : (
+                <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold" style={{ backgroundColor: accentColor || '#D94E2B', color: 'white' }}>
+                  {profile.displayName.charAt(0)}
+                </div>
+              )}
+              <span className="text-sm font-medium max-w-[80px] truncate" style={{ color: '#374151' }}>
+                {profile.displayName}
+              </span>
+            </div>
+          )}
+          {isLoggedIn && !showStaffUI && (
+            <motion.button
+              className="relative flex items-center gap-1.5 px-3 py-2 rounded-full transition-colors hover:bg-gray-100 active:scale-95"
+              style={{ color: '#374151' }}
+              onClick={() => setIsOrderDrawerOpen(true)}
+              animate={orderIconPulse ? { scale: [1, 1.4, 1, 1.2, 1] } : {}}
+              transition={{ duration: 0.6, ease: 'easeInOut' }}
+            >
+              <div className="relative">
+                <ClipboardList className="w-5 h-5" />
+                {orderItemCount > 0 && (
+                  <motion.span
+                    key={orderItemCount}
+                    initial={{ scale: 0 }}
+                    animate={{ scale: [0, 1.5, 1] }}
+                    transition={{ duration: 0.4, ease: 'easeOut' }}
+                    className="absolute -top-1.5 -right-2.5 min-w-[16px] h-4 text-[10px] font-bold rounded-full flex items-center justify-center px-0.5"
+                    style={{ backgroundColor: accentColor || '#D94E2B', color: '#fff' }}
+                  >
+                    {orderItemCount}
+                  </motion.span>
+                )}
+              </div>
+              <span className="text-sm font-medium">訂單</span>
+            </motion.button>
+          )}
+        </div>
+      </nav>
+
+      {/* 手機版 Header（sticky） */}
+      <header className="lg:hidden sticky top-0 z-40 border-b relative overflow-hidden">
         {shopSettings.banner_url ? (
           <>
             <div
@@ -1281,9 +1399,7 @@ export default function ShopPage() {
             <div className="flex items-center gap-2.5 min-w-0">
               <div
                 className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
-                style={{
-                  backgroundColor: shopSettings.banner_url ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.2)',
-                }}
+                style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}
               >
                 <Store className="w-4 h-4" style={{ color: 'white' }} />
               </div>
@@ -1331,7 +1447,6 @@ export default function ShopPage() {
                   </button>
                 </>
               )}
-              {/* 用戶頭貼 + 名稱 */}
               {isLoggedIn && profile && !showStaffUI && (
                 <div className="flex items-center gap-1.5 mr-1">
                   {profile.pictureUrl ? (
@@ -1352,18 +1467,14 @@ export default function ShopPage() {
                   </span>
                 </div>
               )}
-              {/* 訂單 */}
               {isLoggedIn && !showStaffUI && (
                 <motion.button
                   className="relative flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg transition-colors active:scale-95"
                   style={{ color: 'rgba(255,255,255,0.9)' }}
                   onClick={() => setIsOrderDrawerOpen(true)}
-                  animate={orderIconPulse ? {
-                    scale: [1, 1.4, 1, 1.2, 1],
-                  } : {}}
+                  animate={orderIconPulse ? { scale: [1, 1.4, 1, 1.2, 1] } : {}}
                   transition={{ duration: 0.6, ease: 'easeInOut' }}
                 >
-                  {/* 彩帶迸發 */}
                   {orderIconPulse && (
                     <>
                       {[...Array(5)].map((_, i) => {
@@ -1377,22 +1488,9 @@ export default function ShopPage() {
                           <motion.div
                             key={`confetti-${i}`}
                             className="absolute rounded-full"
-                            style={{
-                              width: size,
-                              height: size,
-                              backgroundColor: color,
-                              top: '50%',
-                              left: '50%',
-                              marginTop: -size / 2,
-                              marginLeft: -size / 2,
-                            }}
+                            style={{ width: size, height: size, backgroundColor: color, top: '50%', left: '50%', marginTop: -size / 2, marginLeft: -size / 2 }}
                             initial={{ opacity: 1, x: 0, y: 0, scale: 1 }}
-                            animate={{
-                              opacity: 0,
-                              x: Math.cos(rad) * dist,
-                              y: Math.sin(rad) * dist,
-                              scale: 0,
-                            }}
+                            animate={{ opacity: 0, x: Math.cos(rad) * dist, y: Math.sin(rad) * dist, scale: 0 }}
                             transition={{ duration: 0.7, delay: i * 0.02, ease: 'easeOut' }}
                           />
                         )
@@ -1417,11 +1515,11 @@ export default function ShopPage() {
                   <span className="text-[10px] leading-none">訂單</span>
                 </motion.button>
               )}
-              {/* 未登入時自動跳轉 LINE Login，不顯示按鈕 */}
             </div>
           </div>
         </div>
       </header>
+
 
       {/* Announcement Banner */}
       {shopSettings.announcement && (
@@ -1454,8 +1552,8 @@ export default function ShopPage() {
         </div>
       )}
 
-      {/* 搜尋框 */}
-      <div className="px-3 sm:px-6 pt-3 pb-1">
+      {/* 搜尋框（手機版） */}
+      <div className="px-3 sm:px-6 pt-3 pb-1 lg:hidden">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: '#C4A882' }} />
           <input
@@ -1495,7 +1593,7 @@ export default function ShopPage() {
           ? products.filter(p => p.category === cat).length
           : products.length
         return (
-          <div className="px-3 pt-2.5 pb-0 flex gap-2 overflow-x-auto scrollbar-hide sm:flex-wrap sm:overflow-x-visible">
+          <div className="px-3 pt-2.5 pb-0 flex gap-2 overflow-x-auto scrollbar-hide sm:flex-wrap sm:overflow-x-visible lg:justify-center lg:pt-4 lg:pb-1 max-w-7xl mx-auto">
             <button
               className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${selectedCategory === null ? 'shadow-sm' : ''}`}
               style={{
@@ -1566,7 +1664,7 @@ export default function ShopPage() {
           popular: '熱門優先',
         }
         return (
-          <div className="flex items-center justify-between px-3 py-2">
+          <div className="flex items-center justify-between px-3 lg:px-16 py-2 max-w-7xl mx-auto">
             <span className="text-xs" style={{ color: '#8B6B4A' }}>{filteredCount} 件商品</span>
             <div className="relative">
               <button
@@ -1598,8 +1696,8 @@ export default function ShopPage() {
       })()}
 
       {/* 商品列表 */}
-      <main className="px-3 sm:px-6 pb-2" style={{ backgroundColor: '#FFFBF7' }}>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-3">
+      <main className="px-3 sm:px-6 lg:px-24 pb-4 max-w-7xl mx-auto" style={{ backgroundColor: '#FFFBF7' }}>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5 lg:gap-8">
           {(selectedCategory === '__favorites__'
             ? products.filter(p => favoriteIds.has(p.id))
             : selectedCategory
@@ -1637,7 +1735,7 @@ export default function ShopPage() {
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.03 }}
-                  className={`relative transition-all duration-200 flex flex-col group shadow-sm ${(isUnavailable && !showStaffUI) ? 'opacity-60' : 'cursor-pointer hover:-translate-y-1 hover:shadow-xl'
+                  className={`relative transition-all duration-200 flex flex-col group bg-white rounded-2xl overflow-hidden shadow-sm ${(isUnavailable && !showStaffUI) ? 'opacity-60' : 'cursor-pointer hover:-translate-y-1 hover:shadow-lg'
                     } ${isInactive && showStaffUI ? 'opacity-50' : ''}`}
                   onClick={() => {
                     if (showStaffUI) {
@@ -1675,7 +1773,7 @@ export default function ShopPage() {
                   )}
 
                   {/* 商品圖片 */}
-                  <div className="aspect-square relative overflow-hidden rounded-2xl" style={{ backgroundColor: '#F5E0C4', WebkitTouchCallout: 'none', userSelect: 'none' }}>
+                  <div className="aspect-[5/4] relative overflow-hidden" style={{ backgroundColor: '#F5E0C4', WebkitTouchCallout: 'none', userSelect: 'none' }}>
                     {product.image_url ? (
                       <Image
                         src={product.image_url}
@@ -1812,8 +1910,8 @@ export default function ShopPage() {
               animate={isDesktop ? { opacity: 1, scale: 1 } : { y: 0 }}
               exit={isDesktop ? { opacity: 0, scale: 0.96 } : { y: '100%' }}
               transition={isDesktop ? { duration: 0.2, ease: 'easeOut' } : { type: 'spring', damping: 25 }}
-              className="absolute inset-x-0 top-12 bottom-0 rounded-t-2xl safe-bottom max-w-lg mx-auto flex flex-col sm:static sm:max-w-lg sm:rounded-b-2xl sm:rounded-t-2xl sm:max-h-[80vh] sm:overflow-y-auto"
-              style={{ backgroundColor: '#FFF8F0' }}
+              className="absolute inset-x-0 top-12 bottom-0 rounded-t-2xl safe-bottom max-w-lg mx-auto flex flex-col sm:static sm:rounded-b-2xl sm:rounded-t-2xl sm:max-h-[85vh] sm:overflow-y-auto"
+              style={{ backgroundColor: '#FFF8F0', ...(isDesktop ? { maxWidth: '36rem' } : {}) }}
               onClick={(e) => e.stopPropagation()}
             >
               {/* 拖曳指示條（獨立拖曳區域，加大觸控範圍） */}
@@ -2429,16 +2527,15 @@ export default function ShopPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/40 flex justify-center sm:items-center"
+            className="fixed inset-0 z-50 bg-black/40 flex justify-end"
             onClick={() => setIsOrderDrawerOpen(false)}
           >
-            <div className="relative w-full max-w-lg h-full">
             <motion.div
               initial={{ x: '100%' }}
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 25 }}
-              className="absolute top-0 right-0 bottom-0 w-full max-w-sm flex flex-col"
+              className="h-full w-full max-w-sm flex flex-col"
               style={{ backgroundColor: '#ffffff' }}
               onClick={(e) => e.stopPropagation()}
             >
@@ -2528,7 +2625,6 @@ export default function ShopPage() {
                 </div>
               )} */}
             </motion.div>
-            </div>
           </motion.div>
           )
         })()}
