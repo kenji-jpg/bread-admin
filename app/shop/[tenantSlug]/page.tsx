@@ -272,6 +272,7 @@ export default function ShopPage() {
 
   // 分類篩選
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
   // 桌面版判斷
   const [isDesktop, setIsDesktop] = useState(false)
   useEffect(() => {
@@ -1453,6 +1454,35 @@ export default function ShopPage() {
         </div>
       )}
 
+      {/* 搜尋框 */}
+      <div className="px-3 sm:px-6 pt-3 pb-1">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: '#C4A882' }} />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="搜尋商品..."
+            className="w-full pl-8 pr-8 py-2 rounded-full text-sm outline-none transition-all"
+            style={{
+              backgroundColor: '#F7D9B4',
+              color: '#5C3D1E',
+              border: '1.5px solid transparent',
+            }}
+            onFocus={e => { e.currentTarget.style.borderColor = accentColor || '#D94E2B' }}
+            onBlur={e => { e.currentTarget.style.borderColor = 'transparent' }}
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2"
+            >
+              <X className="w-3.5 h-3.5" style={{ color: '#C4A882' }} />
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* 分類標籤篩選 */}
       {(() => {
         const orderedCategories = shopCategories.length > 0
@@ -1520,11 +1550,14 @@ export default function ShopPage() {
 
       {/* 排序 & 商品數量 */}
       {(() => {
-        const filteredCount = selectedCategory === '__favorites__'
-          ? products.filter(p => favoriteIds.has(p.id)).length
+        const baseProducts = selectedCategory === '__favorites__'
+          ? products.filter(p => favoriteIds.has(p.id))
           : selectedCategory
-            ? products.filter(p => p.category === selectedCategory).length
-            : products.length
+            ? products.filter(p => p.category === selectedCategory)
+            : products
+        const filteredCount = searchQuery.trim()
+          ? baseProducts.filter(p => p.name.toLowerCase().includes(searchQuery.trim().toLowerCase())).length
+          : baseProducts.length
         if (filteredCount === 0) return null
         const sortLabels: Record<string, string> = {
           newest: '最新上架',
@@ -1572,6 +1605,7 @@ export default function ShopPage() {
             : selectedCategory
               ? products.filter(p => p.category === selectedCategory)
               : products)
+            .filter(p => !searchQuery.trim() || p.name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
             .slice()
             .sort((a, b) => {
               const aUnavailable = a.status !== 'active' || a.is_expired || a.is_sold_out || (a.end_time && new Date(a.end_time).getTime() < Date.now()) || (a.is_limited && a.stock !== null && a.stock <= 0)
