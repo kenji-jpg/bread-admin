@@ -1774,7 +1774,7 @@ export default function ShopPage() {
                   )}
 
                   {/* 商品圖片 */}
-                  <div className="aspect-[5/4] relative overflow-hidden" style={{ backgroundColor: '#F5E0C4', WebkitTouchCallout: 'none', userSelect: 'none' }}>
+                  <div className="aspect-[4/5] relative overflow-hidden" style={{ backgroundColor: '#F5E0C4', WebkitTouchCallout: 'none', userSelect: 'none' }}>
                     {product.image_url ? (
                       <Image
                         src={product.image_url}
@@ -1947,12 +1947,12 @@ export default function ShopPage() {
                         }}
                       >
                         {modalImages.map((url, i) => (
-                          <div key={i} className="min-w-full relative" style={{ aspectRatio: '1', maxHeight: '45vh', WebkitTouchCallout: 'none', userSelect: 'none' }}>
+                          <div key={i} className="min-w-full relative" style={{ aspectRatio: '4/5', maxHeight: '55vh', WebkitTouchCallout: 'none', userSelect: 'none' }}>
                             <Image
                               src={url}
                               alt={`${selectedProduct.name} ${i + 1}`}
                               fill
-                              className="object-cover pointer-events-none"
+                              className="object-contain pointer-events-none"
                               sizes="(max-width: 768px) 100vw, 400px"
                               draggable={false}
                               onContextMenu={(e) => e.preventDefault()}
