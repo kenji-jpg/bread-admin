@@ -392,13 +392,14 @@ export default function ShopPage() {
   const [noticeDontShowToday, setNoticeDontShowToday] = useState(false)
   useEffect(() => {
     if (!tenant?.id || !shopSettings.shopping_notice || showStaffUI) return
-    // 檢查今日是否已勾選「今日不再出現」
-    const today = new Date().toISOString().slice(0, 10) // YYYY-MM-DD
+    // 等好友檢查通過後才顯示購物須知
+    if (isLineFriend !== true) return
+    const today = new Date().toISOString().slice(0, 10)
     const key = `shopping_notice_dismissed_${tenant.id}`
     const dismissedDate = localStorage.getItem(key)
-    if (dismissedDate === today) return // 今日已勾選不再顯示
+    if (dismissedDate === today) return
     setShowShoppingNotice(true)
-  }, [tenant?.id, shopSettings.shopping_notice, showStaffUI])
+  }, [tenant?.id, shopSettings.shopping_notice, showStaffUI, isLineFriend])
 
   // 載入商城資料（不依賴 isStaff，避免 staff 判定後重複載入）
   const isStaffRef = useRef(isStaff)
