@@ -89,7 +89,7 @@ async function compressImage(file: File, maxWidth = 400, quality = 0.7): Promise
   })
 }
 
-// 裁切圖片
+// 裁切圖片（支援白邊填充：圖片縮小超出範圍時填白色）
 async function getCroppedImg(imageSrc: string, pixelCrop: Area): Promise<Blob> {
   return new Promise((resolve, reject) => {
     const img = new window.Image()
@@ -100,6 +100,10 @@ async function getCroppedImg(imageSrc: string, pixelCrop: Area): Promise<Blob> {
       canvas.height = pixelCrop.height
       const ctx = canvas.getContext('2d')
       if (!ctx) { reject(new Error('No canvas context')); return }
+      // 先填白色背景
+      ctx.fillStyle = '#ffffff'
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      // 畫圖片（負座標時自動產生白邊）
       ctx.drawImage(
         img,
         pixelCrop.x, pixelCrop.y, pixelCrop.width, pixelCrop.height,
@@ -3574,7 +3578,10 @@ export default function ShopPage() {
                 image={cropImageSrc}
                 crop={crop}
                 zoom={cropZoom}
-                aspect={5 / 4}
+                minZoom={0.3}
+                aspect={4 / 5}
+                restrictPosition={false}
+                style={{ containerStyle: { backgroundColor: '#ffffff' } }}
                 onCropChange={setCrop}
                 onZoomChange={setCropZoom}
                 onCropComplete={(_: Area, croppedPixels: Area) => setCroppedAreaPixels(croppedPixels)}
@@ -3587,7 +3594,7 @@ export default function ShopPage() {
                 <span className="text-white/60 text-xs">縮放</span>
                 <input
                   type="range"
-                  min={1}
+                  min={0.3}
                   max={3}
                   step={0.05}
                   value={cropZoom}
