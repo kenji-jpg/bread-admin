@@ -167,6 +167,7 @@ interface ShopSettings {
   shopping_notice?: string | null
   accent_color?: string | null
   product_sort?: 'created_at' | 'sold_qty' | 'manual'
+  order_notice?: string | null
 }
 
 interface ShopCategory {
