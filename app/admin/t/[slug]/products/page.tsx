@@ -828,10 +828,37 @@ export default function ProductsPage() {
                 toast.success(messages.join('，'))
             }
 
+            // 刪除 Storage 上的照片（硬刪除的商品）
+            if (data.hard_deleted_ids?.length > 0) {
+                const filesToDelete: string[] = []
+                products.forEach(p => {
+                    if (!data.hard_deleted_ids.includes(p.id)) return
+                    const extractPath = (url: string) => {
+                        const match = url.match(/\/product-images\/(.+)$/)
+                        return match ? match[1] : null
+                    }
+                    if (p.image_url) {
+                        const path = extractPath(p.image_url)
+                        if (path) filesToDelete.push(path)
+                    }
+                    if (p.image_urls) {
+                        p.image_urls.forEach(url => {
+                            const path = extractPath(url)
+                            if (path) filesToDelete.push(path)
+                        })
+                    }
+                })
+                if (filesToDelete.length > 0) {
+                    supabase.storage.from('product-images').remove(filesToDelete).catch(err => {
+                        console.error('Storage cleanup error:', err)
+                    })
+                }
+            }
+
             // 移除硬刪除的，更新軟刪除的狀態
             setProducts(prev => prev.filter(p => {
                 if (data.hard_deleted_ids?.includes(p.id)) return false
-                if (data.soft_deleted_ids?.includes(p.id)) return false  // 也隱藏軟刪除的
+                if (data.soft_deleted_ids?.includes(p.id)) return false
                 return true
             }))
             setSelectedProducts(new Set())
