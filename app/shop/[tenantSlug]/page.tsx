@@ -1484,7 +1484,7 @@ export default function ShopPage() {
               </button>
             </>
           )}
-          {isLoggedIn && (
+          {(isLoggedIn || showStaffUI) && (
             <motion.button
               className="relative p-2 rounded-full transition-colors active:scale-95"
               style={{ color: 'white' }}
@@ -1591,7 +1591,7 @@ export default function ShopPage() {
                   </button>
                 </>
               )}
-              {isLoggedIn && !showStaffUI && (
+              {(isLoggedIn || showStaffUI) && (
                 <motion.button
                   className="relative flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg transition-colors active:scale-95"
                   style={{ color: 'rgba(255,255,255,0.9)' }}
@@ -1828,7 +1828,7 @@ export default function ShopPage() {
                   )}
 
                   {/* 商品圖片 */}
-                  <div className="aspect-[4/5] relative overflow-hidden" style={{ backgroundColor: '#F5E0C4', WebkitTouchCallout: 'none', userSelect: 'none' }}>
+                  <div className="aspect-square relative overflow-hidden" style={{ backgroundColor: '#F5E0C4', WebkitTouchCallout: 'none', userSelect: 'none' }}>
                     {product.image_url ? (
                       <Image
                         src={product.image_url}
@@ -3763,7 +3763,7 @@ export default function ShopPage() {
                 crop={crop}
                 zoom={cropZoom}
                 minZoom={0.3}
-                aspect={4 / 5}
+                aspect={1}
                 restrictPosition={false}
                 style={{ containerStyle: { backgroundColor: '#ffffff' } }}
                 onCropChange={setCrop}
