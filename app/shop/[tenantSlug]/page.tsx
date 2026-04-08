@@ -2884,7 +2884,7 @@ export default function ShopPage() {
                           onClick={async () => {
                             try {
                               const newSettings = { ...shopSettings, order_notice: orderNoticeValue.trim() || null }
-                              const { error } = await supabase.from('tenants').update({ settings: newSettings }).eq('id', tenant.id)
+                              const { error } = await supabase.from('tenants').update({ settings: newSettings }).eq('id', tenant!.id)
                               if (error) throw error
                               setShopSettings(newSettings)
                               setEditingOrderNotice(false)
