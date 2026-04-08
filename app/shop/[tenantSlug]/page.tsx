@@ -1792,10 +1792,10 @@ export default function ShopPage() {
           const showCategoryHeaders = !selectedCategory && groups.length > 1
 
           let globalIndex = 0
-          return groups.map((group) => (
-            <div key={group.name || '__uncategorized'}>
+          return groups.map((group, gi) => (
+            <div key={group.name || '__uncategorized'} className={gi > 0 ? 'mt-6' : ''}>
               {showCategoryHeaders && group.name && (
-                <div className="flex items-center gap-3 my-4">
+                <div className="flex items-center gap-3 mb-4 mt-2">
                   <div className="flex-1 h-px" style={{ backgroundColor: '#E5E7EB' }} />
                   <span className="text-xs font-medium px-2" style={{ color: '#9CA3AF' }}>{group.name}</span>
                   <div className="flex-1 h-px" style={{ backgroundColor: '#E5E7EB' }} />
