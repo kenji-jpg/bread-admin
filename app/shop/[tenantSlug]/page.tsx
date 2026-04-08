@@ -1998,13 +1998,8 @@ export default function ShopPage() {
                   onChange={(e) => {
                     const files = Array.from(e.target.files || [])
                     if (files.length === 0) return
-                    // 走裁切流程（編輯模式）
-                    setCropMode('edit')
-                    setCropPendingFiles(files)
-                    setCropCurrentIndex(0)
-                    setCropImageSrc(URL.createObjectURL(files[0]))
-                    setCrop({ x: 0, y: 0 })
-                    setCropZoom(1)
+                    // 直接上傳原圖
+                    handleEditProductPhoto(files)
                     e.target.value = ''
                   }}
                 />
@@ -3465,13 +3460,9 @@ export default function ShopPage() {
                   if (toAdd.length < files.length) {
                     toast.error(`最多上傳 5 張圖片`)
                   }
-                  // 開啟裁切流程（新增模式）
-                  setCropMode('add')
-                  setCropPendingFiles(toAdd)
-                  setCropCurrentIndex(0)
-                  setCropImageSrc(URL.createObjectURL(toAdd[0]))
-                  setCrop({ x: 0, y: 0 })
-                  setCropZoom(1)
+                  // 直接加入原圖（不強制裁切）
+                  setNewProductImages(prev => [...prev, ...toAdd])
+                  setNewProductPreviews(prev => [...prev, ...toAdd.map(f => URL.createObjectURL(f))])
                   e.target.value = ''
                 }}
               />
