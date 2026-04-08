@@ -3678,35 +3678,20 @@ export default function ShopPage() {
                 )}
               </div>
 
-              {/* 分類標籤 */}
+              {/* 分類選擇 */}
               {shopCategories.length > 0 && (
                 <div className="mb-3">
-                  <p className="text-xs text-muted-foreground mb-1.5">分類標籤</p>
-                  <div className="flex gap-1.5 flex-wrap">
-                    <button
-                      type="button"
-                      className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${!newProductCategory
-                        ? 'bg-[#D94E2B] text-white'
-                        : 'bg-muted text-muted-foreground'
-                        }`}
-                      onClick={() => setNewProductCategory('')}
-                    >
-                      無
-                    </button>
-                    {shopCategories.map((cat) => (
-                      <button
-                        key={cat.id}
-                        type="button"
-                        className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${newProductCategory === cat.name
-                          ? 'bg-[#D94E2B] text-white'
-                          : 'bg-muted text-muted-foreground'
-                          }`}
-                        onClick={() => setNewProductCategory(cat.name)}
-                      >
-                        #{cat.name}
-                      </button>
+                  <select
+                    value={newProductCategory}
+                    onChange={e => setNewProductCategory(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl text-[16px] sm:text-sm outline-none appearance-none"
+                    style={{ backgroundColor: '#F3F4F6', color: newProductCategory ? '#374151' : '#9CA3AF', border: '1.5px solid #E5E7EB' }}
+                  >
+                    <option value="">選擇分類（可不選）</option>
+                    {shopCategories.map(cat => (
+                      <option key={cat.id} value={cat.name}>{cat.name}</option>
                     ))}
-                  </div>
+                  </select>
                 </div>
               )}
 
