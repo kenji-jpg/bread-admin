@@ -2871,10 +2871,13 @@ export default function ShopPage() {
                           style={{ backgroundColor: accentColor || '#D94E2B' }}
                           onClick={async () => {
                             try {
-                              const newSettings = { ...shopSettings, order_notice: orderNoticeValue.trim() || null }
-                              const { error } = await supabase.from('tenants').update({ settings: newSettings }).eq('id', tenant!.id)
+                              const noticeValue = orderNoticeValue.trim() || null
+                              // 用 RPC 或 SQL 合併，不覆蓋其他 settings 欄位
+                              const { data: current } = await supabase.from('tenants').select('settings').eq('id', tenant!.id).single()
+                              const mergedSettings = { ...(current?.settings || {}), order_notice: noticeValue }
+                              const { error } = await supabase.from('tenants').update({ settings: mergedSettings }).eq('id', tenant!.id)
                               if (error) throw error
-                              setShopSettings(newSettings)
+                              setShopSettings(prev => ({ ...prev, order_notice: noticeValue }))
                               setEditingOrderNotice(false)
                               toast.success('告示已更新')
                             } catch { toast.error('更新失敗') }
