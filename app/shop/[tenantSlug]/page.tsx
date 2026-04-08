@@ -190,6 +190,7 @@ interface OrderItem {
   is_arrived: boolean
   variant_name: string | null
   checkout_id: string | null
+  created_at: string
 }
 
 interface CheckoutResult {
@@ -2789,10 +2790,23 @@ export default function ShopPage() {
       {/* 我的訂單 Drawer */}
       <AnimatePresence>
         {isOrderDrawerOpen && (() => {
-          // 分類訂單
-          const pendingOrders = orders.filter((o) => o.status === 'pending' || (o.status === 'partial' && !o.checkout_id))
-          const confirmedOrders = orders.filter((o) => (o.status === 'allocated' || o.checkout_id) && o.status !== 'cancelled')
-          const failedOrders = orders.filter((o) => o.status === 'cancelled')
+          // 分類訂單：未結帳 vs 已結帳
+          const uncheckedOrders = orders.filter((o) => !o.checkout_id && o.status !== 'cancelled')
+          const pendingOrders = uncheckedOrders.filter((o) => o.status === 'pending' || o.status === 'partial')
+          const confirmedOrders = uncheckedOrders.filter((o) => o.status === 'allocated')
+          const failedOrders = orders.filter((o) => o.status === 'cancelled' && !o.checkout_id)
+          // 已結帳：按 checkout_id 分組
+          const checkedOutOrders = orders.filter((o) => o.checkout_id)
+          const checkoutGroups = new Map<string, { orders: typeof orders; date: string; total: number }>()
+          checkedOutOrders.forEach((o) => {
+            const cid = o.checkout_id!
+            if (!checkoutGroups.has(cid)) {
+              checkoutGroups.set(cid, { orders: [], date: o.created_at, total: 0 })
+            }
+            const g = checkoutGroups.get(cid)!
+            g.orders.push(o)
+            g.total += o.subtotal
+          })
 
           return (
           <motion.div
@@ -2905,7 +2919,7 @@ export default function ShopPage() {
 
               {/* Content */}
               <div className="flex-1 overflow-y-auto px-5 py-4">
-                {orders.length === 0 ? (
+                {uncheckedOrders.length === 0 && failedOrders.length === 0 && checkoutGroups.size === 0 ? (
                   <div className="text-center py-12">
                     <ClipboardList className="w-12 h-12 mx-auto mb-3" style={{ color: '#D4B896' }} />
                     <p style={{ color: '#8B6B4A' }}>還沒有訂單</p>
@@ -2955,6 +2969,43 @@ export default function ShopPage() {
                         <div className="space-y-2 opacity-60">
                           {failedOrders.map((order) => <OrderCard key={order.id} order={order} />)}
                         </div>
+                      </div>
+                    )}
+
+                    {/* 已結帳紀錄（折疊） */}
+                    {checkoutGroups.size > 0 && (
+                      <div>
+                        <details className="group">
+                          <summary className="flex items-center gap-2 mb-2.5 cursor-pointer list-none">
+                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#9CA3AF' }} />
+                            <span className="text-sm font-semibold" style={{ color: '#9CA3AF' }}>
+                              📋 已結帳紀錄（{checkoutGroups.size}）
+                            </span>
+                            <ChevronDown className="w-3.5 h-3.5 transition-transform group-open:rotate-180" style={{ color: '#9CA3AF' }} />
+                          </summary>
+                          <div className="space-y-2">
+                            {Array.from(checkoutGroups.entries()).map(([cid, group]) => {
+                              const date = new Date(group.date)
+                              const dateStr = `${date.getMonth() + 1}/${date.getDate()}`
+                              return (
+                                <div key={cid} className="rounded-xl p-3" style={{ backgroundColor: '#F9FAFB', border: '1px solid #E5E7EB' }}>
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <span className="text-xs font-medium" style={{ color: '#6B7280' }}>{dateStr} 結帳</span>
+                                    <span className="text-xs font-bold" style={{ color: '#374151' }}>${group.total.toLocaleString()}</span>
+                                  </div>
+                                  <div className="space-y-1">
+                                    {group.orders.map((o) => (
+                                      <div key={o.id} className="flex items-center justify-between text-xs" style={{ color: '#9CA3AF' }}>
+                                        <span className="truncate flex-1 mr-2">{o.product_name}{o.variant_name ? `（${o.variant_name}）` : ''}</span>
+                                        <span className="shrink-0">×{o.quantity}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </details>
                       </div>
                     )}
                   </div>
