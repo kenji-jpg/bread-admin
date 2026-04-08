@@ -356,7 +356,8 @@ export default function ShopPage() {
   const [newProductIsLimited, setNewProductIsLimited] = useState(false)
   const [newProductCategory, setNewProductCategory] = useState('')
   const [newProductEndTime, setNewProductEndTime] = useState<number | null>(null) // null=不限時, 30/60/120=分鐘
-  const [newProductImages, setNewProductImages] = useState<File[]>([])
+  const [newProductImages, setNewProductImages] = useState<File[]>([]) // 正方形縮圖
+  const [newProductOriginals, setNewProductOriginals] = useState<File[]>([]) // 原圖
   // 裁切狀態
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null)
   const [cropPendingFiles, setCropPendingFiles] = useState<File[]>([])
@@ -1011,38 +1012,39 @@ export default function ShopPage() {
 
     setIsUploading(true)
     try {
-      const imageUrls: string[] = []
+      const thumbnailUrls: string[] = [] // 正方形縮圖（主頁用）
+      const originalUrls: string[] = [] // 原圖（詳情頁用）
       const skuBase = `SP${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
 
-      // 上傳圖片（支援多張）
+      // 上傳圖片：正方形縮圖 + 原圖
       for (let i = 0; i < newProductImages.length; i++) {
         try {
           const sku = `${skuBase}-${i}`
-          const compressedBlob = await compressImage(newProductImages[i])
-          const compressedFile = new File([compressedBlob], `${sku}.webp`, {
-            type: 'image/webp',
-          })
-
-          const filePath = `${tenant.id}/products/${sku}.webp`
-          const { error: uploadError } = await supabase.storage
-            .from('product-images')
-            .upload(filePath, compressedFile, {
-              cacheControl: '3600',
-              upsert: true,
-            })
-
-          if (!uploadError) {
-            const {
-              data: { publicUrl },
-            } = supabase.storage.from('product-images').getPublicUrl(filePath)
-            imageUrls.push(publicUrl)
-          } else {
-            console.error('Upload error for image', i, uploadError)
+          // 上傳正方形縮圖
+          const thumbBlob = await compressImage(newProductImages[i])
+          const thumbFile = new File([thumbBlob], `${sku}.webp`, { type: 'image/webp' })
+          const thumbPath = `${tenant.id}/products/${sku}.webp`
+          const { error: thumbErr } = await supabase.storage.from('product-images').upload(thumbPath, thumbFile, { cacheControl: '3600', upsert: true })
+          if (!thumbErr) {
+            const { data: { publicUrl } } = supabase.storage.from('product-images').getPublicUrl(thumbPath)
+            thumbnailUrls.push(publicUrl)
+          }
+          // 上傳原圖
+          if (newProductOriginals[i]) {
+            const origBlob = await compressImage(newProductOriginals[i], 800, 0.85)
+            const origFile = new File([origBlob], `${sku}-orig.webp`, { type: 'image/webp' })
+            const origPath = `${tenant.id}/products/${sku}-orig.webp`
+            const { error: origErr } = await supabase.storage.from('product-images').upload(origPath, origFile, { cacheControl: '3600', upsert: true })
+            if (!origErr) {
+              const { data: { publicUrl } } = supabase.storage.from('product-images').getPublicUrl(origPath)
+              originalUrls.push(publicUrl)
+            }
           }
         } catch (err) {
-          console.error('Compress/upload error for image', i, err)
+          console.error('Upload error for image', i, err)
         }
       }
+      const imageUrls = thumbnailUrls // 向後相容
 
       // 呼叫 RPC 建立商品
       const endTimeValue = newProductEndTime
@@ -1066,8 +1068,8 @@ export default function ShopPage() {
             ? newProductVariants.reduce((sum, v) => sum + (parseInt(v.stock) || 0), 0)
             : (parseInt(newProductStock) || 0)
           : 0,
-        p_image_url: imageUrls[0] || null,
-        p_image_urls: imageUrls.length > 0 ? imageUrls : null,
+        p_image_url: thumbnailUrls[0] || null,
+        p_image_urls: originalUrls.length > 0 ? originalUrls : (thumbnailUrls.length > 0 ? thumbnailUrls : null),
         p_is_limited: newProductIsLimited,
         p_category: newProductCategory || null,
         p_end_time: endTimeValue,
@@ -1087,6 +1089,7 @@ export default function ShopPage() {
       setNewProductPrice('')
       setNewProductStock('')
       setNewProductImages([])
+      setNewProductOriginals([])
       setNewProductPreviews([])
       setNewProductHasVariants(false)
       setNewProductVariants([{ name: '', stock: '' }])
@@ -1998,8 +2001,13 @@ export default function ShopPage() {
                   onChange={(e) => {
                     const files = Array.from(e.target.files || [])
                     if (files.length === 0) return
-                    // 直接上傳原圖
-                    handleEditProductPhoto(files)
+                    // 開啟顯示範圍選擇器（編輯模式）
+                    setCropMode('edit')
+                    setCropPendingFiles(files)
+                    setCropCurrentIndex(0)
+                    setCropImageSrc(URL.createObjectURL(files[0]))
+                    setCrop({ x: 0, y: 0 })
+                    setCropZoom(1)
                     e.target.value = ''
                   }}
                 />
@@ -3460,9 +3468,13 @@ export default function ShopPage() {
                   if (toAdd.length < files.length) {
                     toast.error(`最多上傳 5 張圖片`)
                   }
-                  // 直接加入原圖（不強制裁切）
-                  setNewProductImages(prev => [...prev, ...toAdd])
-                  setNewProductPreviews(prev => [...prev, ...toAdd.map(f => URL.createObjectURL(f))])
+                  // 開啟顯示範圍選擇器（新增模式）
+                  setCropMode('add')
+                  setCropPendingFiles(toAdd)
+                  setCropCurrentIndex(0)
+                  setCropImageSrc(URL.createObjectURL(toAdd[0]))
+                  setCrop({ x: 0, y: 0 })
+                  setCropZoom(1)
                   e.target.value = ''
                 }}
               />
@@ -3808,16 +3820,18 @@ export default function ShopPage() {
                     if (!croppedAreaPixels || !cropImageSrc) return
                     try {
                       const croppedBlob = await getCroppedImg(cropImageSrc, croppedAreaPixels)
-                      const croppedFile = new File([croppedBlob], cropPendingFiles[cropCurrentIndex].name, { type: 'image/jpeg' })
+                      const croppedFile = new File([croppedBlob], `thumb_${cropPendingFiles[cropCurrentIndex].name}`, { type: 'image/jpeg' })
+                      const originalFile = cropPendingFiles[cropCurrentIndex]
                       if (cropMode === 'add') {
                         setNewProductImages(prev => [...prev, croppedFile])
+                        setNewProductOriginals(prev => [...prev, originalFile])
                         setNewProductPreviews(prev => [...prev, URL.createObjectURL(croppedBlob)])
                       } else {
-                        // edit 模式：收集裁切後的檔案，最後一張完成時上傳
                         editCroppedFilesRef.current.push(croppedFile)
+                        editCroppedFilesRef.current.push(originalFile) // 原圖也一起
                       }
                     } catch {
-                      toast.error('裁切失敗')
+                      toast.error('選取失敗')
                     }
                     URL.revokeObjectURL(cropImageSrc)
                     // 下一張或結束
@@ -3838,7 +3852,7 @@ export default function ShopPage() {
                     }
                   }}
                 >
-                  確認裁切 {cropPendingFiles.length > 1 ? `(${cropCurrentIndex + 1}/${cropPendingFiles.length})` : ''}
+                  確認顯示範圍 {cropPendingFiles.length > 1 ? `(${cropCurrentIndex + 1}/${cropPendingFiles.length})` : ''}
                 </button>
               </div>
             </div>
