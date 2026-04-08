@@ -1750,12 +1750,14 @@ export default function ShopPage() {
 
       {/* 商品列表 */}
       <main className="px-3 sm:px-6 lg:px-24 pb-4 max-w-7xl mx-auto" style={{ backgroundColor: '#ffffff' }}>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5 lg:gap-8">
-          {isLoading ? (
-            [...Array(8)].map((_, i) => (
-              <div key={i} className="bg-gray-100 rounded-2xl animate-pulse" style={{ aspectRatio: '5/4' }} />
-            ))
-          ) : (selectedCategory === '__favorites__'
+        {isLoading ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5 lg:gap-8">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="bg-gray-100 rounded-2xl animate-pulse" style={{ aspectRatio: '1' }} />
+            ))}
+          </div>
+        ) : (() => {
+          const filtered = (selectedCategory === '__favorites__'
             ? products.filter(p => favoriteIds.has(p.id))
             : selectedCategory
               ? products.filter(p => p.category === selectedCategory)
@@ -1768,13 +1770,40 @@ export default function ShopPage() {
               const bUnavailable = b.status !== 'active' || b.is_expired || b.is_sold_out || (b.end_time && new Date(b.end_time).getTime() < Date.now()) || (b.is_limited && b.stock !== null && b.stock <= 0)
               if (aUnavailable && !bUnavailable) return 1
               if (!aUnavailable && bUnavailable) return -1
-              // 自訂排序
               if (sortBy === 'price_asc') return a.price - b.price
               if (sortBy === 'price_desc') return b.price - a.price
               if (sortBy === 'popular') return b.sold_qty - a.sold_qty
-              return 0 // newest = 預設（API 已按 created_at 排序）
+              return 0
             })
-            .map((product, index) => {
+
+          // 按分類分組（保持 shopCategories 排序）
+          const categoryOrder = shopCategories.length > 0
+            ? shopCategories.map(c => c.name)
+            : [...new Set(filtered.map(p => p.category).filter(Boolean))] as string[]
+          const uncategorized = filtered.filter(p => !p.category)
+          const groups: { name: string | null; items: typeof filtered }[] = []
+          categoryOrder.forEach(cat => {
+            const items = filtered.filter(p => p.category === cat)
+            if (items.length > 0) groups.push({ name: cat, items })
+          })
+          if (uncategorized.length > 0) groups.push({ name: null, items: uncategorized })
+
+          // 如果只有一個分類或在篩選模式，不顯示分類標題
+          const showCategoryHeaders = !selectedCategory && groups.length > 1
+
+          let globalIndex = 0
+          return groups.map((group) => (
+            <div key={group.name || '__uncategorized'}>
+              {showCategoryHeaders && group.name && (
+                <div className="flex items-center gap-3 my-4">
+                  <div className="flex-1 h-px" style={{ backgroundColor: '#E5E7EB' }} />
+                  <span className="text-xs font-medium px-2" style={{ color: '#9CA3AF' }}>{group.name}</span>
+                  <div className="flex-1 h-px" style={{ backgroundColor: '#E5E7EB' }} />
+                </div>
+              )}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5 lg:gap-8">
+                {group.items.map((product) => {
+                  const index = globalIndex++
               const isExpired = product.end_time
                 ? new Date(product.end_time).getTime() < Date.now()
                 : product.is_expired
@@ -1913,7 +1942,10 @@ export default function ShopPage() {
                 </motion.div>
               )
             })}
-        </div>
+              </div>
+            </div>
+          ))
+        })()}
 
         {products.length === 0 && (
           <div className="text-center py-16 text-muted-foreground">
