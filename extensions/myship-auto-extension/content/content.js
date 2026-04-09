@@ -478,13 +478,13 @@
         <button class="close-btn" id="panelCloseBtn">&times;</button>
       </div>
       <div class="panel-body">
-        <div id="panelQueue"></div>
-        <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
         <div class="panel-controls" id="panelControls">
           <button class="ctrl-btn pause-btn" id="pauseBtn" title="暫停">⏸ 暫停</button>
           <button class="ctrl-btn resume-btn" id="resumeBtn" title="繼續" style="display:none;">▶ 繼續</button>
           <button class="ctrl-btn stop-btn" id="stopBtn" title="中止">⏹ 中止</button>
         </div>
+        <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+        <div id="panelQueue"></div>
         <div class="log-area" id="logArea"></div>
       </div>
     `;
