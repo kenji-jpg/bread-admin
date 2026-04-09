@@ -533,7 +533,7 @@ export default function ManualOrdersPage() {
             if (parts.length >= 3) {
                 const secondLast = parts[parts.length - 2]
                 // 如果倒數第二個不是數字/金額格式，就當商品名
-                if (!/^\d+(\+\d+)*$/.test(secondLast)) {
+                if (!/^-?\d+(\+-?\d+)*$/.test(secondLast)) {
                     productName = secondLast
                     nicknameEndIndex = parts.length - 2
                 }
@@ -553,7 +553,7 @@ export default function ManualOrdersPage() {
 
             for (const amtStr of amountStrings) {
                 const amt = parseInt(amtStr, 10)
-                if (isNaN(amt) || amt <= 0) {
+                if (isNaN(amt)) {
                     hasError = true
                     break
                 }
