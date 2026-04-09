@@ -67,6 +67,7 @@ import {
     CalendarDays,
     PenLine,
     ArrowLeft,
+    Package,
 } from 'lucide-react'
 
 // ============ 型別定義 ============
@@ -245,6 +246,7 @@ export default function ManualOrdersPage() {
         const today = new Date()
         return `${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`
     })
+    const [orderIsArrived, setOrderIsArrived] = useState(true) // 預設可結帳
     const [rawText, setRawText] = useState('')
     const [isImporting, setIsImporting] = useState(false)
     const [showPreview, setShowPreview] = useState(false)
@@ -589,11 +591,12 @@ export default function ManualOrdersPage() {
             for (const entry of validEntries) {
                 const { data, error } = await supabase.rpc('create_auction_order_v1', {
                     p_tenant_id: tenant.id,
-                    p_auction_date: auctionDate.trim() || null,  // 日期選填
+                    p_auction_date: auctionDate.trim() || null,
                     p_winner_nickname: entry.nickname,
                     p_amount: entry.totalAmount,
                     p_product_name: entry.productName || null,
                     p_note: entry.note || null,
+                    p_is_arrived: orderIsArrived,
                 }) as { data: CreateAuctionOrderResponse | null; error: Error | null }
 
                 if (error || !data?.success) {
@@ -748,6 +751,36 @@ ${orderList}
                                 <p className="text-sm text-muted-foreground">
                                     格式：MMDD（例如 0129），可留空
                                 </p>
+                            </div>
+
+                            {/* 到貨狀態 */}
+                            <div className="flex items-center gap-4">
+                                <Label className="flex items-center gap-1.5 whitespace-nowrap">
+                                    <Package className="h-4 w-4" />
+                                    狀態
+                                </Label>
+                                <div className="flex items-center gap-3">
+                                    <label className="flex items-center gap-1.5 cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="order-arrived"
+                                            checked={!orderIsArrived}
+                                            onChange={() => setOrderIsArrived(false)}
+                                            className="accent-primary"
+                                        />
+                                        <span className="text-sm">未到貨</span>
+                                    </label>
+                                    <label className="flex items-center gap-1.5 cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="order-arrived"
+                                            checked={orderIsArrived}
+                                            onChange={() => setOrderIsArrived(true)}
+                                            className="accent-primary"
+                                        />
+                                        <span className="text-sm">可結帳</span>
+                                    </label>
+                                </div>
                             </div>
 
                             {/* 名單輸入 */}
