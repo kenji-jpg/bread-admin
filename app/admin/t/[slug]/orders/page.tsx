@@ -117,7 +117,7 @@ export default function OrdersPage() {
 
     // 批量結帳 Dialog 狀態
     const [batchCheckoutConfirm, setBatchCheckoutConfirm] = useState(false)
-    const [checkoutShippingMethod, setCheckoutShippingMethod] = useState<'myship' | 'delivery' | 'pickup'>('myship')
+    const [checkoutShippingMethod, setCheckoutShippingMethod] = useState<'myship' | 'myship_free' | 'delivery' | 'pickup'>('myship')
 
     const supabase = createClient()
 
