@@ -149,6 +149,9 @@ function ShippingMethodCell({ item, onChangeMethod }: { item: CheckoutListItem; 
     )
 }
 
+// 賣貨便系列判斷（含免運）
+const isMyshipMethod = (method?: string | null) => method === 'myship' || method === 'myship_free'
+
 export default function CheckoutsPage() {
     const { tenant, isLoading: tenantLoading } = useTenant()
     const [checkouts, setCheckouts] = useState<CheckoutListItem[]>([])
@@ -547,12 +550,12 @@ export default function CheckoutsPage() {
         const oldMethod = checkout.shipping_method || 'myship'
         if (oldMethod === newMethod) return
 
-        const methodLabels: Record<string, string> = { myship: '賣貨便', delivery: '宅配', pickup: '自取' }
+        const methodLabels: Record<string, string> = { myship: '賣貨便', myship_free: '賣貨便(免運)', delivery: '宅配', pickup: '自取' }
         if (!confirm(`確定要將出貨方式從「${methodLabels[oldMethod]}」改為「${methodLabels[newMethod]}」嗎？\n出貨狀態會重設為「待處理」。`)) return
 
         setIsUpdating(true)
         try {
-            const fee = newMethod === 'myship' ? 38 : newMethod === 'delivery' ? 0 : 0
+            const fee = newMethod === 'myship' ? 38 : newMethod === 'myship_free' ? 0 : newMethod === 'delivery' ? 0 : 0
             const result = await checkoutApiRef.current.changeShippingMethod(checkoutId, newMethod, fee)
             if (!result.success) {
                 toast.error(result.error || '變更失敗')
@@ -639,7 +642,7 @@ export default function CheckoutsPage() {
                 item.checkout_no,
                 item.customer_name || item.member_display_name || item.member_nickname || '',
                 item.total_amount,
-                (item.shipping_method || 'myship') !== 'myship' ? item.shipping_fee : '',
+                !isMyshipMethod(item.shipping_method || 'myship') ? item.shipping_fee : '',
                 item.item_count,
                 item.payment_status === 'paid' ? '已付款' : '待付款',
                 STATUS_LABELS[item.shipping_status] || item.shipping_status,
@@ -1088,7 +1091,7 @@ export default function CheckoutsPage() {
                                                         case 'pending':
                                                             // 賣貨便：需要先設定連結
                                                             // 宅配/自取：可直接標記已收款
-                                                            if (method === 'myship') {
+                                                            if (isMyshipMethod(method)) {
                                                                 return (
                                                                     <Button
                                                                         variant="outline"
@@ -1382,7 +1385,7 @@ export default function CheckoutsPage() {
                         </DialogDescription>
                     </DialogHeader>
                     {/* 賣貨便模式才顯示訂單編號輸入 */}
-                    {(markOrderedCheckout?.shipping_method || 'myship') === 'myship' && (
+                    {isMyshipMethod(markOrderedCheckout?.shipping_method || 'myship') && (
                         <div className="space-y-4 py-4">
                             <div className="space-y-2">
                                 <Label htmlFor="myshipOrderNo">賣貨便訂單編號（選填）</Label>
@@ -1496,7 +1499,7 @@ export default function CheckoutsPage() {
                                                 </TableCell>
                                             </TableRow>
                                         ))}
-                                        {(checkoutDetail.checkout?.shipping_fee ?? 0) > 0 && checkoutDetail.checkout?.shipping_method !== 'myship' && (
+                                        {(checkoutDetail.checkout?.shipping_fee ?? 0) > 0 && !isMyshipMethod(checkoutDetail.checkout?.shipping_method) && (
                                             <TableRow>
                                                 <TableCell colSpan={4} className="text-right text-muted-foreground">運費</TableCell>
                                                 <TableCell className="text-right">
@@ -1507,7 +1510,7 @@ export default function CheckoutsPage() {
                                         <TableRow className="bg-muted/50">
                                             <TableCell colSpan={4} className="text-right font-bold">總計</TableCell>
                                             <TableCell className="text-right font-bold text-lg">
-                                                ${((checkoutDetail.checkout?.total_amount ?? 0) + (checkoutDetail.checkout?.shipping_method !== 'myship' ? (checkoutDetail.checkout?.shipping_fee ?? 0) : 0)).toLocaleString()}
+                                                ${((checkoutDetail.checkout?.total_amount ?? 0) + (!isMyshipMethod(checkoutDetail.checkout?.shipping_method) ? (checkoutDetail.checkout?.shipping_fee ?? 0) : 0)).toLocaleString()}
                                             </TableCell>
                                         </TableRow>
                                         {/* 成本摘要（僅有成本資料時顯示） */}

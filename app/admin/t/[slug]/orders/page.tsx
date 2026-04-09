@@ -556,6 +556,7 @@ export default function OrdersPage() {
         // 顯示結果 Toast（包含結帳模式提醒）
         const methodLabels: Record<string, string> = {
             myship: '🏪 賣貨便',
+            myship_free: '🏪 賣貨便(免運)',
             delivery: '🚚 宅配',
             pickup: '🏠 自取',
         }
@@ -1207,6 +1208,7 @@ export default function OrdersPage() {
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="myship">🏪 賣貨便</SelectItem>
+                                    <SelectItem value="myship_free">🏪 賣貨便(免運)</SelectItem>
                                     <SelectItem value="delivery">🚚 宅配</SelectItem>
                                     <SelectItem value="pickup">🏠 自取</SelectItem>
                                 </SelectContent>
