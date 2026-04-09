@@ -1,0 +1,526 @@
+/* 基本設定 */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  width: 380px;
+  min-height: 200px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  color: #333;
+  background: #fff;
+}
+
+.container {
+  padding: 0;
+}
+
+/* Header */
+.header {
+  background: linear-gradient(135deg, #f60, #ff8c00);
+  color: #fff;
+  padding: 14px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.header h1 {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+/* 按鈕 */
+.btn-primary {
+  background: #f60;
+  color: #fff;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  margin-top: 10px;
+  transition: background 0.2s;
+}
+
+.btn-primary:hover {
+  background: #e55a00;
+}
+
+.btn-primary:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.btn-icon {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  border-radius: 4px;
+}
+
+.btn-icon:hover {
+  background: rgba(255,255,255,0.2);
+}
+
+/* 區塊 */
+section {
+  padding: 14px 16px;
+}
+
+.section-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 10px;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.section-header .btn-icon {
+  color: #666;
+}
+
+/* 表單 */
+.form-group {
+  margin-bottom: 10px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #555;
+  margin-bottom: 4px;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.form-group input:focus {
+  border-color: #f60;
+}
+
+.hint {
+  display: block;
+  font-size: 11px;
+  color: #999;
+  margin-top: 3px;
+}
+
+.select-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+  background: #fff;
+}
+
+/* 全選 */
+.select-all-wrap {
+  padding: 6px 12px;
+  font-size: 13px;
+  border-bottom: 1px solid #eee;
+}
+
+.select-all-wrap label {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: #555;
+}
+
+.select-all-wrap input[type="checkbox"] {
+  accent-color: #f60;
+}
+
+/* 結帳單列表 */
+.checkout-list {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid #eee;
+  border-radius: 8px;
+}
+
+.checkout-item {
+  padding: 10px 12px;
+  border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.checkout-item:last-child {
+  border-bottom: none;
+}
+
+.checkout-item:hover {
+  background: #fff8f0;
+}
+
+.checkout-item.selected {
+  background: #fff3e6;
+  border-left: 3px solid #f60;
+}
+
+.checkout-item input[type="checkbox"] {
+  margin-top: 3px;
+  accent-color: #f60;
+}
+
+.checkout-item .item-info {
+  flex: 1;
+}
+
+.checkout-item .item-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: #333;
+}
+
+.checkout-item .item-meta {
+  font-size: 11px;
+  color: #888;
+  margin-top: 2px;
+}
+
+.checkout-item .item-amount {
+  font-weight: 700;
+  color: #f60;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.checkout-item .item-status {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  margin-left: 6px;
+}
+
+.item-status.done {
+  background: #d4edda;
+  color: #155724;
+}
+
+.item-status.processing {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.item-status.error {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+/* 已選資訊 */
+.selected-info {
+  text-align: center;
+  font-size: 12px;
+  color: #666;
+  margin-top: 8px;
+  padding: 6px;
+  background: #f8f9fa;
+  border-radius: 6px;
+}
+
+/* 狀態訊息 */
+.status-msg {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  text-align: center;
+}
+
+.status-msg.info {
+  background: #e7f5ff;
+  color: #1971c2;
+}
+
+.status-msg.success {
+  background: #d4edda;
+  color: #155724;
+}
+
+.status-msg.error {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+/* 錯誤訊息 */
+.error-msg {
+  margin-top: 8px;
+  padding: 8px;
+  background: #f8d7da;
+  color: #721c24;
+  border-radius: 6px;
+  font-size: 12px;
+  text-align: center;
+}
+
+/* 載入中 */
+.loading {
+  text-align: center;
+  padding: 20px;
+  color: #999;
+}
+
+/* 總筆數 */
+.total-info {
+  font-size: 12px;
+  color: #666;
+  padding: 6px 12px;
+  background: #f0f7ff;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  text-align: center;
+  font-weight: 600;
+}
+
+/* 空狀態 */
+.empty-state {
+  text-align: center;
+  padding: 30px 20px;
+  color: #999;
+}
+
+.empty-state .empty-icon {
+  font-size: 36px;
+  margin-bottom: 8px;
+}
+
+.empty-state .empty-text {
+  font-size: 13px;
+}
+
+/* 執行進度頁面 */
+.progress-bar {
+  width: 100%;
+  height: 6px;
+  background: #eee;
+  border-radius: 3px;
+  margin-bottom: 8px;
+}
+
+.progress-bar .progress-fill {
+  height: 100%;
+  background: #f60;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.progress-stats {
+  font-size: 12px;
+  color: #666;
+  text-align: center;
+  margin-bottom: 8px;
+  padding: 6px;
+  background: #f8f9fa;
+  border-radius: 6px;
+}
+
+.progress-controls {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.ctrl-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  transition: background 0.2s;
+}
+
+.pause-btn {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.pause-btn:hover {
+  background: #ffe69c;
+}
+
+.resume-btn {
+  background: #d4edda;
+  color: #155724;
+}
+
+.resume-btn:hover {
+  background: #b1dfbb;
+}
+
+.stop-btn {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.stop-btn:hover {
+  background: #f1aeb5;
+}
+
+.item-status {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  margin-left: 6px;
+}
+
+.item-status.waiting {
+  background: #e2e3e5;
+  color: #383d41;
+}
+
+.item-status.processing {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.item-status.done {
+  background: #d4edda;
+  color: #155724;
+}
+
+.item-status.error {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.item-status.skipped {
+  background: #e2e3e5;
+  color: #6c757d;
+}
+
+/* 總結報告 */
+.summary-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid #f60;
+}
+
+.summary-stats {
+  margin-bottom: 10px;
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 0;
+  font-size: 12px;
+}
+
+.stat-val {
+  font-weight: 700;
+}
+
+.stat-val.ok {
+  color: #155724;
+}
+
+.stat-val.err {
+  color: #dc3545;
+}
+
+.stat-hr {
+  border: none;
+  border-top: 1px solid #eee;
+  margin: 4px 0;
+}
+
+.failed-header {
+  font-size: 11px;
+  font-weight: 700;
+  color: #dc3545;
+  margin-bottom: 4px;
+}
+
+.failed-list {
+  background: #fff8f8;
+  border: 1px solid #f5c6cb;
+  border-radius: 6px;
+  padding: 6px 8px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.failed-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 0;
+  border-bottom: 1px dashed #f5c6cb;
+  font-size: 11px;
+}
+
+.failed-row:last-child {
+  border-bottom: none;
+}
+
+.fn {
+  font-weight: 600;
+  color: #333;
+}
+
+.fno {
+  color: #888;
+}
+
+.btn-copy {
+  width: 100%;
+  margin-top: 6px;
+  padding: 7px;
+  background: #f60;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-copy:hover {
+  background: #e55a00;
+}

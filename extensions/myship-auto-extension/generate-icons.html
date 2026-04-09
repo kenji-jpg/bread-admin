@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MyShip Auto Extension - Icon Generator</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px 20px;
+        }
+        h1 {
+            font-size: 24px;
+            margin-bottom: 8px;
+            color: #FF8C00;
+        }
+        .subtitle {
+            color: #999;
+            margin-bottom: 40px;
+            font-size: 14px;
+        }
+        .icons-row {
+            display: flex;
+            gap: 40px;
+            align-items: flex-end;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .icon-card {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+            border: 1px solid #333;
+        }
+        .icon-card:hover { border-color: #FF8C00; }
+        .icon-label { font-size: 13px; color: #aaa; }
+        .icon-size { font-size: 18px; font-weight: 600; color: #FF8C00; }
+        canvas { border-radius: 8px; image-rendering: pixelated; }
+        .preview-bg {
+            background: #0f0f23;
+            padding: 12px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .preview-lg canvas { width: 128px; height: 128px; }
+        button {
+            background: #FF8C00;
+            color: #fff;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+        button:hover { background: #e07800; }
+        .instructions {
+            margin-top: 40px;
+            max-width: 600px;
+            background: #16213e;
+            border-radius: 12px;
+            padding: 24px;
+            border: 1px solid #333;
+            line-height: 1.7;
+            font-size: 14px;
+        }
+        .instructions h2 { color: #FF8C00; margin-bottom: 12px; font-size: 16px; }
+        .instructions code {
+            background: #0f0f23;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        .instructions ol { padding-left: 20px; }
+        .instructions li { margin-bottom: 8px; }
+        .download-all {
+            margin-top: 24px;
+            padding: 12px 32px;
+            font-size: 15px;
+        }
+    </style>
+</head>
+<body>
+    <h1>MyShip Auto Extension - Icon Generator</h1>
+    <p class="subtitle">Generate orange truck icons for the Chrome extension</p>
+
+    <div class="icons-row">
+        <div class="icon-card">
+            <span class="icon-size">16 x 16</span>
+            <span class="icon-label">Toolbar icon</span>
+            <div class="preview-bg preview-lg">
+                <canvas id="canvas16" width="16" height="16"></canvas>
+            </div>
+            <button onclick="download('canvas16', 'icon16.png')">Download</button>
+        </div>
+        <div class="icon-card">
+            <span class="icon-size">48 x 48</span>
+            <span class="icon-label">Extension management</span>
+            <div class="preview-bg">
+                <canvas id="canvas48" width="48" height="48"></canvas>
+            </div>
+            <button onclick="download('canvas48', 'icon48.png')">Download</button>
+        </div>
+        <div class="icon-card">
+            <span class="icon-size">128 x 128</span>
+            <span class="icon-label">Chrome Web Store</span>
+            <div class="preview-bg">
+                <canvas id="canvas128" width="128" height="128"></canvas>
+            </div>
+            <button onclick="download('canvas128', 'icon128.png')">Download</button>
+        </div>
+    </div>
+
+    <button class="download-all" onclick="downloadAll()">Download All Icons</button>
+
+    <div class="instructions">
+        <h2>How to use</h2>
+        <ol>
+            <li>Click <strong>Download</strong> on each icon (or <strong>Download All</strong>).</li>
+            <li>Place the downloaded files in the <code>icons/</code> folder of the extension.</li>
+            <li>The filenames should be: <code>icon16.png</code>, <code>icon48.png</code>, <code>icon128.png</code>.</li>
+            <li>Reload the extension in <code>chrome://extensions</code>.</li>
+        </ol>
+    </div>
+
+    <script>
+        function drawTruckIcon(canvasId, size) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+            const s = size;
+
+            ctx.clearRect(0, 0, s, s);
+
+            // Background: rounded rectangle
+            const radius = s * 0.15;
+            ctx.fillStyle = '#FF8C00';
+            ctx.beginPath();
+            ctx.moveTo(radius, 0);
+            ctx.lineTo(s - radius, 0);
+            ctx.quadraticCurveTo(s, 0, s, radius);
+            ctx.lineTo(s, s - radius);
+            ctx.quadraticCurveTo(s, s, s - radius, s);
+            ctx.lineTo(radius, s);
+            ctx.quadraticCurveTo(0, s, 0, s - radius);
+            ctx.lineTo(0, radius);
+            ctx.quadraticCurveTo(0, 0, radius, 0);
+            ctx.closePath();
+            ctx.fill();
+
+            const f = s / 128;
+            ctx.save();
+            ctx.translate(s * 0.08, s * 0.12);
+            const inner = s * 0.84;
+
+            // Truck cargo box
+            ctx.fillStyle = '#FFF';
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+
+            const boxX = inner * 0.02;
+            const boxY = inner * 0.15;
+            const boxW = inner * 0.55;
+            const boxH = inner * 0.55;
+            const boxR = inner * 0.06;
+            ctx.beginPath();
+            ctx.moveTo(boxX + boxR, boxY);
+            ctx.lineTo(boxX + boxW - boxR, boxY);
+            ctx.quadraticCurveTo(boxX + boxW, boxY, boxX + boxW, boxY + boxR);
+            ctx.lineTo(boxX + boxW, boxY + boxH - boxR);
+            ctx.quadraticCurveTo(boxX + boxW, boxY + boxH, boxX + boxW - boxR, boxY + boxH);
+            ctx.lineTo(boxX + boxR, boxY + boxH);
+            ctx.quadraticCurveTo(boxX, boxY + boxH, boxX, boxY + boxH - boxR);
+            ctx.lineTo(boxX, boxY + boxR);
+            ctx.quadraticCurveTo(boxX, boxY, boxX + boxR, boxY);
+            ctx.closePath();
+            ctx.fill();
+
+            // Cab
+            const cabX = inner * 0.57;
+            const cabY = inner * 0.30;
+            const cabW = inner * 0.40;
+            const cabH = inner * 0.40;
+            const cabR = inner * 0.06;
+            ctx.beginPath();
+            ctx.moveTo(cabX, cabY);
+            ctx.lineTo(cabX + cabW * 0.5, cabY);
+            ctx.quadraticCurveTo(cabX + cabW, cabY + cabH * 0.1, cabX + cabW, cabY + cabH * 0.45);
+            ctx.lineTo(cabX + cabW, cabY + cabH - cabR);
+            ctx.quadraticCurveTo(cabX + cabW, cabY + cabH, cabX + cabW - cabR, cabY + cabH);
+            ctx.lineTo(cabX, cabY + cabH);
+            ctx.closePath();
+            ctx.fill();
+
+            // Windshield
+            ctx.fillStyle = '#FF8C00';
+            const wsX = cabX + cabW * 0.15;
+            const wsY = cabY + cabH * 0.12;
+            const wsW = cabW * 0.78;
+            const wsH = cabH * 0.42;
+            ctx.beginPath();
+            ctx.moveTo(wsX, wsY + wsH);
+            ctx.lineTo(wsX + wsW * 0.3, wsY);
+            ctx.quadraticCurveTo(wsX + wsW, wsY, wsX + wsW, wsY + wsH * 0.6);
+            ctx.lineTo(wsX + wsW, wsY + wsH);
+            ctx.closePath();
+            ctx.fill();
+
+            // Wheels
+            ctx.fillStyle = '#FFF';
+            const wheelR = inner * 0.10;
+            const wheelY2 = inner * 0.82;
+
+            ctx.beginPath();
+            ctx.arc(inner * 0.22, wheelY2, wheelR, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(inner * 0.76, wheelY2, wheelR, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Wheel hubs
+            ctx.fillStyle = '#FF8C00';
+            const hubR = wheelR * 0.45;
+            ctx.beginPath();
+            ctx.arc(inner * 0.22, wheelY2, hubR, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(inner * 0.76, wheelY2, hubR, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Ground line
+            ctx.strokeStyle = '#FFF';
+            ctx.lineWidth = Math.max(1, 2.5 * f);
+            ctx.beginPath();
+            ctx.moveTo(0, inner * 0.92);
+            ctx.lineTo(inner, inner * 0.92);
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        function download(canvasId, filename) {
+            const canvas = document.getElementById(canvasId);
+            const link = document.createElement('a');
+            link.download = filename;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+
+        function downloadAll() {
+            download('canvas16', 'icon16.png');
+            setTimeout(() => download('canvas48', 'icon48.png'), 200);
+            setTimeout(() => download('canvas128', 'icon128.png'), 400);
+        }
+
+        drawTruckIcon('canvas16', 16);
+        drawTruckIcon('canvas48', 48);
+        drawTruckIcon('canvas128', 128);
+    </script>
+</body>
+</html>
