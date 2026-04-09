@@ -419,6 +419,28 @@ export default function OrdersPage() {
         }
     }
 
+    // 批量標記可結帳
+    const handleBatchMarkArrived = async () => {
+        if (selectedOrders.size === 0) return
+        setIsSubmitting(true)
+        try {
+            const ids = Array.from(selectedOrders)
+            const { error } = await supabase
+                .from('order_items')
+                .update({ is_arrived: true, arrived_qty: 1, status: 'allocated' })
+                .in('id', ids)
+                .eq('tenant_id', tenant?.id)
+            if (error) throw error
+            toast.success(`已將 ${ids.length} 筆訂單標記為可結帳`)
+            setOrders(prev => prev.map(o => ids.includes(o.id) ? { ...o, is_arrived: true, arrived_qty: 1, status: 'allocated' } : o))
+            setSelectedOrders(new Set())
+        } catch (err: any) {
+            toast.error('操作失敗：' + (err.message || '未知錯誤'))
+        } finally {
+            setIsSubmitting(false)
+        }
+    }
+
     // 批量結帳 - 開啟確認 Dialog
     const handleBatchCheckout = () => {
         // 篩選出選中且已到貨的訂單
@@ -562,7 +584,11 @@ export default function OrdersPage() {
         const uniqueMembers = new Set(
             arrivedOrders.map((id) => orders.find((o) => o.id === id)?.member_id).filter(Boolean)
         )
-        return { arrivedCount, uniqueMemberCount: uniqueMembers.size }
+        const pendingCount = Array.from(selectedOrders).filter((id) => {
+            const order = orders.find((o) => o.id === id)
+            return order && !order.is_arrived && !order.checkout_id
+        }).length
+        return { arrivedCount, uniqueMemberCount: uniqueMembers.size, pendingCount }
     }, [selectedOrders, orders])
 
     if (tenantLoading) {
@@ -1233,6 +1259,17 @@ export default function OrdersPage() {
                                     >
                                         <Receipt className="mr-1 h-3 w-3" />
                                         結帳 ({selectedStats.arrivedCount})
+                                    </Button>
+                                )}
+                                {selectedStats.pendingCount > 0 && (
+                                    <Button
+                                        onClick={handleBatchMarkArrived}
+                                        disabled={isSubmitting}
+                                        size="xs"
+                                        className="bg-blue-600 hover:bg-blue-700 text-white rounded-full h-7 px-3 text-xs"
+                                    >
+                                        <Package className="mr-1 h-3 w-3" />
+                                        標記可結帳 ({selectedStats.pendingCount})
                                     </Button>
                                 )}
                                 <Button
