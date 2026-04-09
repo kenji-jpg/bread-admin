@@ -516,7 +516,8 @@ export default function ManualOrdersPage() {
                 return { nickname: '', productName: '', amounts: [], totalAmount: 0, note: '', hasMultiple: false, isValid: false, errorMessage: '空行' }
             }
 
-            // 用空格分割
+            // 從右邊往左解析：最後是金額，中間可能是商品名，剩下全是暱稱
+            // 支援暱稱含空格（如 "Nicole Tung 打鼓玩具 500"）
             const parts = trimmedLine.split(/\s+/)
             if (parts.length < 2) {
                 return { nickname: trimmedLine, productName: '', amounts: [], totalAmount: 0, note: '', hasMultiple: false, isValid: false, errorMessage: '缺少金額' }
@@ -524,10 +525,22 @@ export default function ManualOrdersPage() {
 
             // 最後一個詞為金額
             const amountPart = parts[parts.length - 1]
-            // 第一個詞為暱稱
-            const nickname = parts[0]
-            // 中間的詞為商品名稱（如果有）
-            const productName = parts.length > 2 ? parts.slice(1, -1).join(' ') : ''
+
+            // 檢查倒數第二個詞是否為金額格式，如果不是就當商品名
+            let productName = ''
+            let nicknameEndIndex = parts.length - 1 // 預設：暱稱到金額前
+
+            if (parts.length >= 3) {
+                const secondLast = parts[parts.length - 2]
+                // 如果倒數第二個不是數字/金額格式，就當商品名
+                if (!/^\d+(\+\d+)*$/.test(secondLast)) {
+                    productName = secondLast
+                    nicknameEndIndex = parts.length - 2
+                }
+            }
+
+            // 剩下的全部是暱稱（支援含空格的暱稱）
+            const nickname = parts.slice(0, nicknameEndIndex).join(' ')
 
             if (!nickname) {
                 return { nickname: '', productName: '', amounts: [], totalAmount: 0, note: '', hasMultiple: false, isValid: false, errorMessage: '缺少暱稱' }
