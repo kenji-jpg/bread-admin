@@ -599,7 +599,7 @@ export default function ManualOrdersPage() {
             // 使用 create_auction_order_v1 逐筆建立訂單（支援 product_name）
             let matchedCount = 0
             let pendingCount = 0
-            let errorCount = 0
+            const failedEntries: string[] = []
 
             for (const entry of validEntries) {
                 const { data, error } = await supabase.rpc('create_auction_order_v1', {
@@ -613,7 +613,8 @@ export default function ManualOrdersPage() {
                 }) as { data: CreateAuctionOrderResponse | null; error: Error | null }
 
                 if (error || !data?.success) {
-                    errorCount++
+                    const reason = error?.message || data?.message || '未知錯誤'
+                    failedEntries.push(`${entry.nickname} ${entry.productName || ''} ${entry.totalAmount}（${reason}）`)
                     console.error(`建立訂單失敗: ${entry.nickname}`, error || data?.message)
                     continue
                 }
@@ -625,8 +626,9 @@ export default function ManualOrdersPage() {
                 }
             }
 
-            if (errorCount > 0) {
-                toast.warning(`匯入完成：${matchedCount} 筆已建單，${pendingCount} 筆待認領，${errorCount} 筆失敗`)
+            if (failedEntries.length > 0) {
+                toast.warning(`匯入完成：${matchedCount} 筆已建單，${pendingCount} 筆待認領，${failedEntries.length} 筆失敗`, { duration: 5000 })
+                toast.error(`失敗明細：\n${failedEntries.join('\n')}`, { duration: 10000 })
             } else {
                 toast.success(`匯入完成：${matchedCount} 筆已建單，${pendingCount} 筆待認領`)
             }
