@@ -1205,12 +1205,15 @@ export default function ShopPage() {
         ? selectedProduct.image_urls
         : selectedProduct.image_url ? [selectedProduct.image_url] : []
       const allUrls = [...existingUrls, ...imageUrls]
-      // 更新 DB
-      const { error } = await supabase
-        .from('products')
-        .update({ image_url: allUrls[0], image_urls: allUrls })
-        .eq('id', selectedProduct.id)
+      // 更新 DB（透過 RPC 繞過 RLS）
+      const { data, error } = await supabase.rpc('update_product_images_v1', {
+        p_product_id: selectedProduct.id,
+        p_line_user_id: profile.userId,
+        p_image_url: allUrls[0],
+        p_image_urls: allUrls,
+      })
       if (error) throw error
+      if (!data?.success) throw new Error(data?.error)
       toast.success(`已新增 ${files.length} 張圖片`)
       setSelectedProduct(null)
       loadShop()
@@ -2145,11 +2148,14 @@ export default function ShopPage() {
                             if (modalImages.length <= 1) { toast.error('至少保留一張圖片'); return }
                             const newUrls = modalImages.filter((_, i) => i !== idx)
                             try {
-                              const { error } = await supabase
-                                .from('products')
-                                .update({ image_url: newUrls[0], image_urls: newUrls })
-                                .eq('id', selectedProduct.id)
+                              const { data, error } = await supabase.rpc('update_product_images_v1', {
+                                p_product_id: selectedProduct.id,
+                                p_line_user_id: profile?.userId,
+                                p_image_url: newUrls[0],
+                                p_image_urls: newUrls,
+                              })
                               if (error) throw error
+                              if (!data?.success) throw new Error(data?.error)
                               toast.success('圖片已刪除')
                               setSelectedProduct(null)
                               loadShop()
