@@ -1217,9 +1217,9 @@ export default function ShopPage() {
       toast.success(`已新增 ${files.length} 張圖片`)
       setSelectedProduct({ ...selectedProduct, image_url: allUrls[0], image_urls: allUrls })
       loadShop()
-    } catch (err) {
+    } catch (err: any) {
       console.error('Upload photo error:', err)
-      toast.error('圖片上傳失敗')
+      toast.error('圖片上傳失敗：' + (err?.message || '未知錯誤'))
     } finally {
       setIsUploadingPhoto(false)
     }
@@ -2036,13 +2036,8 @@ export default function ShopPage() {
                   onChange={(e) => {
                     const files = Array.from(e.target.files || [])
                     if (files.length === 0) return
-                    // 開啟顯示範圍選擇器（編輯模式）
-                    setCropMode('edit')
-                    setCropPendingFiles(files)
-                    setCropCurrentIndex(0)
-                    setCropImageSrc(URL.createObjectURL(files[0]))
-                    setCrop({ x: 0, y: 0 })
-                    setCropZoom(1)
+                    // 直接上傳原圖（不走裁切）
+                    handleEditProductPhoto(files)
                     e.target.value = ''
                   }}
                 />
@@ -2369,6 +2364,74 @@ export default function ShopPage() {
                           ))}
                         </select>
                       )}
+
+                      {/* 規格管理 */}
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium" style={{ color: '#8B6B4A' }}>規格</p>
+                        {productVariants.length > 0 ? (
+                          <div className="space-y-1.5">
+                            {productVariants.map((v: any) => (
+                              <div key={v.id} className="flex items-center justify-between px-3 py-2 rounded-lg text-sm" style={{ backgroundColor: '#F9FAFB', border: '1px solid #E5E7EB' }}>
+                                <span style={{ color: '#374151' }}>{v.name}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs" style={{ color: '#9CA3AF' }}>庫存: {v.stock}</span>
+                                  <button
+                                    className="p-0.5 rounded active:scale-90"
+                                    style={{ color: '#EF4444' }}
+                                    onClick={async () => {
+                                      if (!confirm(`確定刪除規格「${v.name}」？`)) return
+                                      try {
+                                        const { data, error } = await supabase.rpc('delete_product_variant_v1', {
+                                          p_variant_id: v.id,
+                                          p_line_user_id: profile?.userId,
+                                        })
+                                        if (error) throw error
+                                        if (!data?.success) { toast.error(data?.error); return }
+                                        toast.success('規格已刪除')
+                                        // 重新載入規格
+                                        const { data: varData } = await supabase.rpc('get_product_variants_v1', { p_product_id: selectedProduct.id })
+                                        if (varData?.variants) setProductVariants(varData.variants)
+                                        else setProductVariants([])
+                                        loadShop()
+                                      } catch { toast.error('刪除失敗') }
+                                    }}
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs" style={{ color: '#9CA3AF' }}>無規格</p>
+                        )}
+                        <button
+                          className="w-full py-2 rounded-lg text-xs font-medium"
+                          style={{ backgroundColor: '#F3F4F6', color: '#6B7280', border: '1px dashed #D1D5DB' }}
+                          onClick={async () => {
+                            const name = prompt('輸入規格名稱（如 S / M / L）')
+                            if (!name || !name.trim()) return
+                            const stockStr = prompt('庫存數量（預設 0）')
+                            const stock = parseInt(stockStr || '0') || 0
+                            try {
+                              const { data, error } = await supabase.rpc('add_product_variant_v1', {
+                                p_product_id: selectedProduct.id,
+                                p_line_user_id: profile?.userId,
+                                p_name: name.trim(),
+                                p_stock: stock,
+                              })
+                              if (error) throw error
+                              if (!data?.success) { toast.error(data?.error); return }
+                              toast.success('規格已新增')
+                              const { data: varData } = await supabase.rpc('get_product_variants_v1', { p_product_id: selectedProduct.id })
+                              if (varData?.variants) setProductVariants(varData.variants)
+                              loadShop()
+                            } catch { toast.error('新增失敗') }
+                          }}
+                        >
+                          + 新增規格
+                        </button>
+                      </div>
 
                       {/* 操作按鈕 */}
                       <div className="grid grid-cols-3 gap-2">
