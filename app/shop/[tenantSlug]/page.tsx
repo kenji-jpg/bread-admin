@@ -1014,7 +1014,8 @@ export default function ShopPage() {
 
   // 上架新商品
   const handleAddProduct = async () => {
-    if (!profile || !tenant || !newProductName.trim() || newProductPrice === '') return
+    const isVariantPricing = newProductHasVariants && newProductVariantPricing
+    if (!profile || !tenant || !newProductName.trim() || (!isVariantPricing && newProductPrice === '')) return
 
     setIsUploading(true)
     try {
@@ -1072,7 +1073,7 @@ export default function ShopPage() {
         p_tenant_id: tenant.id,
         p_line_user_id: profile.userId,
         p_name: newProductName.trim(),
-        p_price: parseFloat(newProductPrice),
+        p_price: isVariantPricing ? 0 : parseFloat(newProductPrice),
         p_stock: newProductIsLimited
           ? newProductHasVariants
             ? newProductVariants.reduce((sum, v) => sum + (parseInt(v.stock) || 0), 0)
@@ -3803,13 +3804,15 @@ export default function ShopPage() {
 
               {/* 價格 + 庫存（現貨+無規格時才顯示主庫存） */}
               <div className="flex gap-2 mb-3">
-                <Input
-                  type="number"
-                  placeholder="價格（可為負數）"
-                  value={newProductPrice}
-                  onChange={(e) => setNewProductPrice(e.target.value)}
-                  className="flex-1 rounded-xl text-[16px]"
-                />
+                {!(newProductHasVariants && newProductVariantPricing) && (
+                  <Input
+                    type="number"
+                    placeholder="價格（可為負數）"
+                    value={newProductPrice}
+                    onChange={(e) => setNewProductPrice(e.target.value)}
+                    className="flex-1 rounded-xl text-[16px]"
+                  />
+                )}
                 {newProductIsLimited && !newProductHasVariants && (
                   <Input
                     type="number"
@@ -3995,7 +3998,7 @@ export default function ShopPage() {
                   className="flex-1 hover:opacity-90 text-white"
                   style={{ backgroundColor: accentColor || '#D94E2B' }}
                   onClick={handleAddProduct}
-                  disabled={!newProductName.trim() || newProductPrice === '' || isUploading}
+                  disabled={!newProductName.trim() || (!(newProductHasVariants && newProductVariantPricing) && newProductPrice === '') || isUploading}
                 >
                   {isUploading ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
