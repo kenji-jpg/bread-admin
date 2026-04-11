@@ -1659,7 +1659,7 @@ export default function ShopPage() {
 
 
       {/* Announcement Banner */}
-      {shopSettings.announcement && !showStaffUI && (
+      {shopSettings.announcement && (
         <div className="px-4 sm:px-6 lg:px-24 pt-3 max-w-7xl mx-auto">
           <div
             className="px-2 py-1 rounded-lg text-[11px]"
@@ -2036,8 +2036,14 @@ export default function ShopPage() {
                   onChange={(e) => {
                     const files = Array.from(e.target.files || [])
                     if (files.length === 0) return
-                    // 直接上傳原圖（不走裁切）
-                    handleEditProductPhoto(files)
+                    // 進入裁切流程
+                    setCropMode('edit')
+                    editCroppedFilesRef.current = []
+                    setCropPendingFiles(files)
+                    setCropCurrentIndex(0)
+                    setCropImageSrc(URL.createObjectURL(files[0]))
+                    setCrop({ x: 0, y: 0 })
+                    setCropZoom(1)
                     e.target.value = ''
                   }}
                 />
@@ -3942,7 +3948,7 @@ export default function ShopPage() {
                         setNewProductOriginals(prev => [...prev, originalFile])
                         setNewProductPreviews(prev => [...prev, URL.createObjectURL(croppedBlob)])
                       } else {
-                        editCroppedFilesRef.current.push(originalFile) // 編輯模式只存原圖
+                        editCroppedFilesRef.current.push(croppedFile) // 編輯模式存裁切後的圖
                       }
                     } catch {
                       toast.error('選取失敗')
