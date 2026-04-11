@@ -324,7 +324,7 @@ export default function ShopPage() {
   }, [])
 
   // 排序
-  const [sortBy, setSortBy] = useState<'newest' | 'price_asc' | 'price_desc' | 'popular'>('newest')
+  const [sortBy, setSortBy] = useState<'newest' | 'price_asc' | 'price_desc' | 'popular'>('popular')
   const [isSortOpen, setIsSortOpen] = useState(false)
 
   // ========== 收藏 ==========
