@@ -1687,7 +1687,7 @@ export default function ShopPage() {
             size="sm"
             className="flex-1 rounded-lg"
             style={{ borderColor: accentColor || '#D94E2B', color: accentColor || '#D94E2B' }}
-            onClick={() => setIsAddProductOpen(true)}
+            onClick={() => { setNewProductImages([]); setNewProductOriginals([]); setNewProductPreviews([]); setIsAddProductOpen(true) }}
           >
             <Camera className="w-3 h-3 mr-1" />
             上架
@@ -1959,7 +1959,7 @@ export default function ShopPage() {
                 <Button
                   className="hover:opacity-90 rounded-xl text-white"
                   style={{ backgroundColor: accentColor || '#D94E2B' }}
-                  onClick={() => setIsAddProductOpen(true)}
+                  onClick={() => { setNewProductImages([]); setNewProductOriginals([]); setNewProductPreviews([]); setIsAddProductOpen(true) }}
                 >
                   <Camera className="w-4 h-4 mr-1" />
                   上架商品
@@ -3743,6 +3743,7 @@ export default function ShopPage() {
                     setNewProductCategory('')
                     setNewProductEndTime(null)
                     setNewProductImages([])
+                    setNewProductOriginals([])
                     setNewProductPreviews([])
                   }}
                 >
