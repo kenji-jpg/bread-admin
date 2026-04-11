@@ -43,6 +43,7 @@ import {
   Menu,
   Pencil,
   Check,
+  GripVertical,
 } from 'lucide-react'
 import Image from 'next/image'
 import Cropper from 'react-easy-crop'
@@ -292,6 +293,9 @@ export default function ShopPage() {
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null)
   const [productVariants, setProductVariants] = useState<ProductVariant[]>([])
   const [isLoadingVariants, setIsLoadingVariants] = useState(false)
+  const [dragVariantIdx, setDragVariantIdx] = useState<number | null>(null)
+  const touchStartY = useRef<number>(0)
+  const touchVariantIdx = useRef<number | null>(null)
   // 直接喊單狀態
   const [isOrdering, setIsOrdering] = useState(false)
 
@@ -2376,9 +2380,73 @@ export default function ShopPage() {
                         <p className="text-xs font-medium" style={{ color: '#8B6B4A' }}>規格</p>
                         {productVariants.length > 0 ? (
                           <div className="space-y-1.5">
-                            {productVariants.map((v: any) => (
-                              <div key={v.id} className="flex items-center justify-between px-3 py-2 rounded-lg text-sm" style={{ backgroundColor: '#F9FAFB', border: '1px solid #E5E7EB' }}>
-                                <span style={{ color: '#374151' }}>{v.name}</span>
+                            {productVariants.map((v: any, idx: number) => (
+                              <div
+                                key={v.id}
+                                draggable
+                                onDragStart={() => setDragVariantIdx(idx)}
+                                onDragOver={(e) => {
+                                  e.preventDefault()
+                                  if (dragVariantIdx === null || dragVariantIdx === idx) return
+                                  const updated = [...productVariants]
+                                  const [moved] = updated.splice(dragVariantIdx, 1)
+                                  updated.splice(idx, 0, moved)
+                                  setProductVariants(updated)
+                                  setDragVariantIdx(idx)
+                                }}
+                                onDragEnd={async () => {
+                                  setDragVariantIdx(null)
+                                  try {
+                                    const ids = productVariants.map((pv: any) => pv.id)
+                                    await supabase.rpc('reorder_product_variants_v1', {
+                                      p_product_id: selectedProduct.id,
+                                      p_line_user_id: profile?.userId,
+                                      p_variant_ids: ids,
+                                    })
+                                  } catch { /* 靜默 */ }
+                                }}
+                                onTouchStart={(e) => {
+                                  touchStartY.current = e.touches[0].clientY
+                                  touchVariantIdx.current = idx
+                                  setDragVariantIdx(idx)
+                                }}
+                                onTouchMove={(e) => {
+                                  if (touchVariantIdx.current === null) return
+                                  const el = e.currentTarget.parentElement
+                                  if (!el) return
+                                  const children = Array.from(el.children)
+                                  const touchY = e.touches[0].clientY
+                                  for (let i = 0; i < children.length; i++) {
+                                    const rect = children[i].getBoundingClientRect()
+                                    if (touchY >= rect.top && touchY <= rect.bottom && i !== touchVariantIdx.current) {
+                                      const updated = [...productVariants]
+                                      const [moved] = updated.splice(touchVariantIdx.current!, 1)
+                                      updated.splice(i, 0, moved)
+                                      setProductVariants(updated)
+                                      touchVariantIdx.current = i
+                                      break
+                                    }
+                                  }
+                                }}
+                                onTouchEnd={async () => {
+                                  setDragVariantIdx(null)
+                                  touchVariantIdx.current = null
+                                  try {
+                                    const ids = productVariants.map((pv: any) => pv.id)
+                                    await supabase.rpc('reorder_product_variants_v1', {
+                                      p_product_id: selectedProduct.id,
+                                      p_line_user_id: profile?.userId,
+                                      p_variant_ids: ids,
+                                    })
+                                  } catch { /* 靜默 */ }
+                                }}
+                                className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm cursor-grab active:cursor-grabbing transition-shadow select-none ${dragVariantIdx === idx ? 'shadow-md ring-2 ring-blue-300' : ''}`}
+                                style={{ backgroundColor: '#F9FAFB', border: '1px solid #E5E7EB' }}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <GripVertical className="w-3.5 h-3.5 shrink-0" style={{ color: '#9CA3AF' }} />
+                                  <span style={{ color: '#374151' }}>{v.name}</span>
+                                </div>
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs" style={{ color: '#9CA3AF' }}>庫存: {v.stock}</span>
                                   <button
@@ -2394,7 +2462,6 @@ export default function ShopPage() {
                                         if (error) throw error
                                         if (!data?.success) { toast.error(data?.error); return }
                                         toast.success('規格已刪除')
-                                        // 重新載入規格
                                         const { data: varData } = await supabase.rpc('get_product_variants_v1', { p_product_id: selectedProduct.id })
                                         if (varData?.variants) setProductVariants(varData.variants)
                                         else setProductVariants([])
