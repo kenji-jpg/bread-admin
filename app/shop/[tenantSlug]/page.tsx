@@ -1215,7 +1215,7 @@ export default function ShopPage() {
       if (error) throw error
       if (!data?.success) throw new Error(data?.error)
       toast.success(`已新增 ${files.length} 張圖片`)
-      setSelectedProduct(null)
+      setSelectedProduct({ ...selectedProduct, image_url: allUrls[0], image_urls: allUrls })
       loadShop()
     } catch (err) {
       console.error('Upload photo error:', err)
@@ -2157,7 +2157,7 @@ export default function ShopPage() {
                               if (error) throw error
                               if (!data?.success) throw new Error(data?.error)
                               toast.success('圖片已刪除')
-                              setSelectedProduct(null)
+                              setSelectedProduct({ ...selectedProduct, image_url: newUrls[0], image_urls: newUrls })
                               loadShop()
                             } catch { toast.error('刪除失敗') }
                           }}
@@ -2340,6 +2340,35 @@ export default function ShopPage() {
                           <p className="text-xs" style={{ color: '#8B6B4A' }}>待處理</p>
                         </div>
                       </div>
+
+                      {/* 分類調整 */}
+                      {shopCategories.length > 0 && (
+                        <select
+                          value={selectedProduct.category || ''}
+                          onChange={async (e) => {
+                            const newCategory = e.target.value || null
+                            try {
+                              const { data, error } = await supabase.rpc('update_product_images_v1', {
+                                p_product_id: selectedProduct.id,
+                                p_line_user_id: profile?.userId,
+                                p_category: newCategory,
+                              })
+                              if (error) throw error
+                              if (!data?.success) throw new Error(data?.error)
+                              toast.success('分類已更新')
+                              loadShop()
+                              setSelectedProduct({ ...selectedProduct, category: newCategory })
+                            } catch { toast.error('更新分類失敗') }
+                          }}
+                          className="w-full px-3 py-2 rounded-xl text-sm"
+                          style={{ backgroundColor: '#F3F4F6', border: '1px solid #E5E7EB', color: '#374151' }}
+                        >
+                          <option value="">無分類</option>
+                          {shopCategories.map(cat => (
+                            <option key={cat.id} value={cat.name}>{cat.name}</option>
+                          ))}
+                        </select>
+                      )}
 
                       {/* 操作按鈕 */}
                       <div className="grid grid-cols-3 gap-2">
@@ -3850,8 +3879,7 @@ export default function ShopPage() {
                         setNewProductOriginals(prev => [...prev, originalFile])
                         setNewProductPreviews(prev => [...prev, URL.createObjectURL(croppedBlob)])
                       } else {
-                        editCroppedFilesRef.current.push(croppedFile)
-                        editCroppedFilesRef.current.push(originalFile) // 原圖也一起
+                        editCroppedFilesRef.current.push(originalFile) // 編輯模式只存原圖
                       }
                     } catch {
                       toast.error('選取失敗')
