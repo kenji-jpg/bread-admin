@@ -798,7 +798,7 @@ export default function CheckoutsPage() {
                         <div className="relative flex-1 min-w-[200px]">
                             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                             <Input
-                                placeholder="搜尋單號、客戶..."
+                                placeholder="搜尋單號、客戶、商品..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 className="pl-9 rounded-xl"
