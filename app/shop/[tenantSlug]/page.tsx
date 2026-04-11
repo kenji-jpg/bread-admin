@@ -3078,11 +3078,13 @@ export default function ShopPage() {
                           onClick={async () => {
                             try {
                               const noticeValue = orderNoticeValue.trim() || null
-                              // 用 RPC 或 SQL 合併，不覆蓋其他 settings 欄位
-                              const { data: current } = await supabase.from('tenants').select('settings').eq('id', tenant!.id).single()
-                              const mergedSettings = { ...(current?.settings || {}), order_notice: noticeValue }
-                              const { error } = await supabase.from('tenants').update({ settings: mergedSettings }).eq('id', tenant!.id)
+                              const { data, error } = await supabase.rpc('update_shop_settings_v1', {
+                                p_tenant_id: tenant!.id,
+                                p_line_user_id: profile?.userId || '',
+                                p_settings: { order_notice: noticeValue },
+                              })
                               if (error) throw error
+                              if (!data?.success) throw new Error(data?.error)
                               setShopSettings(prev => ({ ...prev, order_notice: noticeValue }))
                               setEditingOrderNotice(false)
                               toast.success('告示已更新')
