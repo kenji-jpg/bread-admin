@@ -139,12 +139,13 @@ interface Product {
   is_sold_out: boolean
   created_at: string
   has_variants?: boolean
-  variants?: { name: string; stock: number }[]
+  variants?: { name: string; stock: number; price?: number }[]
 }
 
 interface ProductVariant {
   id: string
   name: string
+  price?: number | null
   stock: number
   sold_qty: number
   sort_order: number
@@ -372,7 +373,8 @@ export default function ShopPage() {
   const [newProductPreviews, setNewProductPreviews] = useState<string[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const [newProductHasVariants, setNewProductHasVariants] = useState(false)
-  const [newProductVariants, setNewProductVariants] = useState<{ name: string; stock: string }[]>([{ name: '', stock: '' }])
+  const [newProductVariantPricing, setNewProductVariantPricing] = useState(false)
+  const [newProductVariants, setNewProductVariants] = useState<{ name: string; stock: string; price: string }[]>([{ name: '', stock: '', price: '' }])
   const addProductFileRef = useRef<HTMLInputElement>(null)
   const editProductFileRef = useRef<HTMLInputElement>(null)
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false)
@@ -1059,7 +1061,11 @@ export default function ShopPage() {
       const variantsPayload = newProductHasVariants
         ? newProductVariants
             .filter((v) => v.name.trim())
-            .map((v) => ({ name: v.name.trim(), stock: parseInt(v.stock) || 0 }))
+            .map((v) => ({
+              name: v.name.trim(),
+              stock: parseInt(v.stock) || 0,
+              ...(newProductVariantPricing && v.price ? { price: parseInt(v.price) } : {}),
+            }))
         : null
 
       const { data, error } = await supabase.rpc('add_shop_product_v1', {
@@ -1096,7 +1102,8 @@ export default function ShopPage() {
       setNewProductOriginals([])
       setNewProductPreviews([])
       setNewProductHasVariants(false)
-      setNewProductVariants([{ name: '', stock: '' }])
+      setNewProductVariantPricing(false)
+      setNewProductVariants([{ name: '', stock: '', price: '' }])
       setIsAddProductOpen(false)
       loadShop()
     } catch (err) {
@@ -1305,6 +1312,22 @@ export default function ShopPage() {
     // 預購商品補貨後 stock>0 也顯示為有現貨
     if (product.stock !== null && product.stock > 0) return 'stock'
     return 'preorder'
+  }
+
+  // 取得顯示價格（規格獨立定價時用規格價格）
+  const getDisplayPrice = (product: Product, variant?: ProductVariant | null) => {
+    if (variant?.price != null) return variant.price
+    return product.price
+  }
+
+  // 取得商品價格範圍文字（有不同價格規格時顯示 $min~$max）
+  const getPriceRange = (product: Product) => {
+    if (!product.has_variants || !product.variants || product.variants.length === 0) return null
+    const prices = product.variants.map(v => v.price ?? product.price)
+    const min = Math.min(...prices)
+    const max = Math.max(...prices)
+    if (min === max) return null // 所有規格同價
+    return { min, max }
   }
 
   // 商城主題色：麵包超人紅橘色
@@ -1920,7 +1943,11 @@ export default function ShopPage() {
                     </div>
                     <div className="flex items-baseline gap-1 mt-0.5">
                       <span className="text-xs" style={{ color: '#8B6B4A' }}>$</span>
-                      <span className="text-base font-bold" style={{ color: accentColor || '#8b5e3c' }}>{product.price.toLocaleString()}</span>
+                      {(() => {
+                        const range = getPriceRange(product)
+                        if (range) return <span className="text-base font-bold" style={{ color: accentColor || '#8b5e3c' }}>{range.min.toLocaleString()}~{range.max.toLocaleString()}</span>
+                        return <span className="text-base font-bold" style={{ color: accentColor || '#8b5e3c' }}>{product.price.toLocaleString()}</span>
+                      })()}
                       {mode === 'stock' && product.stock !== null && product.stock > 0 && (
                         <span className="text-[10px] ml-auto" style={{ color: '#8B6B4A' }}>
                           剩 {product.stock}
@@ -2296,7 +2323,10 @@ export default function ShopPage() {
                         }
                       }}
                     >
-                      ${selectedProduct.price.toLocaleString()}
+                      ${getDisplayPrice(selectedProduct, selectedVariant).toLocaleString()}
+                      {selectedVariant?.price != null && selectedVariant.price !== selectedProduct.price && (
+                        <span className="text-xs font-normal line-through ml-1" style={{ color: '#9CA3AF' }}>${selectedProduct.price.toLocaleString()}</span>
+                      )}
                       {showStaffUI && <Pencil className="w-3.5 h-3.5 ml-0.5" style={{ color: '#8B6B4A' }} />}
                     </p>
                   )}
@@ -2448,6 +2478,9 @@ export default function ShopPage() {
                                   <span style={{ color: '#374151' }}>{v.name}</span>
                                 </div>
                                 <div className="flex items-center gap-2">
+                                  {v.price != null && v.price !== selectedProduct.price && (
+                                    <span className="text-xs font-medium" style={{ color: accentColor || '#D94E2B' }}>${v.price}</span>
+                                  )}
                                   <span className="text-xs" style={{ color: '#9CA3AF' }}>庫存: {v.stock}</span>
                                   <button
                                     className="p-0.5 rounded active:scale-90"
@@ -2486,12 +2519,15 @@ export default function ShopPage() {
                             if (!name || !name.trim()) return
                             const stockStr = prompt('庫存數量（預設 0）')
                             const stock = parseInt(stockStr || '0') || 0
+                            const priceStr = prompt('價格（留空則同主商品價格）')
+                            const price = priceStr ? parseInt(priceStr) : null
                             try {
                               const { data, error } = await supabase.rpc('add_product_variant_v1', {
                                 p_product_id: selectedProduct.id,
                                 p_line_user_id: profile?.userId,
                                 p_name: name.trim(),
                                 p_stock: stock,
+                                ...(price ? { p_price: price } : {}),
                               })
                               if (error) throw error
                               if (!data?.success) { toast.error(data?.error); return }
@@ -2698,6 +2734,9 @@ export default function ShopPage() {
                                 disabled={isSoldOut}
                               >
                                 {v.name}
+                                {v.price != null && v.price !== selectedProduct.price && (
+                                  <span className="ml-1 text-xs opacity-70">${v.price}</span>
+                                )}
                                 {selectedProduct.is_limited && (
                                   <span className="ml-1 opacity-60">({v.stock})</span>
                                 )}
@@ -2769,7 +2808,7 @@ export default function ShopPage() {
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-sm" style={{ color: '#8B6B4A' }}>小計</span>
                     <span className="text-lg font-bold" style={{ color: accentColor || '#D94E2B' }}>
-                      ${(selectedProduct.price * quantity).toLocaleString()}
+                      ${(getDisplayPrice(selectedProduct, selectedVariant) * quantity).toLocaleString()}
                     </span>
                   </div>
                   <div className="flex gap-3">
@@ -2833,7 +2872,7 @@ export default function ShopPage() {
               <div className="rounded-xl p-3 mb-4" style={{ backgroundColor: '#F5E0C4' }}>
                 <div className="flex justify-between text-sm" style={{ color: '#4A2C17' }}>
                   <span className="font-medium">{selectedProduct.name}</span>
-                  <span className="font-bold">${(selectedProduct.price * quantity).toLocaleString()}</span>
+                  <span className="font-bold">${(getDisplayPrice(selectedProduct, selectedVariant) * quantity).toLocaleString()}</span>
                 </div>
                 {selectedVariant && (
                   <p className="text-xs mt-0.5" style={{ color: '#8B6B4A' }}>規格：{selectedVariant.name}</p>
@@ -3786,7 +3825,7 @@ export default function ShopPage() {
               {/* 規格開關 */}
               <div className="mb-3">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs text-muted-foreground">規格（同價格不同選項）</p>
+                  <p className="text-xs text-muted-foreground">規格</p>
                   <button
                     type="button"
                     className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
@@ -3794,7 +3833,10 @@ export default function ShopPage() {
                     }`}
                     onClick={() => {
                       setNewProductHasVariants(!newProductHasVariants)
-                      if (!newProductHasVariants) setNewProductVariants([{ name: '', stock: '' }])
+                      if (!newProductHasVariants) {
+                        setNewProductVariants([{ name: '', stock: '', price: '' }])
+                        setNewProductVariantPricing(false)
+                      }
                     }}
                   >
                     {newProductHasVariants ? '已開啟' : '關閉'}
@@ -3802,6 +3844,19 @@ export default function ShopPage() {
                 </div>
                 {newProductHasVariants && (
                   <div className="space-y-2">
+                    {/* 獨立定價開關 */}
+                    <div className="flex items-center justify-between">
+                      <p className="text-[11px]" style={{ color: '#9CA3AF' }}>各規格不同價格</p>
+                      <button
+                        type="button"
+                        className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-colors ${
+                          newProductVariantPricing ? 'bg-blue-500 text-white' : 'bg-muted text-muted-foreground'
+                        }`}
+                        onClick={() => setNewProductVariantPricing(!newProductVariantPricing)}
+                      >
+                        {newProductVariantPricing ? 'ON' : 'OFF'}
+                      </button>
+                    </div>
                     {newProductVariants.map((v, idx) => (
                       <div key={idx} className="flex gap-2 items-center">
                         <Input
@@ -3814,6 +3869,20 @@ export default function ShopPage() {
                           }}
                           className="flex-1 rounded-xl text-[16px]"
                         />
+                        {newProductVariantPricing && (
+                          <Input
+                            type="number"
+                            min="0"
+                            placeholder="價格"
+                            value={v.price}
+                            onChange={(e) => {
+                              const arr = [...newProductVariants]
+                              arr[idx] = { ...arr[idx], price: e.target.value }
+                              setNewProductVariants(arr)
+                            }}
+                            className="w-20 rounded-xl text-[16px]"
+                          />
+                        )}
                         {newProductIsLimited && (
                           <Input
                             type="number"
@@ -3842,7 +3911,7 @@ export default function ShopPage() {
                     <button
                       type="button"
                       className="text-xs text-orange-600 font-medium"
-                      onClick={() => setNewProductVariants([...newProductVariants, { name: '', stock: '' }])}
+                      onClick={() => setNewProductVariants([...newProductVariants, { name: '', stock: '', price: '' }])}
                     >
                       + 新增規格
                     </button>
