@@ -30,6 +30,7 @@ export async function generateMetadata({ params }: { params: Promise<{ tenantSlu
   const announcement = settings?.shop?.announcement
   const title = `${tenant.name} — PlusHub 商城`
   const description = announcement || `歡迎來到 ${tenant.name} 的線上商城`
+  const ogImage = bannerUrl || `https://www.plushub.cc/shop-logo.jpg`
 
   return {
     title,
@@ -37,7 +38,7 @@ export async function generateMetadata({ params }: { params: Promise<{ tenantSlu
     openGraph: {
       title,
       description,
-      ...(bannerUrl ? { images: [{ url: bannerUrl, width: 1200, height: 630 }] } : {}),
+      images: [{ url: ogImage, width: 1200, height: 630 }],
       siteName: 'PlusHub',
       type: 'website',
     },
@@ -45,7 +46,7 @@ export async function generateMetadata({ params }: { params: Promise<{ tenantSlu
       card: 'summary_large_image',
       title,
       description,
-      ...(bannerUrl ? { images: [bannerUrl] } : {}),
+      images: [ogImage],
     },
   }
 }
