@@ -1,18 +1,38 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
 import { useTenant } from '@/hooks/use-tenant'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Textarea } from '@/components/ui/textarea'
 import type { Member, Checkout } from '@/types/database'
-import { Users, Search, Star, ShoppingCart, Package } from 'lucide-react'
+import { Users, Search, Star, ShoppingCart, Package, Eye, Pencil, Check, X } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { toast } from 'sonner'
+
+function formatRelativeTime(dateStr: string | null): string {
+    if (!dateStr) return '-'
+    const now = new Date()
+    const date = new Date(dateStr)
+    const diffMs = now.getTime() - date.getTime()
+    const diffMin = Math.floor(diffMs / 60000)
+    if (diffMin < 1) return '剛剛'
+    if (diffMin < 60) return `${diffMin} 分鐘前`
+    const diffHr = Math.floor(diffMin / 60)
+    if (diffHr < 24) return `${diffHr} 小時前`
+    const diffDay = Math.floor(diffHr / 24)
+    if (diffDay < 30) return `${diffDay} 天前`
+    const diffMonth = Math.floor(diffDay / 30)
+    if (diffMonth < 12) return `${diffMonth} 個月前`
+    return `${Math.floor(diffMonth / 12)} 年前`
+}
 
 export default function MembersPage() {
     const { tenant, isLoading: tenantLoading } = useTenant()
@@ -22,35 +42,34 @@ export default function MembersPage() {
     const [selectedMember, setSelectedMember] = useState<Member | null>(null)
     const [memberOrders, setMemberOrders] = useState<Checkout[]>([])
     const [ordersLoading, setOrdersLoading] = useState(false)
+    const [editingNote, setEditingNote] = useState(false)
+    const [noteValue, setNoteValue] = useState('')
+    const [savingNote, setSavingNote] = useState(false)
+    const [togglingVip, setTogglingVip] = useState(false)
     const supabase = createClient()
+
+    const fetchMembers = useCallback(async () => {
+        if (!tenant) return
+        setIsLoading(true)
+        const { data } = await supabase
+            .from('members')
+            .select('*')
+            .eq('tenant_id', tenant.id)
+            .order('total_spent', { ascending: false })
+        if (data) setMembers(data)
+        setIsLoading(false)
+    }, [tenant, supabase])
 
     useEffect(() => {
         if (!tenant || tenantLoading) return
-
-        const fetchMembers = async () => {
-            setIsLoading(true)
-
-            const { data } = await supabase
-                .from('members')
-                .select('*')
-                .eq('tenant_id', tenant.id)
-                .order('total_spent', { ascending: false })
-
-            if (data) {
-                setMembers(data)
-            }
-            setIsLoading(false)
-        }
-
         fetchMembers()
-    }, [tenant, tenantLoading, supabase])
+    }, [tenant, tenantLoading, fetchMembers])
 
     useEffect(() => {
         if (!selectedMember) {
             setMemberOrders([])
             return
         }
-
         const fetchOrders = async () => {
             setOrdersLoading(true)
             const { data } = await supabase
@@ -58,15 +77,51 @@ export default function MembersPage() {
                 .select('*')
                 .eq('member_id', selectedMember.id)
                 .order('created_at', { ascending: false })
-
-            if (data) {
-                setMemberOrders(data)
-            }
+            if (data) setMemberOrders(data)
             setOrdersLoading(false)
         }
-
         fetchOrders()
     }, [selectedMember, supabase])
+
+    const handleToggleVip = async () => {
+        if (!selectedMember || !tenant || togglingVip) return
+        setTogglingVip(true)
+        const newVip = !selectedMember.is_vip
+        const { data, error } = await supabase.rpc('update_member_info_v1', {
+            p_member_id: selectedMember.id,
+            p_tenant_id: tenant.id,
+            p_is_vip: newVip,
+        })
+        if (error || !data?.success) {
+            toast.error('更新失敗')
+        } else {
+            const updated = { ...selectedMember, is_vip: newVip }
+            setSelectedMember(updated)
+            setMembers(prev => prev.map(m => m.id === updated.id ? updated : m))
+            toast.success(newVip ? '已標記為 VIP' : '已取消 VIP')
+        }
+        setTogglingVip(false)
+    }
+
+    const handleSaveNote = async () => {
+        if (!selectedMember || !tenant) return
+        setSavingNote(true)
+        const { data, error } = await supabase.rpc('update_member_info_v1', {
+            p_member_id: selectedMember.id,
+            p_tenant_id: tenant.id,
+            p_note: noteValue,
+        })
+        if (error || !data?.success) {
+            toast.error('儲存失敗')
+        } else {
+            const updated = { ...selectedMember, note: noteValue }
+            setSelectedMember(updated)
+            setMembers(prev => prev.map(m => m.id === updated.id ? updated : m))
+            setEditingNote(false)
+            toast.success('備註已儲存')
+        }
+        setSavingNote(false)
+    }
 
     const filteredMembers = members.filter((member) =>
         searchQuery === '' ||
@@ -151,7 +206,10 @@ export default function MembersPage() {
                                             initial={{ opacity: 0, x: -10 }}
                                             animate={{ opacity: 1, x: 0 }}
                                             transition={{ delay: index * 0.02 }}
-                                            onClick={() => setSelectedMember(member)}
+                                            onClick={() => {
+                                                setSelectedMember(member)
+                                                setEditingNote(false)
+                                            }}
                                             className={`flex items-center justify-between rounded-xl border p-3 cursor-pointer transition-all ${selectedMember?.id === member.id
                                                 ? 'border-primary bg-primary/5'
                                                 : 'border-border/50 hover:border-primary/50 hover:bg-muted/50'
@@ -174,7 +232,10 @@ export default function MembersPage() {
                                                         )}
                                                     </div>
                                                     <p className="text-xs text-muted-foreground">
-                                                        {member.display_name}
+                                                        {member.last_visited_at
+                                                            ? `最近 ${formatRelativeTime(member.last_visited_at)}`
+                                                            : member.display_name || '-'
+                                                        }
                                                     </p>
                                                 </div>
                                             </div>
@@ -226,9 +287,14 @@ export default function MembersPage() {
                                                 <h3 className="font-semibold text-lg">
                                                     {selectedMember.nickname || selectedMember.display_name || '未命名'}
                                                 </h3>
-                                                {selectedMember.is_vip && (
-                                                    <Badge className="bg-warning/20 text-warning border-warning/30">VIP</Badge>
-                                                )}
+                                                <button
+                                                    onClick={handleToggleVip}
+                                                    disabled={togglingVip}
+                                                    className="transition-transform hover:scale-110 active:scale-95 disabled:opacity-50"
+                                                    title={selectedMember.is_vip ? '取消 VIP' : '標記為 VIP'}
+                                                >
+                                                    <Star className={`h-5 w-5 ${selectedMember.is_vip ? 'fill-warning text-warning' : 'text-muted-foreground/40 hover:text-warning/60'}`} />
+                                                </button>
                                             </div>
                                             <p className="text-sm text-muted-foreground">
                                                 {selectedMember.display_name || '-'}
@@ -246,6 +312,19 @@ export default function MembersPage() {
                                             <div className="rounded-xl border border-border/50 p-3 text-center">
                                                 <p className="text-2xl font-bold">{selectedMember.order_count}</p>
                                                 <p className="text-xs text-muted-foreground">訂單數</p>
+                                            </div>
+                                            <div className="rounded-xl border border-border/50 p-3 text-center">
+                                                <div className="flex items-center justify-center gap-1">
+                                                    <Eye className="h-4 w-4 text-muted-foreground" />
+                                                    <p className="text-2xl font-bold">{selectedMember.visit_count || 0}</p>
+                                                </div>
+                                                <p className="text-xs text-muted-foreground">來訪次數</p>
+                                            </div>
+                                            <div className="rounded-xl border border-border/50 p-3 text-center">
+                                                <p className="text-lg font-bold">
+                                                    {formatRelativeTime(selectedMember.last_visited_at)}
+                                                </p>
+                                                <p className="text-xs text-muted-foreground">最近來訪</p>
                                             </div>
                                         </div>
 
@@ -271,12 +350,55 @@ export default function MembersPage() {
                                             </div>
                                         </div>
 
-                                        {selectedMember.note && (
-                                            <div className="rounded-xl bg-muted/50 p-3">
-                                                <p className="text-xs text-muted-foreground mb-1">備註</p>
-                                                <p className="text-sm">{selectedMember.note}</p>
+                                        {/* Note - editable */}
+                                        <div className="rounded-xl bg-muted/50 p-3">
+                                            <div className="flex items-center justify-between mb-1">
+                                                <p className="text-xs text-muted-foreground">備註</p>
+                                                {!editingNote && (
+                                                    <button
+                                                        onClick={() => {
+                                                            setNoteValue(selectedMember.note || '')
+                                                            setEditingNote(true)
+                                                        }}
+                                                        className="text-muted-foreground hover:text-foreground transition-colors"
+                                                    >
+                                                        <Pencil className="h-3.5 w-3.5" />
+                                                    </button>
+                                                )}
                                             </div>
-                                        )}
+                                            {editingNote ? (
+                                                <div className="space-y-2">
+                                                    <Textarea
+                                                        value={noteValue}
+                                                        onChange={(e) => setNoteValue(e.target.value)}
+                                                        placeholder="輸入備註..."
+                                                        className="min-h-[80px] text-sm resize-none"
+                                                        autoFocus
+                                                    />
+                                                    <div className="flex justify-end gap-2">
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            onClick={() => setEditingNote(false)}
+                                                            disabled={savingNote}
+                                                        >
+                                                            <X className="h-3.5 w-3.5 mr-1" />
+                                                            取消
+                                                        </Button>
+                                                        <Button
+                                                            size="sm"
+                                                            onClick={handleSaveNote}
+                                                            disabled={savingNote}
+                                                        >
+                                                            <Check className="h-3.5 w-3.5 mr-1" />
+                                                            {savingNote ? '儲存中...' : '儲存'}
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <p className="text-sm">{selectedMember.note || '無備註'}</p>
+                                            )}
+                                        </div>
                                     </motion.div>
                                 </TabsContent>
 

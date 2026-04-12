@@ -117,6 +117,8 @@ export interface Member {
   total_spent: number
   order_count: number
   note: string | null
+  visit_count: number
+  last_visited_at: string | null
   created_at: string
   updated_at: string
 }
