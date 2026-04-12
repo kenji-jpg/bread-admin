@@ -13,9 +13,12 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Textarea } from '@/components/ui/textarea'
 import type { Member, Checkout } from '@/types/database'
-import { Users, Search, Star, ShoppingCart, Package, Eye, Pencil, Check, X } from 'lucide-react'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Users, Search, Star, ShoppingCart, Package, Eye, Pencil, Check, X, ArrowUpDown } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
+
+type SortOption = 'online' | 'total_spent' | 'last_visited' | 'visit_count'
 
 function formatRelativeTime(dateStr: string | null): string {
     if (!dateStr) return '-'
@@ -46,7 +49,28 @@ export default function MembersPage() {
     const [noteValue, setNoteValue] = useState('')
     const [savingNote, setSavingNote] = useState(false)
     const [togglingVip, setTogglingVip] = useState(false)
+    const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set())
+    const [sortBy, setSortBy] = useState<SortOption>('total_spent')
     const supabase = createClient()
+
+    // 訂閱商城 Presence channel，即時顯示誰在線上
+    useEffect(() => {
+        if (!tenant?.id) return
+        const channel = supabase.channel(`presence-shop-${tenant.id}`)
+            .on('presence', { event: 'sync' }, () => {
+                const state = channel.presenceState()
+                const ids = new Set<string>()
+                for (const key of Object.keys(state)) {
+                    const presences = state[key] as { user_id?: string }[]
+                    presences.forEach(p => {
+                        if (p.user_id && p.user_id !== 'anonymous') ids.add(p.user_id)
+                    })
+                }
+                setOnlineUserIds(ids)
+            })
+            .subscribe()
+        return () => { supabase.removeChannel(channel) }
+    }, [tenant?.id, supabase])
 
     const fetchMembers = useCallback(async () => {
         if (!tenant) return
@@ -123,11 +147,33 @@ export default function MembersPage() {
         setSavingNote(false)
     }
 
-    const filteredMembers = members.filter((member) =>
-        searchQuery === '' ||
-        member.display_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        member.nickname?.toLowerCase().includes(searchQuery.toLowerCase())
-    )
+    const filteredMembers = members
+        .filter((member) =>
+            searchQuery === '' ||
+            member.display_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            member.nickname?.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+        .sort((a, b) => {
+            switch (sortBy) {
+                case 'online': {
+                    const aOnline = onlineUserIds.has(a.line_user_id) ? 1 : 0
+                    const bOnline = onlineUserIds.has(b.line_user_id) ? 1 : 0
+                    if (bOnline !== aOnline) return bOnline - aOnline
+                    return b.total_spent - a.total_spent // 在線內再依消費排
+                }
+                case 'total_spent':
+                    return b.total_spent - a.total_spent
+                case 'last_visited': {
+                    const aTime = a.last_visited_at ? new Date(a.last_visited_at).getTime() : 0
+                    const bTime = b.last_visited_at ? new Date(b.last_visited_at).getTime() : 0
+                    return bTime - aTime
+                }
+                case 'visit_count':
+                    return (b.visit_count || 0) - (a.visit_count || 0)
+                default:
+                    return 0
+            }
+        })
 
     if (tenantLoading) {
         return (
@@ -160,17 +206,31 @@ export default function MembersPage() {
                 <p className="text-muted-foreground mt-1">管理店家所有會員</p>
             </div>
 
-            {/* Search */}
+            {/* Search + Sort */}
             <Card className="border-border/50">
                 <CardContent className="pt-6">
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                            placeholder="搜尋會員名稱、暱稱..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="pl-9 rounded-xl"
-                        />
+                    <div className="flex gap-3">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                            <Input
+                                placeholder="搜尋會員名稱、暱稱..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="pl-9 rounded-xl"
+                            />
+                        </div>
+                        <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
+                            <SelectTrigger className="w-[140px] rounded-xl">
+                                <ArrowUpDown className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="online">即時在線</SelectItem>
+                                <SelectItem value="total_spent">消費金額</SelectItem>
+                                <SelectItem value="last_visited">最近來訪</SelectItem>
+                                <SelectItem value="visit_count">來訪次數</SelectItem>
+                            </SelectContent>
+                        </Select>
                     </div>
                 </CardContent>
             </Card>
@@ -181,7 +241,15 @@ export default function MembersPage() {
                 <Card className="border-border/50 lg:col-span-2">
                     <CardHeader>
                         <CardTitle>會員列表</CardTitle>
-                        <CardDescription>共 {filteredMembers.length} 位會員</CardDescription>
+                        <CardDescription>
+                            共 {filteredMembers.length} 位會員
+                            {onlineUserIds.size > 0 && (
+                                <span className="ml-2 inline-flex items-center gap-1 text-green-600">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                                    {onlineUserIds.size} 人在線
+                                </span>
+                            )}
+                        </CardDescription>
                     </CardHeader>
                     <CardContent>
                         {isLoading ? (
@@ -216,12 +284,17 @@ export default function MembersPage() {
                                                 }`}
                                         >
                                             <div className="flex items-center gap-3">
-                                                <Avatar className="h-10 w-10">
-                                                    <AvatarImage src={member.picture_url || ''} />
-                                                    <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-primary-foreground text-sm">
-                                                        {(member.nickname || member.display_name || '?').charAt(0)}
-                                                    </AvatarFallback>
-                                                </Avatar>
+                                                <div className="relative">
+                                                    <Avatar className="h-10 w-10">
+                                                        <AvatarImage src={member.picture_url || ''} />
+                                                        <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-primary-foreground text-sm">
+                                                            {(member.nickname || member.display_name || '?').charAt(0)}
+                                                        </AvatarFallback>
+                                                    </Avatar>
+                                                    {onlineUserIds.has(member.line_user_id) && (
+                                                        <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-500 border-2 border-background" />
+                                                    )}
+                                                </div>
                                                 <div>
                                                     <div className="flex items-center gap-2">
                                                         <p className="font-medium">
