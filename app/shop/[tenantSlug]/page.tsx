@@ -345,6 +345,7 @@ export default function ShopPage() {
   const [allOrders, setAllOrders] = useState<StaffOrderItem[]>([])
   const [staffStats, setStaffStats] = useState<StaffStats | null>(null)
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false)
+  const [onlineCount, setOnlineCount] = useState(0)
 
   // 補貨 Modal
   const [restockProduct, setRestockProduct] = useState<Product | null>(null)
@@ -757,7 +758,8 @@ export default function ShopPage() {
 
     presenceChannel
       .on('presence', { event: 'sync' }, () => {
-        // 不需在客戶端處理，僅用於 admin 訂閱
+        const state = presenceChannel.presenceState()
+        setOnlineCount(Object.keys(state).length)
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
@@ -1488,6 +1490,12 @@ export default function ShopPage() {
               訂單 {staffStats.total_orders - staffStats.cancelled_count} · ${staffStats.total_sales.toLocaleString()}
             </span>
           )}
+          {showStaffUI && (
+            <span className="inline-flex items-center gap-1 text-[11px] ml-1.5" style={{ color: 'rgba(255,255,255,0.7)' }}>
+              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#4ADE80' }} />
+              {onlineCount}人在線
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1">
           {isStaff && (
@@ -1592,6 +1600,12 @@ export default function ShopPage() {
                 {showStaffUI && staffStats && (
                   <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.7)' }}>
                     訂單 {staffStats.total_orders - staffStats.cancelled_count} · ${staffStats.total_sales.toLocaleString()}
+                    {onlineCount > 0 && (
+                      <span className="ml-1.5">
+                        <span className="inline-block w-1.5 h-1.5 rounded-full align-middle mr-0.5" style={{ backgroundColor: '#4ADE80' }} />
+                        {onlineCount}人在線
+                      </span>
+                    )}
                   </p>
                 )}
               </div>
