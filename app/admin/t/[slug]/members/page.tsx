@@ -46,7 +46,27 @@ export default function MembersPage() {
     const [noteValue, setNoteValue] = useState('')
     const [savingNote, setSavingNote] = useState(false)
     const [togglingVip, setTogglingVip] = useState(false)
+    const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set())
     const supabase = createClient()
+
+    // 訂閱商城 Presence channel，即時顯示誰在線上
+    useEffect(() => {
+        if (!tenant?.id) return
+        const channel = supabase.channel(`presence-shop-${tenant.id}`)
+            .on('presence', { event: 'sync' }, () => {
+                const state = channel.presenceState()
+                const ids = new Set<string>()
+                for (const key of Object.keys(state)) {
+                    const presences = state[key] as { user_id?: string }[]
+                    presences.forEach(p => {
+                        if (p.user_id && p.user_id !== 'anonymous') ids.add(p.user_id)
+                    })
+                }
+                setOnlineUserIds(ids)
+            })
+            .subscribe()
+        return () => { supabase.removeChannel(channel) }
+    }, [tenant?.id, supabase])
 
     const fetchMembers = useCallback(async () => {
         if (!tenant) return
@@ -181,7 +201,15 @@ export default function MembersPage() {
                 <Card className="border-border/50 lg:col-span-2">
                     <CardHeader>
                         <CardTitle>會員列表</CardTitle>
-                        <CardDescription>共 {filteredMembers.length} 位會員</CardDescription>
+                        <CardDescription>
+                            共 {filteredMembers.length} 位會員
+                            {onlineUserIds.size > 0 && (
+                                <span className="ml-2 inline-flex items-center gap-1 text-green-600">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                                    {onlineUserIds.size} 人在線
+                                </span>
+                            )}
+                        </CardDescription>
                     </CardHeader>
                     <CardContent>
                         {isLoading ? (
@@ -216,12 +244,17 @@ export default function MembersPage() {
                                                 }`}
                                         >
                                             <div className="flex items-center gap-3">
-                                                <Avatar className="h-10 w-10">
-                                                    <AvatarImage src={member.picture_url || ''} />
-                                                    <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-primary-foreground text-sm">
-                                                        {(member.nickname || member.display_name || '?').charAt(0)}
-                                                    </AvatarFallback>
-                                                </Avatar>
+                                                <div className="relative">
+                                                    <Avatar className="h-10 w-10">
+                                                        <AvatarImage src={member.picture_url || ''} />
+                                                        <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-primary-foreground text-sm">
+                                                            {(member.nickname || member.display_name || '?').charAt(0)}
+                                                        </AvatarFallback>
+                                                    </Avatar>
+                                                    {onlineUserIds.has(member.line_user_id) && (
+                                                        <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-500 border-2 border-background" />
+                                                    )}
+                                                </div>
                                                 <div>
                                                     <div className="flex items-center gap-2">
                                                         <p className="font-medium">
