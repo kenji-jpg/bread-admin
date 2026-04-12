@@ -643,6 +643,22 @@ export default function ShopPage() {
       })()
   }, [isDevStaff, isLoggedIn, profile?.userId, tenant?.id, staffCheckDone, supabase])
 
+  // 記錄會員來訪（每次進頁面一次）
+  const visitRecorded = useRef(false)
+  useEffect(() => {
+    if (visitRecorded.current) return
+    if (!isLoggedIn || !profile?.userId || !tenant?.id) return
+    visitRecorded.current = true
+    supabase.rpc('record_member_visit_v1', {
+      p_tenant_id: tenant.id,
+      p_line_user_id: profile.userId,
+      p_display_name: profile.displayName || null,
+      p_picture_url: profile.pictureUrl || null,
+    }).then(({ error }) => {
+      if (error) console.error('[Shop] Record visit error:', error)
+    })
+  }, [isLoggedIn, profile?.userId, tenant?.id, supabase, profile?.displayName, profile?.pictureUrl])
+
   // 管理員身份確認後，重載商品（含 inactive）+ 載入全部訂單
   useEffect(() => {
     if (isStaff && tenant) {
