@@ -1483,17 +1483,11 @@ export default function ShopPage() {
           <h1 className="text-lg font-bold" style={{ color: 'white' }}>{tenant?.name || ''}</h1>
           <span className="inline-flex items-center gap-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.8)' }}>
             <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: '#4ADE80' }} />
-            營業中
+            {showStaffUI ? `${onlineCount} 人在線` : '營業中'}
           </span>
           {showStaffUI && staffStats && (
             <span className="text-[11px] ml-1" style={{ color: 'rgba(255,255,255,0.7)' }}>
               訂單 {staffStats.total_orders - staffStats.cancelled_count} · ${staffStats.total_sales.toLocaleString()}
-            </span>
-          )}
-          {showStaffUI && (
-            <span className="inline-flex items-center gap-1 text-[11px] ml-1.5" style={{ color: 'rgba(255,255,255,0.7)' }}>
-              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#4ADE80' }} />
-              {onlineCount}人在線
             </span>
           )}
         </div>
@@ -1594,18 +1588,12 @@ export default function ShopPage() {
                   <h1 className="text-base font-bold truncate" style={{ color: 'white' }}>{tenant?.name || ''}</h1>
                   <span className="inline-flex items-center gap-1 text-[10px]" style={{ color: 'rgba(255,255,255,0.8)' }}>
                     <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: '#4ADE80' }} />
-                    營業中
+                    {showStaffUI ? `${onlineCount} 人在線` : '營業中'}
                   </span>
                 </div>
                 {showStaffUI && staffStats && (
                   <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.7)' }}>
                     訂單 {staffStats.total_orders - staffStats.cancelled_count} · ${staffStats.total_sales.toLocaleString()}
-                    {onlineCount > 0 && (
-                      <span className="ml-1.5">
-                        <span className="inline-block w-1.5 h-1.5 rounded-full align-middle mr-0.5" style={{ backgroundColor: '#4ADE80' }} />
-                        {onlineCount}人在線
-                      </span>
-                    )}
                   </p>
                 )}
               </div>
