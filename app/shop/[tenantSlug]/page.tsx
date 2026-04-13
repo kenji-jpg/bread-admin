@@ -362,6 +362,7 @@ export default function ShopPage() {
   // 上架 Modal
   const [isAddProductOpen, setIsAddProductOpen] = useState(false)
   const [newProductName, setNewProductName] = useState('')
+  const [newProductJpy, setNewProductJpy] = useState('')
   const [newProductPrice, setNewProductPrice] = useState('')
   const [newProductStock, setNewProductStock] = useState('')
   const [newProductIsLimited, setNewProductIsLimited] = useState(false)
@@ -1122,6 +1123,7 @@ export default function ShopPage() {
       toast.success(`已上架 ${newProductName.trim()}`)
       // 清空表單（保留分類、模式、時限設定，方便連續上架）
       setNewProductName('')
+      setNewProductJpy('')
       setNewProductPrice('')
       setNewProductStock('')
       setNewProductImages([])
@@ -3838,21 +3840,47 @@ export default function ShopPage() {
                 </button>
               </div>
 
-              {/* 價格 + 庫存（現貨+無規格時才顯示主庫存） */}
+              {/* 日幣成本 → 自動算售價 */}
+              {!(newProductHasVariants && newProductVariantPricing) && (
+                <div className="flex gap-2 mb-2">
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">¥</span>
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="日幣成本"
+                      value={newProductJpy}
+                      onChange={(e) => {
+                        const v = e.target.value.replace(/[^0-9]/g, '')
+                        setNewProductJpy(v)
+                        if (v) {
+                          const twdPrice = Math.round(parseInt(v) * 0.3)
+                          setNewProductPrice(String(twdPrice))
+                        }
+                      }}
+                      className="flex-1 rounded-xl text-[16px] pl-7"
+                    />
+                  </div>
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                    <Input
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="售價"
+                      value={newProductPrice}
+                      onChange={(e) => {
+                        const v = e.target.value.replace(/[^0-9.\-]/g, '')
+                        setNewProductPrice(v)
+                      }}
+                      className="flex-1 rounded-xl text-[16px] pl-7"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* 庫存（現貨+無規格時才顯示） */}
               <div className="flex gap-2 mb-3">
-                {!(newProductHasVariants && newProductVariantPricing) && (
-                  <Input
-                    type="text"
-                    inputMode="decimal"
-                    placeholder="價格"
-                    value={newProductPrice}
-                    onChange={(e) => {
-                      const v = e.target.value.replace(/[^0-9.\-]/g, '')
-                      setNewProductPrice(v)
-                    }}
-                    className="flex-1 rounded-xl text-[16px]"
-                  />
-                )}
+
                 {newProductIsLimited && !newProductHasVariants && (
                   <Input
                     type="text"
@@ -4025,7 +4053,8 @@ export default function ShopPage() {
                   onClick={() => {
                     setIsAddProductOpen(false)
                     setNewProductName('')
-                    setNewProductPrice('')
+                    setNewProductJpy('')
+      setNewProductPrice('')
                     setNewProductStock('')
                     setNewProductIsLimited(false)
                     setNewProductCategory('')
