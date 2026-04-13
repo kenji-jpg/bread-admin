@@ -3842,20 +3842,27 @@ export default function ShopPage() {
               <div className="flex gap-2 mb-3">
                 {!(newProductHasVariants && newProductVariantPricing) && (
                   <Input
-                    type="number"
-                    placeholder="價格（可為負數）"
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="價格"
                     value={newProductPrice}
-                    onChange={(e) => setNewProductPrice(e.target.value)}
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/[^0-9.\-]/g, '')
+                      setNewProductPrice(v)
+                    }}
                     className="flex-1 rounded-xl text-[16px]"
                   />
                 )}
                 {newProductIsLimited && !newProductHasVariants && (
                   <Input
-                    type="number"
-                    min="1"
+                    type="text"
+                    inputMode="numeric"
                     placeholder="庫存數量"
                     value={newProductStock}
-                    onChange={(e) => setNewProductStock(e.target.value)}
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/[^0-9]/g, '')
+                      setNewProductStock(v)
+                    }}
                     className="flex-1 rounded-xl text-[16px]"
                   />
                 )}
@@ -3910,13 +3917,13 @@ export default function ShopPage() {
                         />
                         {newProductVariantPricing && (
                           <Input
-                            type="number"
-                            min="0"
+                            type="text"
+                            inputMode="decimal"
                             placeholder="價格"
                             value={v.price}
                             onChange={(e) => {
                               const arr = [...newProductVariants]
-                              arr[idx] = { ...arr[idx], price: e.target.value }
+                              arr[idx] = { ...arr[idx], price: e.target.value.replace(/[^0-9.\-]/g, '') }
                               setNewProductVariants(arr)
                             }}
                             className="w-20 rounded-xl text-[16px]"
