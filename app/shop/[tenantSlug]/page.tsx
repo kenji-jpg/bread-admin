@@ -334,7 +334,7 @@ export default function ShopPage() {
   }, [])
 
   // 排序
-  const [sortBy, setSortBy] = useState<'newest' | 'price_asc' | 'price_desc' | 'popular'>('popular')
+  const [sortBy, setSortBy] = useState<'newest' | 'price_asc' | 'price_desc' | 'popular'>('newest')
   const [isSortOpen, setIsSortOpen] = useState(false)
 
   // ========== 收藏 ==========
@@ -1839,7 +1839,8 @@ export default function ShopPage() {
               if (sortBy === 'price_asc') return a.price - b.price
               if (sortBy === 'price_desc') return b.price - a.price
               if (sortBy === 'popular') return b.sold_qty - a.sold_qty
-              return 0
+              // newest: 按建立時間排（新→舊）
+              return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
             })
 
           // 按分類分組（保持 shopCategories 排序）
