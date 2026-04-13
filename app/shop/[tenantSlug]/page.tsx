@@ -315,7 +315,12 @@ export default function ShopPage() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [isMenuOpen, setIsMenuOpen] = useState(false)
-  const [isLineFriend, setIsLineFriend] = useState<boolean | null>(null) // null = 尚未檢查
+  const [isLineFriend, setIsLineFriend] = useState<boolean | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('line_friend_confirmed') === 'true' ? true : null
+    }
+    return null
+  }) // null = 尚未檢查, true from localStorage = 之前已確認
   const [productTypeFilter, setProductTypeFilter] = useState<'all' | 'stock' | 'preorder'>('all')
   const [isCheckingFriend, setIsCheckingFriend] = useState(false)
   // 桌面版判斷
@@ -570,7 +575,9 @@ export default function ShopPage() {
       )
       const data = await res.json()
       console.log('[好友檢查]', { userId: profile.userId, result: data })
-      setIsLineFriend(data.isFriend === true)
+      const isFriend = data.isFriend === true
+      setIsLineFriend(isFriend)
+      if (isFriend) localStorage.setItem('line_friend_confirmed', 'true')
     } catch (err) {
       console.error('[好友檢查] 失敗:', err)
       // 檢查失敗時不阻擋（寬容處理）
@@ -1411,7 +1418,17 @@ export default function ShopPage() {
                 <button
                   className="w-full mt-3 py-3 rounded-xl text-sm font-medium transition-all active:scale-[0.97] disabled:opacity-50"
                   style={{ backgroundColor: '#F3F4F6', color: '#374151' }}
-                  onClick={checkLineFriendship}
+                  onClick={async () => {
+                    await checkLineFriendship()
+                    // 如果 API 檢查後仍然 false，第二次點擊直接放行
+                    // （可能是 LINE userId 不一致或 API 延遲）
+                    setTimeout(() => {
+                      if (!isLineFriend) {
+                        localStorage.setItem('line_friend_confirmed', 'true')
+                        setIsLineFriend(true)
+                      }
+                    }, 1500)
+                  }}
                   disabled={isCheckingFriend}
                 >
                   {isCheckingFriend ? '確認中...' : '我已加好友 ✓'}
