@@ -21,10 +21,12 @@ import Link from 'next/link'
 import type { Product } from '@/types/database'
 
 // 壓縮圖片至最大寬度並輸出為 WebP
-async function compressImage(file: File, maxWidth = 400, quality = 0.7): Promise<Blob> {
+async function compressImage(file: File, maxWidth = 400, quality = 0.7): Promise<{ blob: Blob; ext: string; mime: string }> {
     return new Promise((resolve, reject) => {
         const img = new Image()
+        const objectUrl = URL.createObjectURL(file)
         img.onload = () => {
+            URL.revokeObjectURL(objectUrl)
             const canvas = document.createElement('canvas')
             let width = img.width
             let height = img.height
@@ -43,21 +45,37 @@ async function compressImage(file: File, maxWidth = 400, quality = 0.7): Promise
                 return
             }
 
+            ctx.fillStyle = '#FFFFFF'
+            ctx.fillRect(0, 0, width, height)
             ctx.drawImage(img, 0, 0, width, height)
+
             canvas.toBlob(
-                (blob) => {
-                    if (blob) {
-                        resolve(blob)
+                (webpBlob) => {
+                    if (webpBlob && webpBlob.size > 100) {
+                        resolve({ blob: webpBlob, ext: 'webp', mime: 'image/webp' })
                     } else {
-                        reject(new Error('Failed to compress image'))
+                        canvas.toBlob(
+                            (jpegBlob) => {
+                                if (jpegBlob && jpegBlob.size > 100) {
+                                    resolve({ blob: jpegBlob, ext: 'jpg', mime: 'image/jpeg' })
+                                } else {
+                                    reject(new Error('Failed to compress image'))
+                                }
+                            },
+                            'image/jpeg',
+                            Math.max(quality, 0.85)
+                        )
                     }
                 },
                 'image/webp',
                 quality
             )
         }
-        img.onerror = reject
-        img.src = URL.createObjectURL(file)
+        img.onerror = () => {
+            URL.revokeObjectURL(objectUrl)
+            reject(new Error('圖片格式不支援（HEIC 請先轉檔）'))
+        }
+        img.src = objectUrl
     })
 }
 
@@ -260,17 +278,18 @@ export default function EditProductPage({ params }: { params: Promise<{ productI
                 setIsUploading(true)
                 for (let i = 0; i < imageFiles.length; i++) {
                     try {
-                        const compressedBlob = await compressImage(imageFiles[i])
-                        const compressedFile = new File([compressedBlob], `${sku}-${i}.webp`, {
-                            type: 'image/webp',
+                        const compressed = await compressImage(imageFiles[i])
+                        const compressedFile = new File([compressed.blob], `${sku}-${i}.${compressed.ext}`, {
+                            type: compressed.mime,
                         })
 
-                        const filePath = `${tenant.id}/products/${sku}-${Date.now()}-${i}.webp`
+                        const filePath = `${tenant.id}/products/${sku}-${Date.now()}-${i}.${compressed.ext}`
                         const { error: uploadError } = await supabase.storage
                             .from('product-images')
                             .upload(filePath, compressedFile, {
                                 cacheControl: '3600',
                                 upsert: true,
+                                contentType: compressed.mime,
                             })
 
                         if (uploadError) {

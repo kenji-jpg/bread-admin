@@ -50,10 +50,12 @@ import Cropper from 'react-easy-crop'
 import type { Area } from 'react-easy-crop'
 
 // 壓縮圖片
-async function compressImage(file: File, maxWidth = 400, quality = 0.7): Promise<Blob> {
+async function compressImage(file: File, maxWidth = 400, quality = 0.7): Promise<{ blob: Blob; ext: string; mime: string }> {
   return new Promise((resolve, reject) => {
     const img = new window.Image()
+    const objectUrl = URL.createObjectURL(file)
     img.onload = () => {
+      URL.revokeObjectURL(objectUrl)
       const canvas = document.createElement('canvas')
       let width = img.width
       let height = img.height
@@ -72,21 +74,40 @@ async function compressImage(file: File, maxWidth = 400, quality = 0.7): Promise
         return
       }
 
+      // iOS HEIC/白底問題：先填白底避免透明變黑
+      ctx.fillStyle = '#FFFFFF'
+      ctx.fillRect(0, 0, width, height)
       ctx.drawImage(img, 0, 0, width, height)
+
+      // 嘗試 WebP，失敗則 fallback JPEG（iOS 相容）
       canvas.toBlob(
-        (blob) => {
-          if (blob) {
-            resolve(blob)
+        (webpBlob) => {
+          if (webpBlob && webpBlob.size > 100) {
+            resolve({ blob: webpBlob, ext: 'webp', mime: 'image/webp' })
           } else {
-            reject(new Error('Failed to compress image'))
+            // WebP 失敗，改用 JPEG
+            canvas.toBlob(
+              (jpegBlob) => {
+                if (jpegBlob && jpegBlob.size > 100) {
+                  resolve({ blob: jpegBlob, ext: 'jpg', mime: 'image/jpeg' })
+                } else {
+                  reject(new Error('Failed to compress image'))
+                }
+              },
+              'image/jpeg',
+              Math.max(quality, 0.85)
+            )
           }
         },
         'image/webp',
         quality
       )
     }
-    img.onerror = reject
-    img.src = URL.createObjectURL(file)
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl)
+      reject(new Error('圖片格式不支援（HEIC 請先轉檔）'))
+    }
+    img.src = objectUrl
   })
 }
 
@@ -1054,20 +1075,20 @@ export default function ShopPage() {
         try {
           const sku = `${skuBase}-${i}`
           // 上傳正方形縮圖
-          const thumbBlob = await compressImage(newProductImages[i])
-          const thumbFile = new File([thumbBlob], `${sku}.webp`, { type: 'image/webp' })
-          const thumbPath = `${tenant.id}/products/${sku}.webp`
-          const { error: thumbErr } = await supabase.storage.from('product-images').upload(thumbPath, thumbFile, { cacheControl: '3600', upsert: true })
+          const thumb = await compressImage(newProductImages[i])
+          const thumbFile = new File([thumb.blob], `${sku}.${thumb.ext}`, { type: thumb.mime })
+          const thumbPath = `${tenant.id}/products/${sku}.${thumb.ext}`
+          const { error: thumbErr } = await supabase.storage.from('product-images').upload(thumbPath, thumbFile, { cacheControl: '3600', upsert: true, contentType: thumb.mime })
           if (!thumbErr) {
             const { data: { publicUrl } } = supabase.storage.from('product-images').getPublicUrl(thumbPath)
             thumbnailUrls.push(publicUrl)
           }
           // 上傳原圖
           if (newProductOriginals[i]) {
-            const origBlob = await compressImage(newProductOriginals[i], 800, 0.85)
-            const origFile = new File([origBlob], `${sku}-orig.webp`, { type: 'image/webp' })
-            const origPath = `${tenant.id}/products/${sku}-orig.webp`
-            const { error: origErr } = await supabase.storage.from('product-images').upload(origPath, origFile, { cacheControl: '3600', upsert: true })
+            const orig = await compressImage(newProductOriginals[i], 800, 0.85)
+            const origFile = new File([orig.blob], `${sku}-orig.${orig.ext}`, { type: orig.mime })
+            const origPath = `${tenant.id}/products/${sku}-orig.${orig.ext}`
+            const { error: origErr } = await supabase.storage.from('product-images').upload(origPath, origFile, { cacheControl: '3600', upsert: true, contentType: orig.mime })
             if (!origErr) {
               const { data: { publicUrl } } = supabase.storage.from('product-images').getPublicUrl(origPath)
               originalUrls.push(publicUrl)
@@ -1231,10 +1252,10 @@ export default function ShopPage() {
       const imageUrls: string[] = []
       for (let i = 0; i < files.length; i++) {
         const sku = `${selectedProduct.id.slice(0, 8)}-${Date.now()}-${i}`
-        const compressedBlob = await compressImage(files[i])
-        const compressedFile = new File([compressedBlob], `${sku}.webp`, { type: 'image/webp' })
-        const path = `${tenant.id}/products/${sku}.webp`
-        const { error: uploadErr } = await supabase.storage.from('product-images').upload(path, compressedFile)
+        const compressed = await compressImage(files[i])
+        const compressedFile = new File([compressed.blob], `${sku}.${compressed.ext}`, { type: compressed.mime })
+        const path = `${tenant.id}/products/${sku}.${compressed.ext}`
+        const { error: uploadErr } = await supabase.storage.from('product-images').upload(path, compressedFile, { contentType: compressed.mime })
         if (uploadErr) throw uploadErr
         const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(path)
         imageUrls.push(urlData.publicUrl)
