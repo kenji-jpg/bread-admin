@@ -1952,14 +1952,11 @@ export default function ShopPage() {
                   {/* 商品圖片 */}
                   <div className="aspect-square relative overflow-hidden" style={{ backgroundColor: '#F5E0C4', WebkitTouchCallout: 'none', userSelect: 'none' }}>
                     {product.image_url ? (
-                      <Image
+                      <img
                         src={product.image_url}
                         alt={product.name}
-                        fill
-                        className="object-cover pointer-events-none group-hover:scale-105 transition-transform duration-300"
-                        sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                        className="absolute inset-0 w-full h-full object-cover pointer-events-none group-hover:scale-105 transition-transform duration-300"
                         loading={index < 4 ? 'eager' : 'lazy'}
-                        priority={index < 4}
                         draggable={false}
                         onContextMenu={(e) => e.preventDefault()}
                       />
@@ -2155,12 +2152,10 @@ export default function ShopPage() {
                       >
                         {modalImages.map((url, i) => (
                           <div key={i} className="min-w-full relative" style={{ aspectRatio: '4/5', maxHeight: '55vh', WebkitTouchCallout: 'none', userSelect: 'none' }}>
-                            <Image
+                            <img
                               src={url}
                               alt={`${selectedProduct.name} ${i + 1}`}
-                              fill
-                              className="object-contain pointer-events-none"
-                              sizes="(max-width: 768px) 100vw, 400px"
+                              className="absolute inset-0 w-full h-full object-contain pointer-events-none"
                               draggable={false}
                               onContextMenu={(e) => e.preventDefault()}
                             />
@@ -2229,7 +2224,7 @@ export default function ShopPage() {
                   <div className="mt-2 flex gap-1.5 overflow-x-auto pb-1">
                     {modalImages.map((url, idx) => (
                       <div key={idx} className="relative shrink-0 w-14 h-14 rounded-lg overflow-hidden border" style={{ borderColor: idx === 0 ? (accentColor || '#D94E2B') : '#E5E7EB' }}>
-                        <Image src={url} alt={`圖${idx + 1}`} width={56} height={56} className="w-full h-full object-cover" />
+                        <img src={url} alt={`圖${idx + 1}`} className="w-full h-full object-cover" />
                         {idx === 0 && (
                           <span className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[8px] text-center leading-tight py-px">封面</span>
                         )}
