@@ -151,7 +151,7 @@ export default function SettingsPage() {
                 admin_line_ids: adminLineIds as string[],
                 myship_notify_email: tenant.myship_notify_email || '',
             })
-            setFreeShippingThreshold(String((tenant as Record<string, unknown>).free_shipping_threshold ?? 3500))
+            setFreeShippingThreshold(String(tenant.free_shipping_threshold ?? 3500))
         }
     }, [tenant])
 
