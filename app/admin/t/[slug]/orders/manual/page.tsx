@@ -250,6 +250,9 @@ export default function ManualOrdersPage() {
     const [rawText, setRawText] = useState('')
     const [isImporting, setIsImporting] = useState(false)
     const [showPreview, setShowPreview] = useState(false)
+    // 預設商品 / 金額：填了之後每行只寫暱稱即可
+    const [defaultProductName, setDefaultProductName] = useState('')
+    const [defaultAmount, setDefaultAmount] = useState('')
 
     // ============ 計算屬性 ============
 
@@ -504,10 +507,17 @@ export default function ManualOrdersPage() {
 
     // ============ 匯入相關 ============
 
-    // 解析邏輯：暱稱 商品名稱(選填) 金額
-    // 例如：小幫手2 打鼓玩具 500 或 小幫手2 500
+    // 解析邏輯：
+    // A) 舊格式（行含金額）：暱稱 [商品名] 金額，如 "小美 打鼓玩具 780" 或 "阿華 500"
+    // B) 新格式（有預設商品/金額）：行可省略商品+金額，僅寫暱稱 / 暱稱 +1 / 暱稱 *2
+    //    數量 token 支援：+N、*N、xN、×N（預設 1）
     const parsedEntries = useMemo((): ParsedEntry[] => {
         if (!rawText.trim()) return []
+
+        const defaultAmt = defaultAmount ? parseInt(defaultAmount, 10) : NaN
+        const hasDefaultAmt = !isNaN(defaultAmt) && defaultAmt > 0
+        const defaultProd = defaultProductName.trim()
+        const qtyRegex = /^[+*×x](\d+)$/i
 
         const lines = rawText.trim().split('\n')
         return lines.map(line => {
@@ -516,61 +526,78 @@ export default function ManualOrdersPage() {
                 return { nickname: '', productName: '', amounts: [], totalAmount: 0, note: '', hasMultiple: false, isValid: false, errorMessage: '空行' }
             }
 
-            // 從右邊往左解析：最後是金額，中間可能是商品名，剩下全是暱稱
-            // 支援暱稱含空格（如 "Nicole Tung 打鼓玩具 500"）
             const parts = trimmedLine.split(/\s+/)
-            if (parts.length < 2) {
-                return { nickname: trimmedLine, productName: '', amounts: [], totalAmount: 0, note: '', hasMultiple: false, isValid: false, errorMessage: '缺少金額' }
+            const lastPart = parts[parts.length - 1]
+            const lastIsAmount = /^-?\d+(\+-?\d+)*$/.test(lastPart)
+
+            // ===== 情境 A：行內最後是金額（暱稱 [商品] 金額） =====
+            if (lastIsAmount) {
+                const amountPart = lastPart
+                let productName = defaultProd
+                let nicknameEndIndex = parts.length - 1
+
+                if (parts.length >= 3) {
+                    const secondLast = parts[parts.length - 2]
+                    if (!/^-?\d+(\+-?\d+)*$/.test(secondLast)) {
+                        productName = secondLast
+                        nicknameEndIndex = parts.length - 2
+                    }
+                }
+
+                const nickname = parts.slice(0, nicknameEndIndex).join(' ')
+                if (!nickname) {
+                    return { nickname: '', productName: '', amounts: [], totalAmount: 0, note: '', hasMultiple: false, isValid: false, errorMessage: '缺少暱稱' }
+                }
+
+                const amountStrings = amountPart.split('+').map(s => s.trim())
+                const amounts: number[] = []
+                for (const amtStr of amountStrings) {
+                    const amt = parseInt(amtStr, 10)
+                    if (isNaN(amt)) {
+                        return { nickname, productName: '', amounts: [], totalAmount: 0, note: '', hasMultiple: false, isValid: false, errorMessage: '金額格式錯誤' }
+                    }
+                    amounts.push(amt)
+                }
+
+                const totalAmount = amounts.reduce((sum, a) => sum + a, 0)
+                const hasMultiple = amounts.length > 1
+                const note = hasMultiple ? amountPart : ''
+                return { nickname, productName, amounts, totalAmount, note, hasMultiple, isValid: true }
             }
 
-            // 最後一個詞為金額
-            const amountPart = parts[parts.length - 1]
+            // ===== 情境 B：行內無金額，必須有預設金額 =====
+            if (!hasDefaultAmt) {
+                return { nickname: trimmedLine, productName: '', amounts: [], totalAmount: 0, note: '', hasMultiple: false, isValid: false, errorMessage: '缺少金額（或填入預設金額）' }
+            }
 
-            // 檢查倒數第二個詞是否為金額格式，如果不是就當商品名
-            let productName = ''
-            let nicknameEndIndex = parts.length - 1 // 預設：暱稱到金額前
-
-            if (parts.length >= 3) {
-                const secondLast = parts[parts.length - 2]
-                // 如果倒數第二個不是數字/金額格式，就當商品名
-                if (!/^-?\d+(\+-?\d+)*$/.test(secondLast)) {
-                    productName = secondLast
-                    nicknameEndIndex = parts.length - 2
+            let qty = 1
+            const nicknameParts: string[] = []
+            for (const part of parts) {
+                const m = part.match(qtyRegex)
+                if (m) {
+                    qty = parseInt(m[1], 10) || 1
+                } else {
+                    nicknameParts.push(part)
                 }
             }
 
-            // 剩下的全部是暱稱（支援含空格的暱稱）
-            const nickname = parts.slice(0, nicknameEndIndex).join(' ')
-
+            const nickname = nicknameParts.join(' ')
             if (!nickname) {
                 return { nickname: '', productName: '', amounts: [], totalAmount: 0, note: '', hasMultiple: false, isValid: false, errorMessage: '缺少暱稱' }
             }
 
-            // 解析金額（支援 300+200 格式）
-            const amountStrings = amountPart.split('+').map(s => s.trim())
-            const amounts: number[] = []
-            let hasError = false
-
-            for (const amtStr of amountStrings) {
-                const amt = parseInt(amtStr, 10)
-                if (isNaN(amt)) {
-                    hasError = true
-                    break
-                }
-                amounts.push(amt)
+            const totalAmount = defaultAmt * qty
+            return {
+                nickname,
+                productName: defaultProd,
+                amounts: [totalAmount],
+                totalAmount,
+                note: qty > 1 ? `×${qty}` : '',
+                hasMultiple: false,
+                isValid: true,
             }
-
-            if (hasError || amounts.length === 0) {
-                return { nickname, productName: '', amounts: [], totalAmount: 0, note: '', hasMultiple: false, isValid: false, errorMessage: '金額格式錯誤' }
-            }
-
-            const totalAmount = amounts.reduce((sum, a) => sum + a, 0)
-            const hasMultiple = amounts.length > 1
-            const note = hasMultiple ? amountPart : ''
-
-            return { nickname, productName, amounts, totalAmount, note, hasMultiple, isValid: true }
         }).filter(e => e.nickname || e.errorMessage)
-    }, [rawText])
+    }, [rawText, defaultAmount, defaultProductName])
 
     const previewStats = useMemo(() => {
         const valid = parsedEntries.filter(e => e.isValid).length
@@ -798,11 +825,52 @@ ${orderList}
                                 </div>
                             </div>
 
+                            {/* 預設商品 / 金額（熱賣商品批次登記用，可選填） */}
+                            <div className="space-y-2">
+                                <Label className="flex items-center gap-1.5">
+                                    <Package className="h-4 w-4" />
+                                    預設商品 / 金額（選填，熱賣款批次用）
+                                </Label>
+                                <div className="flex items-center gap-2">
+                                    <Input
+                                        placeholder="商品名稱（例如：明信片）"
+                                        value={defaultProductName}
+                                        onChange={(e) => {
+                                            setDefaultProductName(e.target.value)
+                                            setShowPreview(false)
+                                        }}
+                                        className="rounded-xl flex-1"
+                                    />
+                                    <Input
+                                        type="number"
+                                        inputMode="numeric"
+                                        placeholder="金額（例如：180）"
+                                        value={defaultAmount}
+                                        onChange={(e) => {
+                                            setDefaultAmount(e.target.value)
+                                            setShowPreview(false)
+                                        }}
+                                        className="rounded-xl w-40 font-mono"
+                                    />
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                    填了預設金額後，名單每行只要寫「暱稱」，或加「+1 / *2」表示數量即可。
+                                </p>
+                            </div>
+
                             {/* 名單輸入 */}
                             <div className="space-y-2">
-                                <Label>名單（每行：暱稱 商品名稱 金額）</Label>
+                                <Label>
+                                    {defaultAmount && parseInt(defaultAmount, 10) > 0
+                                        ? '名單（每行：暱稱，可加 +1 / *2 表示數量）'
+                                        : '名單（每行：暱稱 商品名稱 金額）'}
+                                </Label>
                                 <Textarea
-                                    placeholder={`小美 打鼓玩具 780\n阿華 500\n小華 可愛熊娃娃 480+570+660`}
+                                    placeholder={
+                                        defaultAmount && parseInt(defaultAmount, 10) > 0
+                                            ? `小美\n阿華 +1\n小華 *2\n凡凡 +3`
+                                            : `小美 打鼓玩具 780\n阿華 500\n小華 可愛熊娃娃 480+570+660`
+                                    }
                                     value={rawText}
                                     onChange={(e) => {
                                         setRawText(e.target.value)
