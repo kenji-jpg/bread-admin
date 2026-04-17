@@ -68,12 +68,28 @@ import {
     ChevronsLeft,
     ChevronsRight,
     PenLine,
+    Link2,
+    Users,
+    Loader2,
 } from 'lucide-react'
 
 type OrderWithDetails = OrderItem & {
     member?: Member
     product?: Product
     auction_order?: { product_name: string | null }[]
+    // 未綁定喊單（auction_orders 來源）才會有以下欄位
+    isUnbound?: boolean
+    auctionOrderId?: string
+    winnerNickname?: string
+    auctionDate?: string | null
+}
+
+interface MemberOption {
+    id: string
+    nickname: string
+    display_name: string
+    line_user_id: string
+    created_at?: string
 }
 
 // 取得商品顯示名稱（優先順序：product.name → auction_order.product_name → item_name）+ 規格名
@@ -115,6 +131,15 @@ export default function OrdersPage() {
     // 已結帳訂單檢視 Dialog
     const [viewingOrder, setViewingOrder] = useState<OrderWithDetails | null>(null)
 
+    // 綁定會員 Modal（針對待綁定 auction_orders）
+    const [claimOrder, setClaimOrder] = useState<OrderWithDetails | null>(null)
+    const [claimSearchKeyword, setClaimSearchKeyword] = useState('')
+    const [claimSearchResults, setClaimSearchResults] = useState<MemberOption[]>([])
+    const [claimSelectedMember, setClaimSelectedMember] = useState<MemberOption | null>(null)
+    const [isClaimSearching, setIsClaimSearching] = useState(false)
+    const [isClaiming, setIsClaiming] = useState(false)
+    const [claimUpdateNickname, setClaimUpdateNickname] = useState(true)
+
     // 批量結帳 Dialog 狀態
     const [batchCheckoutConfirm, setBatchCheckoutConfirm] = useState(false)
     const [checkoutShippingMethod, setCheckoutShippingMethod] = useState<'myship' | 'myship_free' | 'delivery' | 'pickup'>('myship')
@@ -128,21 +153,62 @@ export default function OrdersPage() {
         if (!tenant) return
         setIsLoading(true)
 
-        // 載入所有訂單資料（前端分頁），含 auction_orders 的 product_name
-        const { data } = await supabase
-            .from('order_items')
-            .select(`
-                *,
-                member:members(*),
-                product:products(*),
-                auction_order:auction_orders!auction_orders_order_item_id_fkey(product_name)
-            `)
-            .eq('tenant_id', tenant.id)
-            .order('created_at', { ascending: false })
+        // 平行載入：order_items + 未綁定 auction_orders
+        const [orderItemsResult, unboundAuctionResult] = await Promise.all([
+            supabase
+                .from('order_items')
+                .select(`
+                    *,
+                    member:members(*),
+                    product:products(*),
+                    auction_order:auction_orders!auction_orders_order_item_id_fkey(product_name)
+                `)
+                .eq('tenant_id', tenant.id)
+                .order('created_at', { ascending: false }),
+            supabase
+                .from('auction_orders')
+                .select('id, winner_nickname, amount, product_name, raw_input, note, auction_date, created_at')
+                .eq('tenant_id', tenant.id)
+                .eq('status', 'pending')
+                .is('member_id', null)
+                .is('order_item_id', null)
+                .order('created_at', { ascending: false }),
+        ])
 
-        if (data) {
-            setOrders(data)
-        }
+        const orderItems = (orderItemsResult.data || []) as OrderWithDetails[]
+
+        // 將未綁定 auction_orders 映射為 OrderWithDetails 佔位項
+        const unboundItems: OrderWithDetails[] = (unboundAuctionResult.data || []).map((a) => ({
+            id: a.id,
+            tenant_id: tenant.id,
+            product_id: null,
+            member_id: null,
+            checkout_id: null,
+            customer_name: a.winner_nickname,
+            item_name: a.product_name || a.raw_input || a.winner_nickname,
+            variant_name: null,
+            variant_id: null,
+            sku: '-',
+            quantity: 1,
+            unit_price: a.amount,
+            arrived_qty: 0,
+            is_arrived: false,
+            status: 'pending',
+            note: a.note,
+            created_at: a.created_at,
+            updated_at: a.created_at,
+            isUnbound: true,
+            auctionOrderId: a.id,
+            winnerNickname: a.winner_nickname,
+            auctionDate: a.auction_date,
+        } as unknown as OrderWithDetails))
+
+        // 合併後依時間排序
+        const merged = [...orderItems, ...unboundItems].sort(
+            (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        )
+
+        setOrders(merged)
         setIsLoading(false)
     }
 
@@ -199,16 +265,18 @@ export default function OrdersPage() {
 
             let statusMatch = true
             const arrivedQty = order.arrived_qty ?? 0
-            if (statusFilter === 'pending') {
-                statusMatch = order.status !== 'cancelled' && !order.is_arrived && arrivedQty === 0 && !order.checkout_id
+            if (statusFilter === 'unbound') {
+                statusMatch = !!order.isUnbound
+            } else if (statusFilter === 'pending') {
+                statusMatch = !order.isUnbound && order.status !== 'cancelled' && !order.is_arrived && arrivedQty === 0 && !order.checkout_id
             } else if (statusFilter === 'partial') {
-                statusMatch = order.status !== 'cancelled' && !order.is_arrived && arrivedQty > 0 && arrivedQty < order.quantity && !order.checkout_id
+                statusMatch = !order.isUnbound && order.status !== 'cancelled' && !order.is_arrived && arrivedQty > 0 && arrivedQty < order.quantity && !order.checkout_id
             } else if (statusFilter === 'ready') {
-                statusMatch = order.status !== 'cancelled' && order.is_arrived && !order.checkout_id
+                statusMatch = !order.isUnbound && order.status !== 'cancelled' && order.is_arrived && !order.checkout_id
             } else if (statusFilter === 'completed') {
-                statusMatch = !!order.checkout_id
+                statusMatch = !order.isUnbound && !!order.checkout_id
             } else if (statusFilter === 'cancelled') {
-                statusMatch = order.status === 'cancelled'
+                statusMatch = !order.isUnbound && order.status === 'cancelled'
             }
 
             return searchMatch && statusMatch
@@ -228,6 +296,9 @@ export default function OrdersPage() {
     }, [searchQuery, statusFilter, showCompleted, pageSize])
 
     const getStatusBadge = (order: OrderWithDetails) => {
+        if (order.isUnbound) {
+            return <Badge className="bg-muted/60 text-muted-foreground border-muted">待綁定</Badge>
+        }
         if (order.status === 'cancelled') {
             return <Badge className="bg-destructive/20 text-destructive border-destructive/30">配貨失敗</Badge>
         }
@@ -300,20 +371,31 @@ export default function OrdersPage() {
         setIsSubmitting(false)
     }
 
-    // 刪除訂單
+    // 刪除訂單（待綁定走 auction_order RPC，一般訂單走 order_item RPC）
     const handleDeleteOrder = async () => {
         if (!deleteOrder || !tenant) return
         setIsSubmitting(true)
 
-        const { data, error } = await supabase.rpc('delete_order_item_v1', {
-            p_tenant_id: tenant.id,
-            p_order_item_id: deleteOrder.id,
-        })
-
-        if (error || !data?.success) {
-            toast.error(data?.error || data?.message || '刪除失敗')
-            setIsSubmitting(false)
-            return
+        if (deleteOrder.isUnbound && deleteOrder.auctionOrderId) {
+            const { data, error } = await supabase.rpc('delete_auction_order_v1', {
+                p_tenant_id: tenant.id,
+                p_auction_order_id: deleteOrder.auctionOrderId,
+            })
+            if (error || !data?.success) {
+                toast.error(data?.error || data?.message || '刪除失敗')
+                setIsSubmitting(false)
+                return
+            }
+        } else {
+            const { data, error } = await supabase.rpc('delete_order_item_v1', {
+                p_tenant_id: tenant.id,
+                p_order_item_id: deleteOrder.id,
+            })
+            if (error || !data?.success) {
+                toast.error(data?.error || data?.message || '刪除失敗')
+                setIsSubmitting(false)
+                return
+            }
         }
 
         setOrders((prev) => prev.filter((o) => o.id !== deleteOrder.id))
@@ -322,11 +404,78 @@ export default function OrdersPage() {
         setIsSubmitting(false)
     }
 
-    // 全選 / 取消全選（所有篩選後的訂單，跨頁）
+    // 全選 / 取消全選（所有篩選後的訂單，跨頁；排除已結帳、待綁定）
     const allSelectableIds = useMemo(() =>
-        filteredOrders.filter((o) => !o.checkout_id).map((o) => o.id),
+        filteredOrders.filter((o) => !o.checkout_id && !o.isUnbound).map((o) => o.id),
         [filteredOrders]
     )
+
+    // 搜尋會員（供綁定 Modal）
+    const searchMembers = async (keyword: string) => {
+        if (!tenant?.id) return
+        setIsClaimSearching(true)
+        try {
+            const { data } = await supabase.rpc('search_members_v1', {
+                p_tenant_id: tenant.id,
+                p_keyword: keyword || null,
+                p_limit: 20,
+            }) as { data: { success: boolean; members: MemberOption[] } | null }
+            if (data?.success) {
+                setClaimSearchResults(data.members || [])
+            }
+        } finally {
+            setIsClaimSearching(false)
+        }
+    }
+
+    // 打開綁定 Modal
+    const openClaimDialog = (order: OrderWithDetails) => {
+        setClaimOrder(order)
+        setClaimSelectedMember(null)
+        setClaimSearchKeyword('')
+        setClaimSearchResults([])
+        setClaimUpdateNickname(true)
+    }
+
+    // 綁定會員（呼叫 admin_claim_auction_order_v1）
+    const handleClaim = async () => {
+        if (!tenant?.id || !claimOrder || !claimSelectedMember || !claimOrder.auctionOrderId) return
+        setIsClaiming(true)
+        try {
+            const { data, error } = await supabase.rpc('admin_claim_auction_order_v1', {
+                p_tenant_id: tenant.id,
+                p_auction_order_id: claimOrder.auctionOrderId,
+                p_member_id: claimSelectedMember.id,
+                p_update_nickname: claimUpdateNickname,
+            }) as { data: { success: boolean; message?: string; nickname_updated?: boolean; new_nickname?: string } | null; error: Error | null }
+
+            if (error || !data?.success) {
+                toast.error(data?.message || error?.message || '綁定失敗')
+                return
+            }
+
+            if (data.nickname_updated) {
+                toast.success(`已綁定會員，暱稱已更新為「${data.new_nickname}」`)
+            } else {
+                toast.success(data.message || '已綁定會員')
+            }
+            setClaimOrder(null)
+            fetchOrders()
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : '未知錯誤'
+            toast.error('綁定失敗：' + msg)
+        } finally {
+            setIsClaiming(false)
+        }
+    }
+
+    // 搜尋 effect
+    useEffect(() => {
+        if (claimOrder && tenant?.id) {
+            searchMembers(claimSearchKeyword)
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [claimOrder, claimSearchKeyword])
 
     const handleSelectAll = () => {
         const isAllSelected = allSelectableIds.length > 0 &&
@@ -690,7 +839,22 @@ export default function OrdersPage() {
             </div>
 
             {/* Stats Summary */}
-            <div className="grid gap-4 md:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-5">
+                <Card className="border-border/50">
+                    <CardContent className="pt-6">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
+                                <Link2 className="h-5 w-5 text-muted-foreground" />
+                            </div>
+                            <div>
+                                <p className="text-2xl font-bold">
+                                    {orders.filter((o) => o.isUnbound).length}
+                                </p>
+                                <p className="text-sm text-muted-foreground">待綁定</p>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
                 <Card className="border-border/50">
                     <CardContent className="pt-6">
                         <div className="flex items-center gap-3">
@@ -699,7 +863,7 @@ export default function OrdersPage() {
                             </div>
                             <div>
                                 <p className="text-2xl font-bold">
-                                    {orders.filter((o) => !o.is_arrived && (o.arrived_qty ?? 0) === 0 && !o.checkout_id).length}
+                                    {orders.filter((o) => !o.isUnbound && !o.is_arrived && (o.arrived_qty ?? 0) === 0 && !o.checkout_id).length}
                                 </p>
                                 <p className="text-sm text-muted-foreground">待到貨</p>
                             </div>
@@ -714,7 +878,7 @@ export default function OrdersPage() {
                             </div>
                             <div>
                                 <p className="text-2xl font-bold">
-                                    {orders.filter((o) => !o.is_arrived && (o.arrived_qty ?? 0) > 0 && (o.arrived_qty ?? 0) < o.quantity && !o.checkout_id).length}
+                                    {orders.filter((o) => !o.isUnbound && !o.is_arrived && (o.arrived_qty ?? 0) > 0 && (o.arrived_qty ?? 0) < o.quantity && !o.checkout_id).length}
                                 </p>
                                 <p className="text-sm text-muted-foreground">部分到貨</p>
                             </div>
@@ -729,7 +893,7 @@ export default function OrdersPage() {
                             </div>
                             <div>
                                 <p className="text-2xl font-bold">
-                                    {orders.filter((o) => o.is_arrived && !o.checkout_id).length}
+                                    {orders.filter((o) => !o.isUnbound && o.is_arrived && !o.checkout_id).length}
                                 </p>
                                 <p className="text-sm text-muted-foreground">可結帳</p>
                             </div>
@@ -773,6 +937,7 @@ export default function OrdersPage() {
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">全部狀態</SelectItem>
+                                <SelectItem value="unbound">待綁定</SelectItem>
                                 <SelectItem value="pending">待到貨</SelectItem>
                                 <SelectItem value="partial">部分到貨</SelectItem>
                                 <SelectItem value="ready">可結帳</SelectItem>
@@ -839,7 +1004,10 @@ export default function OrdersPage() {
                                             transition={{ delay: index * 0.02 }}
                                             className="group hover:bg-muted/50 transition-colors cursor-pointer"
                                             onClick={() => {
-                                                if (order.checkout_id) {
+                                                if (order.isUnbound) {
+                                                    // 待綁定 → 開綁定 Modal
+                                                    openClaimDialog(order)
+                                                } else if (order.checkout_id) {
                                                     // 已結帳 → 唯讀檢視
                                                     setViewingOrder(order)
                                                 } else {
@@ -849,7 +1017,7 @@ export default function OrdersPage() {
                                             }}
                                         >
                                             <TableCell className="pl-5" onClick={(e) => e.stopPropagation()}>
-                                                {!order.checkout_id && (
+                                                {!order.checkout_id && !order.isUnbound && (
                                                     <Checkbox
                                                         checked={selectedOrders.has(order.id)}
                                                         onCheckedChange={() => toggleOrderSelection(order.id)}
@@ -1182,6 +1350,110 @@ export default function OrdersPage() {
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setViewingOrder(null)} className="rounded-xl">
                             關閉
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* 綁定會員 Modal（待綁定訂單） */}
+            <Dialog open={!!claimOrder} onOpenChange={(open) => !open && setClaimOrder(null)}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Link2 className="h-5 w-5" />
+                            綁定會員
+                        </DialogTitle>
+                        <DialogDescription>
+                            訂單：{claimOrder?.winnerNickname}
+                            {claimOrder?.item_name && ` - ${claimOrder.item_name}`}
+                            {' '}${(claimOrder?.unit_price ?? 0).toLocaleString()}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input
+                                placeholder="搜尋會員暱稱或名稱..."
+                                value={claimSearchKeyword}
+                                onChange={(e) => setClaimSearchKeyword(e.target.value)}
+                                className="pl-9 rounded-xl"
+                            />
+                        </div>
+
+                        <div className="border rounded-xl max-h-64 overflow-y-auto">
+                            {isClaimSearching ? (
+                                <div className="flex items-center justify-center py-8">
+                                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                                </div>
+                            ) : claimSearchResults.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-8 text-center">
+                                    <Users className="h-8 w-8 text-muted-foreground/50 mb-2" />
+                                    <p className="text-sm text-muted-foreground">
+                                        {claimSearchKeyword ? '找不到符合的會員' : '尚無會員資料'}
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="divide-y">
+                                    {claimSearchResults.map((member) => (
+                                        <button
+                                            key={member.id}
+                                            onClick={() => setClaimSelectedMember(member)}
+                                            className={`w-full px-4 py-3 text-left hover:bg-muted/50 transition-colors flex items-center justify-between ${
+                                                claimSelectedMember?.id === member.id ? 'bg-primary/10 border-l-2 border-primary' : ''
+                                            }`}
+                                        >
+                                            <div>
+                                                <p className="font-medium">{member.display_name || member.nickname}</p>
+                                                <p className="text-sm text-muted-foreground">
+                                                    暱稱：{member.nickname}
+                                                </p>
+                                            </div>
+                                            {claimSelectedMember?.id === member.id && (
+                                                <CheckCircle2 className="h-5 w-5 text-primary" />
+                                            )}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {claimSelectedMember && claimOrder && (
+                            <div className="flex items-center space-x-2 pt-2 border-t">
+                                <Checkbox
+                                    id="claim-update-nickname"
+                                    checked={claimUpdateNickname}
+                                    onCheckedChange={(checked) => setClaimUpdateNickname(checked === true)}
+                                />
+                                <label
+                                    htmlFor="claim-update-nickname"
+                                    className="text-sm font-medium leading-none cursor-pointer"
+                                >
+                                    同時更新會員暱稱為「{claimOrder.winnerNickname}」
+                                </label>
+                            </div>
+                        )}
+                    </div>
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={() => setClaimOrder(null)}
+                            className="rounded-xl"
+                        >
+                            取消
+                        </Button>
+                        <Button
+                            onClick={handleClaim}
+                            disabled={!claimSelectedMember || isClaiming}
+                            className="gradient-primary rounded-xl"
+                        >
+                            {isClaiming ? (
+                                <>
+                                    <Loader2 className="animate-spin mr-2 h-4 w-4" />
+                                    綁定中...
+                                </>
+                            ) : (
+                                '確認綁定'
+                            )}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
