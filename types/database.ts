@@ -77,6 +77,8 @@ export interface Tenant {
   myship_notify_email?: string | null
   // 租戶專屬 LIFF ID（用於產生獨立的商城連結）
   liff_id?: string | null
+  // 滿額免運門檻
+  free_shipping_threshold?: number
 }
 
 export interface Product {
