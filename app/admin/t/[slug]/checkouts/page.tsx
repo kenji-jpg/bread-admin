@@ -68,6 +68,7 @@ import {
     Download,
     Calendar,
     X,
+    Merge,
 } from 'lucide-react'
 
 // 狀態標籤配置 (按照後端文件)
@@ -183,6 +184,8 @@ export default function CheckoutsPage() {
     // 選取狀態
     const [selectedCheckouts, setSelectedCheckouts] = useState<Set<string>>(new Set())
     const [batchDeleteConfirm, setBatchDeleteConfirm] = useState(false)
+    const [mergeConfirmOpen, setMergeConfirmOpen] = useState(false)
+    const [isMerging, setIsMerging] = useState(false)
 
     // 下載資料 Dialog 狀態
     const [downloadDialogOpen, setDownloadDialogOpen] = useState(false)
@@ -579,6 +582,49 @@ export default function CheckoutsPage() {
         }).length
     }, [selectedCheckouts, checkouts])
 
+    // 合併驗證
+    const mergeInfo = useMemo(() => {
+        const ids = Array.from(selectedCheckouts)
+        if (ids.length < 2) return { canMerge: false, reason: '請選取至少 2 張' }
+        const selected = ids.map(id => checkouts.find(c => c.id === id)).filter(Boolean) as CheckoutListItem[]
+        // 狀態檢查
+        if (selected.some(c => !['pending', 'url_sent'].includes(c.shipping_status))) {
+            return { canMerge: false, reason: '含有非待處理/待下單的結帳單' }
+        }
+        // 同一會員（用 customer_name 判斷）
+        const customerNames = new Set(selected.map(c => c.customer_name))
+        if (customerNames.size > 1) return { canMerge: false, reason: '不同會員無法合併' }
+        // 預估金額
+        const estimatedTotal = selected.reduce((sum, c) => sum + c.total_amount, 0)
+        const customerName = selected[0]?.customer_name || '未知'
+        const shippingMethod = selected[0]?.shipping_method || 'myship'
+        const willAutoFree = estimatedTotal >= 3500 && shippingMethod === 'myship'
+        return { canMerge: true, estimatedTotal, customerName, count: selected.length, willAutoFree, shippingMethod }
+    }, [selectedCheckouts, checkouts])
+
+    // 合併處理
+    const handleMergeCheckouts = async () => {
+        setIsMerging(true)
+        try {
+            const result = await checkoutApiRef.current.mergeCheckouts(Array.from(selectedCheckouts))
+            if (result.success) {
+                toast.success(
+                    `已合併為 ${result.checkout_no}（$${result.new_total?.toLocaleString()}，${result.item_count} 件）` +
+                    (result.auto_free_shipping ? ' 🎉 已自動切換為免運' : '')
+                )
+                setSelectedCheckouts(new Set())
+                setMergeConfirmOpen(false)
+                fetchCheckouts()
+            } else {
+                toast.error(result.error || '合併失敗')
+            }
+        } catch {
+            toast.error('合併失敗')
+        } finally {
+            setIsMerging(false)
+        }
+    }
+
     // ========================================
     // 下載資料功能
     // ========================================
@@ -867,6 +913,17 @@ export default function CheckoutsPage() {
                                         </span>
                                     )}
                                 </span>
+                                <Button
+                                    variant="default"
+                                    size="sm"
+                                    onClick={() => setMergeConfirmOpen(true)}
+                                    disabled={!mergeInfo.canMerge}
+                                    className="rounded-xl"
+                                    title={!mergeInfo.canMerge ? mergeInfo.reason : undefined}
+                                >
+                                    <Merge className="h-4 w-4 mr-2" />
+                                    合併結帳單
+                                </Button>
                                 <Button
                                     variant="destructive"
                                     size="sm"
@@ -1611,6 +1668,43 @@ export default function CheckoutsPage() {
                             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                         >
                             {isUpdating ? '刪除中...' : `確認刪除 (${deletableCount} 筆)`}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* 合併確認 Dialog */}
+            <AlertDialog open={mergeConfirmOpen} onOpenChange={setMergeConfirmOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>合併結帳單</AlertDialogTitle>
+                        <AlertDialogDescription asChild>
+                            <div className="space-y-2">
+                                <p>
+                                    將 <span className="font-bold">{mergeInfo.canMerge && 'count' in mergeInfo ? mergeInfo.count : 0}</span> 張結帳單合併為一張
+                                    （會員：{mergeInfo.canMerge && 'customerName' in mergeInfo ? mergeInfo.customerName : '-'}）
+                                </p>
+                                <p>
+                                    合併後預估金額：<span className="font-bold text-primary">${mergeInfo.canMerge && 'estimatedTotal' in mergeInfo ? mergeInfo.estimatedTotal?.toLocaleString() : 0}</span>
+                                </p>
+                                {mergeInfo.canMerge && 'willAutoFree' in mergeInfo && mergeInfo.willAutoFree && (
+                                    <p className="text-green-600 font-medium">
+                                        🎉 金額 ≥ $3,500，將自動切換為賣貨便(免運)
+                                    </p>
+                                )}
+                                <p className="text-muted-foreground text-xs mt-2">
+                                    合併後以最早的結帳單為主單，其餘結帳單將被刪除。
+                                </p>
+                            </div>
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isMerging}>取消</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleMergeCheckouts}
+                            disabled={isMerging}
+                        >
+                            {isMerging ? '合併中...' : '確認合併'}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
