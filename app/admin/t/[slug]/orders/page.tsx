@@ -444,6 +444,36 @@ export default function OrdersPage() {
         }
     }
 
+    // 批量改回待到貨（只處理已到貨且未結帳的）
+    const handleBatchMarkPending = async () => {
+        if (selectedOrders.size === 0) return
+        const ids = Array.from(selectedOrders).filter((id) => {
+            const order = orders.find((o) => o.id === id)
+            return order && order.is_arrived && !order.checkout_id
+        })
+        if (ids.length === 0) {
+            toast.error('選中的訂單中沒有可改回待到貨的（需為可結帳且未結帳）')
+            return
+        }
+        setIsSubmitting(true)
+        try {
+            const { error } = await supabase
+                .from('order_items')
+                .update({ is_arrived: false, arrived_qty: 0, status: 'pending' })
+                .in('id', ids)
+                .eq('tenant_id', tenant?.id)
+            if (error) throw error
+            toast.success(`已將 ${ids.length} 筆訂單改回待到貨`)
+            setOrders(prev => prev.map(o => ids.includes(o.id) ? { ...o, is_arrived: false, arrived_qty: 0, status: 'pending' } : o))
+            setSelectedOrders(new Set())
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : '未知錯誤'
+            toast.error('操作失敗：' + msg)
+        } finally {
+            setIsSubmitting(false)
+        }
+    }
+
     // 批量結帳 - 開啟確認 Dialog
     const handleBatchCheckout = () => {
         // 篩選出選中且已到貨的訂單
@@ -1339,6 +1369,18 @@ export default function OrdersPage() {
                                     >
                                         <Receipt className="mr-1 h-3 w-3" />
                                         結帳 ({selectedStats.arrivedCount})
+                                    </Button>
+                                )}
+                                {selectedStats.arrivedCount > 0 && (
+                                    <Button
+                                        onClick={handleBatchMarkPending}
+                                        disabled={isSubmitting}
+                                        size="xs"
+                                        variant="outline"
+                                        className="rounded-full h-7 px-3 text-xs"
+                                    >
+                                        <Clock className="mr-1 h-3 w-3" />
+                                        改回待到貨 ({selectedStats.arrivedCount})
                                     </Button>
                                 )}
                                 {selectedStats.pendingCount > 0 && (
