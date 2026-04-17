@@ -97,6 +97,8 @@ export default function SettingsPage() {
     const { canUseMyshipEmail, canAccessShop } = usePermission()
     const [formData, setFormData] = useState<Partial<Tenant>>({})
     const [isSaving, setIsSaving] = useState(false)
+    const [freeShippingThreshold, setFreeShippingThreshold] = useState<string>('3500')
+    const [isSavingThreshold, setIsSavingThreshold] = useState(false)
     const [showToken, setShowToken] = useState(false)
     const [showSecret, setShowSecret] = useState(false)
     const [activeTab, setActiveTab] = useState('basic') // 控制當前 Tab
@@ -149,6 +151,7 @@ export default function SettingsPage() {
                 admin_line_ids: adminLineIds as string[],
                 myship_notify_email: tenant.myship_notify_email || '',
             })
+            setFreeShippingThreshold(String((tenant as Record<string, unknown>).free_shipping_threshold ?? 3500))
         }
     }, [tenant])
 
@@ -737,6 +740,57 @@ export default function SettingsPage() {
                                         {isCrossTenantAccess && (
                                             <p className="text-xs text-amber-500 mt-2">跨租戶存取時無法編輯</p>
                                         )}
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            {/* 出貨設定 */}
+                            <Card className="border-border/50 mt-6">
+                                <CardHeader>
+                                    <CardTitle className="text-lg">出貨設定</CardTitle>
+                                    <CardDescription>賣貨便免運門檻</CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    <div className="space-y-2">
+                                        <Label>滿額免運門檻（NT$）</Label>
+                                        <p className="text-xs text-muted-foreground">
+                                            合併結帳單後，商品金額達此門檻將自動切換為賣貨便(免運)。設 0 表示不啟用。
+                                        </p>
+                                        <div className="flex gap-3 items-center">
+                                            <Input
+                                                type="text"
+                                                inputMode="numeric"
+                                                value={freeShippingThreshold}
+                                                onChange={(e) => setFreeShippingThreshold(e.target.value.replace(/[^0-9]/g, ''))}
+                                                className="w-32 rounded-xl"
+                                                disabled={isCrossTenantAccess}
+                                            />
+                                            <Button
+                                                size="sm"
+                                                onClick={async () => {
+                                                    setIsSavingThreshold(true)
+                                                    try {
+                                                        const { data, error } = await supabase.rpc('update_free_shipping_threshold_v1', {
+                                                            p_tenant_id: tenant!.id,
+                                                            p_threshold: parseInt(freeShippingThreshold) || 0,
+                                                        })
+                                                        if (error || !data?.success) {
+                                                            toast.error(data?.error || '儲存失敗')
+                                                        } else {
+                                                            toast.success(`免運門檻已更新為 $${parseInt(freeShippingThreshold).toLocaleString()}`)
+                                                        }
+                                                    } catch {
+                                                        toast.error('儲存失敗')
+                                                    } finally {
+                                                        setIsSavingThreshold(false)
+                                                    }
+                                                }}
+                                                disabled={isSavingThreshold || isCrossTenantAccess}
+                                                className="rounded-xl"
+                                            >
+                                                {isSavingThreshold ? '儲存中...' : '儲存'}
+                                            </Button>
+                                        </div>
                                     </div>
                                 </CardContent>
                             </Card>

@@ -598,7 +598,8 @@ export default function CheckoutsPage() {
         const estimatedTotal = selected.reduce((sum, c) => sum + c.total_amount, 0)
         const customerName = selected[0]?.customer_name || '未知'
         const shippingMethod = selected[0]?.shipping_method || 'myship'
-        const willAutoFree = estimatedTotal >= 3500 && shippingMethod === 'myship'
+        const threshold = (tenant as Record<string, unknown>)?.free_shipping_threshold as number || 3500
+        const willAutoFree = threshold > 0 && estimatedTotal >= threshold && shippingMethod === 'myship'
         return { canMerge: true, estimatedTotal, customerName, count: selected.length, willAutoFree, shippingMethod }
     }, [selectedCheckouts, checkouts])
 
@@ -1689,7 +1690,7 @@ export default function CheckoutsPage() {
                                 </p>
                                 {mergeInfo.canMerge && 'willAutoFree' in mergeInfo && mergeInfo.willAutoFree && (
                                     <p className="text-green-600 font-medium">
-                                        🎉 金額 ≥ $3,500，將自動切換為賣貨便(免運)
+                                        🎉 金額達免運門檻，將自動切換為賣貨便(免運)
                                     </p>
                                 )}
                                 <p className="text-muted-foreground text-xs mt-2">
