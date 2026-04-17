@@ -196,6 +196,7 @@ interface UseCheckoutReturn {
     markCompleted: (checkoutId: string, note?: string) => Promise<UpdateStatusResult>
     deleteCheckout: (checkoutId: string) => Promise<DeleteCheckoutResult>
     batchDeleteCheckouts: (checkoutIds: string[]) => Promise<BatchDeleteCheckoutsResult>
+    mergeCheckouts: (checkoutIds: string[]) => Promise<{ success: boolean; merged_checkout_id?: string; checkout_no?: string; new_total?: number; item_count?: number; auto_free_shipping?: boolean; error?: string }>
     removeItem: (checkoutId: string, orderItemId: string) => Promise<RemoveItemResult>
     changeShippingMethod: (checkoutId: string, method: string, fee?: number) => Promise<ChangeShippingMethodResult>
 }
