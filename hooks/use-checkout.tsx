@@ -385,6 +385,16 @@ export const useCheckout = (tenantId: string): UseCheckoutReturn => {
         })
     }, [tenantId, callRpc])
 
+    // 合併結帳單
+    const mergeCheckouts = useCallback((
+        checkoutIds: string[]
+    ): Promise<{ success: boolean; merged_checkout_id?: string; checkout_no?: string; new_total?: number; item_count?: number; auto_free_shipping?: boolean; error?: string }> => {
+        return callRpc('merge_checkouts_v1', {
+            p_tenant_id: tenantId,
+            p_checkout_ids: checkoutIds
+        })
+    }, [tenantId, callRpc])
+
     return {
         loading,
         error,
@@ -396,6 +406,7 @@ export const useCheckout = (tenantId: string): UseCheckoutReturn => {
         markCompleted: (id, note) => updateStatus(id, 'mark_completed', { note }),
         deleteCheckout,
         batchDeleteCheckouts,
+        mergeCheckouts,
         removeItem,
         changeShippingMethod
     }
