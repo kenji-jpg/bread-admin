@@ -164,6 +164,8 @@ export default function CheckoutsPage() {
     const [shippingFilter, setShippingFilter] = useState<string>('all')
     const [paymentFilter, setPaymentFilter] = useState<string>('all')
     const [methodFilter, setMethodFilter] = useState<string>('all')  // 物流方式篩選
+    const [amountMin, setAmountMin] = useState<string>('')
+    const [amountMax, setAmountMax] = useState<string>('')
 
     // 分頁狀態
     const [currentPage, setCurrentPage] = useState(1)
@@ -206,13 +208,17 @@ export default function CheckoutsPage() {
 
         setIsLoading(true)
         try {
+            const minVal = amountMin ? parseInt(amountMin, 10) : null
+            const maxVal = amountMax ? parseInt(amountMax, 10) : null
             const result = await checkoutApiRef.current.listCheckouts(
                 shippingFilter === 'all' ? undefined : shippingFilter,
                 paymentFilter === 'all' ? undefined : paymentFilter,
                 pageSize,
                 (currentPage - 1) * pageSize,
                 debouncedSearch || undefined,
-                methodFilter === 'all' ? undefined : methodFilter
+                methodFilter === 'all' ? undefined : methodFilter,
+                !minVal || isNaN(minVal) ? null : minVal,
+                !maxVal || isNaN(maxVal) ? null : maxVal,
             )
 
             if (result.success) {
@@ -231,7 +237,7 @@ export default function CheckoutsPage() {
         } finally {
             setIsLoading(false)
         }
-    }, [tenant?.id, shippingFilter, paymentFilter, methodFilter, pageSize, currentPage, debouncedSearch])
+    }, [tenant?.id, shippingFilter, paymentFilter, methodFilter, pageSize, currentPage, debouncedSearch, amountMin, amountMax])
 
     // 載入結帳單詳情
     const fetchCheckoutDetail = useCallback(async (checkoutId: string) => {
@@ -278,7 +284,7 @@ export default function CheckoutsPage() {
     // 當篩選條件改變時，重置到第一頁
     useEffect(() => {
         setCurrentPage(1)
-    }, [shippingFilter, paymentFilter, methodFilter, pageSize, debouncedSearch])
+    }, [shippingFilter, paymentFilter, methodFilter, pageSize, debouncedSearch, amountMin, amountMax])
 
     // 所有篩選（含搜尋、狀態、結帳模式）已由 RPC 伺服端處理
     const filteredCheckouts = checkouts
@@ -680,12 +686,31 @@ export default function CheckoutsPage() {
                 '總金額',
                 '運費',
                 '商品數量',
+                '商品明細',
                 '付款狀態',
                 '出貨狀態',
                 '物流方式',
                 '是否已通知',
                 '建立時間',
             ]
+
+            // 將 checkout_items JSON 轉成可讀字串：商品A(規格) x1 $100 | 商品B x2 $200
+            const formatItems = (raw: string | null | undefined): string => {
+                if (!raw) return ''
+                try {
+                    const items = typeof raw === 'string' ? JSON.parse(raw) : raw
+                    if (!Array.isArray(items)) return ''
+                    return items.map((it: { name?: string; variant_name?: string | null; qty?: number; subtotal?: number; unit_price?: number }) => {
+                        const name = it.name || '商品'
+                        const variant = it.variant_name ? `(${it.variant_name})` : ''
+                        const qty = it.qty ?? 1
+                        const sub = it.subtotal ?? ((it.unit_price ?? 0) * qty)
+                        return `${name}${variant} x${qty} $${sub}`
+                    }).join(' | ')
+                } catch {
+                    return ''
+                }
+            }
 
             // 產生 CSV 資料列
             const rows = filteredData.map((item) => [
@@ -694,6 +719,7 @@ export default function CheckoutsPage() {
                 item.total_amount,
                 !isMyshipMethod(item.shipping_method || 'myship') ? item.shipping_fee : '',
                 item.item_count,
+                formatItems(item.checkout_items),
                 item.payment_status === 'paid' ? '已付款' : '待付款',
                 STATUS_LABELS[item.shipping_status] || item.shipping_status,
                 SHIPPING_METHOD_LABELS[item.shipping_method || 'myship'] || item.shipping_method || '',
@@ -890,6 +916,36 @@ export default function CheckoutsPage() {
                                 <SelectItem value="pickup">🏠 自取</SelectItem>
                             </SelectContent>
                         </Select>
+                        <div className="flex items-center gap-1">
+                            <Input
+                                type="number"
+                                inputMode="numeric"
+                                placeholder="最低 $"
+                                value={amountMin}
+                                onChange={(e) => setAmountMin(e.target.value)}
+                                className="w-24 rounded-xl font-mono"
+                            />
+                            <span className="text-muted-foreground text-sm">~</span>
+                            <Input
+                                type="number"
+                                inputMode="numeric"
+                                placeholder="最高 $"
+                                value={amountMax}
+                                onChange={(e) => setAmountMax(e.target.value)}
+                                className="w-24 rounded-xl font-mono"
+                            />
+                            {(amountMin || amountMax) && (
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 rounded-lg"
+                                    onClick={() => { setAmountMin(''); setAmountMax('') }}
+                                    title="清除金額篩選"
+                                >
+                                    ×
+                                </Button>
+                            )}
+                        </div>
                         <Button
                             variant="outline"
                             className="rounded-xl"
