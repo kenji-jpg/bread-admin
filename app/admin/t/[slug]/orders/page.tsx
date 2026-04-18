@@ -149,9 +149,9 @@ export default function OrdersPage() {
 
     const supabase = createClient()
 
-    const fetchOrders = async () => {
+    const fetchOrders = async (showSkeleton = false) => {
         if (!tenant) return
-        setIsLoading(true)
+        if (showSkeleton) setIsLoading(true)
 
         // 平行載入：order_items + 未綁定 auction_orders
         const [orderItemsResult, unboundAuctionResult] = await Promise.all([
@@ -216,9 +216,16 @@ export default function OrdersPage() {
         // 確保 tenant 載入完成後才 fetch
         if (!tenant || tenantLoading) return
 
-        fetchOrders()
+        // 首次載入顯示 skeleton；之後 realtime 觸發的 refetch 不顯示（避免閃白）
+        fetchOrders(true)
 
-        // 即時訂閱 - 當 order_items 表變動時自動刷新
+        // Realtime event debounce：合併 800ms 內的多筆事件為一次 refetch
+        let debounceTimer: ReturnType<typeof setTimeout> | null = null
+        const scheduleRefetch = () => {
+            if (debounceTimer) clearTimeout(debounceTimer)
+            debounceTimer = setTimeout(() => fetchOrders(false), 800)
+        }
+
         const channel = supabase
             .channel(`orders-${tenant.id}`)
             .on(
@@ -229,14 +236,12 @@ export default function OrdersPage() {
                     table: 'order_items',
                     filter: `tenant_id=eq.${tenant.id}`,
                 },
-                () => {
-                    // 訂單資料包含 JOIN，所以直接重新載入
-                    fetchOrders()
-                }
+                scheduleRefetch
             )
             .subscribe()
 
         return () => {
+            if (debounceTimer) clearTimeout(debounceTimer)
             supabase.removeChannel(channel)
         }
     }, [tenant, tenantLoading])
