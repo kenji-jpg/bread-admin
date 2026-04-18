@@ -14,6 +14,7 @@ const progressSection = $('#progressSection');
 
 let selectedCheckouts = [];
 let allCheckouts = [];
+let searchKeyword = '';
 let progressPollTimer = null;
 
 // ============================================
@@ -54,6 +55,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   $('#selectTopHalfBtn').addEventListener('click', () => selectHalf('top'));
   $('#selectBottomHalfBtn').addEventListener('click', () => selectHalf('bottom'));
   $('#clearSelectBtn').addEventListener('click', clearSelection);
+  $('#checkoutSearch').addEventListener('input', (e) => {
+    searchKeyword = e.target.value.trim().toLowerCase();
+    $('#clearSearchBtn').style.display = searchKeyword ? 'block' : 'none';
+    renderCheckouts();
+  });
+  $('#clearSearchBtn').addEventListener('click', () => {
+    $('#checkoutSearch').value = '';
+    searchKeyword = '';
+    $('#clearSearchBtn').style.display = 'none';
+    renderCheckouts();
+  });
   $('#tenantSelect').addEventListener('change', (e) => {
     $('#confirmTenantBtn').disabled = !e.target.value;
   });
@@ -155,14 +167,17 @@ async function loadCheckouts() {
   listEl.innerHTML = '<div class="loading">載入中...</div>';
   $('#startBtn').disabled = true;
   $('#totalInfo').style.display = 'none';
+  $('#searchWrap').style.display = 'none';
   selectedCheckouts = [];
+  searchKeyword = '';
+  $('#checkoutSearch').value = '';
+  $('#clearSearchBtn').style.display = 'none';
   updateSelectedInfo();
 
   try {
     const result = await sendMessage({ type: 'GET_PENDING_CHECKOUTS' });
     if (!result.success) throw new Error(result.error);
 
-    // service worker 回傳: { success, checkouts: [...], total }
     let checkouts = result.checkouts;
     if (checkouts && !Array.isArray(checkouts) && checkouts.checkouts) {
       checkouts = checkouts.checkouts;
@@ -171,12 +186,9 @@ async function loadCheckouts() {
 
     allCheckouts = checkouts;
 
-    // 顯示總筆數
-    const totalInfo = $('#totalInfo');
-    totalInfo.textContent = `共 ${checkouts.length} 筆待處理`;
-    totalInfo.style.display = 'block';
-
     if (checkouts.length === 0) {
+      $('#totalInfo').textContent = `共 0 筆待處理`;
+      $('#totalInfo').style.display = 'block';
       $('#selectAllWrap').style.display = 'none';
       listEl.innerHTML = `
         <div class="empty-state">
@@ -186,84 +198,131 @@ async function loadCheckouts() {
       return;
     }
 
-    // 顯示全選，重設勾選狀態
-    $('#selectAllWrap').style.display = 'block';
-    $('#selectAllCb').checked = false;
-
-    listEl.innerHTML = '';
-    checkouts.forEach((c) => {
-      const item = document.createElement('div');
-      item.className = 'checkout-item';
-      item.dataset.id = c.id;
-      item.innerHTML = `
-        <input type="checkbox" data-id="${c.id}">
-        <div class="item-info">
-          <div class="item-name">${escHtml(c.customer_name || c.member_display_name || '未知客人')}</div>
-          <div class="item-meta">${escHtml(c.checkout_no)} | ${c.item_count || '?'} 件商品</div>
-        </div>
-        <div class="item-amount">$${c.total_amount}</div>
-      `;
-
-      // 點擊整行切換 checkbox
-      item.addEventListener('click', (e) => {
-        if (e.target.type === 'checkbox') return;
-        const cb = item.querySelector('input[type="checkbox"]');
-        cb.checked = !cb.checked;
-        cb.dispatchEvent(new Event('change'));
-      });
-
-      item.querySelector('input[type="checkbox"]').addEventListener('change', (e) => {
-        if (e.target.checked) {
-          item.classList.add('selected');
-          selectedCheckouts.push(c);
-        } else {
-          item.classList.remove('selected');
-          selectedCheckouts = selectedCheckouts.filter(s => s.id !== c.id);
-        }
-        updateSelectedInfo();
-      });
-
-      listEl.appendChild(item);
-    });
+    $('#searchWrap').style.display = 'flex';
+    $('#selectAllWrap').style.display = 'flex';
+    renderCheckouts();
   } catch (err) {
     listEl.innerHTML = `<div class="error-msg">${escHtml(err.message)}</div>`;
   }
 }
 
+// 依 searchKeyword 篩選 allCheckouts
+function getFilteredCheckouts() {
+  if (!searchKeyword) return allCheckouts;
+  const kw = searchKeyword;
+  return allCheckouts.filter(c => {
+    const name = (c.customer_name || '').toLowerCase();
+    const display = (c.member_display_name || '').toLowerCase();
+    const nickname = (c.member_nickname || '').toLowerCase();
+    return name.includes(kw) || display.includes(kw) || nickname.includes(kw);
+  });
+}
+
+// 渲染（篩選後的）結帳單列表
+function renderCheckouts() {
+  const listEl = $('#checkoutList');
+  const filtered = getFilteredCheckouts();
+  const selectedIds = new Set(selectedCheckouts.map(s => s.id));
+
+  const totalInfo = $('#totalInfo');
+  if (searchKeyword) {
+    totalInfo.textContent = `符合 ${filtered.length} / 共 ${allCheckouts.length} 筆`;
+  } else {
+    totalInfo.textContent = `共 ${allCheckouts.length} 筆待處理`;
+  }
+  totalInfo.style.display = 'block';
+
+  if (filtered.length === 0) {
+    listEl.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">&#128269;</div>
+        <div class="empty-text">沒有符合的結帳單</div>
+      </div>`;
+    return;
+  }
+
+  listEl.innerHTML = '';
+  filtered.forEach((c) => {
+    const item = document.createElement('div');
+    item.className = 'checkout-item';
+    if (selectedIds.has(c.id)) item.classList.add('selected');
+    item.dataset.id = c.id;
+    const displayName = c.member_display_name || c.customer_name || '未知客人';
+    const nickname = c.member_nickname ? ` (${c.member_nickname})` : '';
+    item.innerHTML = `
+      <input type="checkbox" data-id="${c.id}" ${selectedIds.has(c.id) ? 'checked' : ''}>
+      <div class="item-info">
+        <div class="item-name">${escHtml(displayName)}${escHtml(nickname)}</div>
+        <div class="item-meta">${escHtml(c.checkout_no)} | ${c.item_count || '?'} 件商品</div>
+      </div>
+      <div class="item-amount">$${c.total_amount}</div>
+    `;
+
+    item.addEventListener('click', (e) => {
+      if (e.target.type === 'checkbox') return;
+      const cb = item.querySelector('input[type="checkbox"]');
+      cb.checked = !cb.checked;
+      cb.dispatchEvent(new Event('change'));
+    });
+
+    item.querySelector('input[type="checkbox"]').addEventListener('change', (e) => {
+      if (e.target.checked) {
+        item.classList.add('selected');
+        if (!selectedCheckouts.find(s => s.id === c.id)) selectedCheckouts.push(c);
+      } else {
+        item.classList.remove('selected');
+        selectedCheckouts = selectedCheckouts.filter(s => s.id !== c.id);
+      }
+      updateSelectedInfo();
+    });
+
+    listEl.appendChild(item);
+  });
+}
+
 function handleSelectAll(e) {
-  applySelection((_, i) => e.target.checked);
+  applySelectionOnFiltered(() => e.target.checked);
   updateSelectedInfo();
 }
 
 function selectHalf(which) {
-  const total = allCheckouts.length;
+  const filtered = getFilteredCheckouts();
+  const total = filtered.length;
   if (total === 0) return;
   const half = Math.ceil(total / 2);
-  applySelection((_, i) => (which === 'top' ? i < half : i >= total - half));
+  applySelectionOnFiltered((_, i) => (which === 'top' ? i < half : i >= total - half));
   $('#selectAllCb').checked = false;
   updateSelectedInfo();
 }
 
 function clearSelection() {
-  applySelection(() => false);
+  selectedCheckouts = [];
+  $$('#checkoutList input[type="checkbox"]').forEach(cb => {
+    cb.checked = false;
+    cb.closest('.checkout-item').classList.remove('selected');
+  });
   $('#selectAllCb').checked = false;
   updateSelectedInfo();
 }
 
-// 根據判斷函式決定每筆是否勾選，同步更新 UI 與 selectedCheckouts
-function applySelection(predicate) {
-  const checkboxes = $$('#checkoutList input[type="checkbox"]');
-  selectedCheckouts = [];
-  checkboxes.forEach((cb, i) => {
-    const shouldSelect = !!predicate(allCheckouts[i], i);
+// 對目前（篩選後）顯示的項目套用勾選判斷，其他（未顯示）的選取狀態保留
+function applySelectionOnFiltered(predicate) {
+  const filtered = getFilteredCheckouts();
+  const filteredIds = new Set(filtered.map(c => c.id));
+  // 先移除 filtered 中的既有選取
+  selectedCheckouts = selectedCheckouts.filter(s => !filteredIds.has(s.id));
+  // 依 predicate 重新加入 filtered 中該勾的
+  filtered.forEach((c, i) => {
+    if (predicate(c, i)) selectedCheckouts.push(c);
+  });
+  // 同步 UI
+  const selectedIds = new Set(selectedCheckouts.map(s => s.id));
+  $$('#checkoutList input[type="checkbox"]').forEach(cb => {
+    const shouldSelect = selectedIds.has(cb.dataset.id);
     cb.checked = shouldSelect;
     const item = cb.closest('.checkout-item');
-    if (shouldSelect) {
-      item.classList.add('selected');
-      selectedCheckouts.push(allCheckouts[i]);
-    } else {
-      item.classList.remove('selected');
-    }
+    if (shouldSelect) item.classList.add('selected');
+    else item.classList.remove('selected');
   });
 }
 
