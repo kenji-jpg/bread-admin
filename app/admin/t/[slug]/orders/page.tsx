@@ -145,7 +145,7 @@ export default function OrdersPage() {
     const [checkoutShippingMethod, setCheckoutShippingMethod] = useState<'myship' | 'myship_free' | 'delivery' | 'pickup'>('myship')
     const [autoMergeCheckout, setAutoMergeCheckout] = useState(true)
     const [checkoutResultOpen, setCheckoutResultOpen] = useState(false)
-    const [checkoutResult, setCheckoutResult] = useState<{ created: number; merged: { name: string; checkoutNo: string; oldTotal: number; newTotal: number }[]; failed: string[] }>({ created: 0, merged: [], failed: [] })
+    const [checkoutResult, setCheckoutResult] = useState<{ created: number; merged: { name: string; checkoutNo: string; oldTotal: number; newTotal: number }[]; failed: { name: string; reason: string }[] }>({ created: 0, merged: [], failed: [] })
 
     const supabase = createClient()
 
@@ -677,7 +677,7 @@ export default function OrdersPage() {
                 const memberId = firstOrder.member_id
 
                 if (!lineUserId) {
-                    result.failed.push(memberName)
+                    result.failed.push({ name: memberName, reason: '會員未綁定 LINE' })
                     return
                 }
 
@@ -701,7 +701,8 @@ export default function OrdersPage() {
                             p_order_item_ids: memberOrders.map((o) => o.id),
                         })
                         if (linkErr || !linkData?.success) {
-                            result.failed.push(memberName)
+                            const reason = linkErr?.message || linkData?.message || linkData?.error || '合併失敗'
+                            result.failed.push({ name: memberName, reason: `合併：${reason}` })
                         } else {
                             result.merged.push({
                                 name: memberName,
@@ -725,7 +726,8 @@ export default function OrdersPage() {
                 })
 
                 if (checkoutError || !checkoutData?.success) {
-                    result.failed.push(memberName)
+                    const reason = checkoutError?.message || checkoutData?.message || checkoutData?.error || '建立結帳單失敗'
+                    result.failed.push({ name: memberName, reason: `建單：${reason}` })
                     return
                 }
 
@@ -738,13 +740,15 @@ export default function OrdersPage() {
                 )
 
                 if (!linkResult.success) {
-                    result.failed.push(memberName)
+                    const reason = (linkResult as { error?: string; message?: string }).message || (linkResult as { error?: string }).error || '關聯訂單失敗'
+                    result.failed.push({ name: memberName, reason: `關聯：${reason}` })
                 } else {
                     result.created++
                 }
             } catch (err) {
                 const name = memberOrders[0]?.customer_name || memberOrders[0]?.member?.display_name || '未知'
-                result.failed.push(name)
+                const reason = err instanceof Error ? err.message : '未知錯誤'
+                result.failed.push({ name, reason: `例外：${reason}` })
             }
         }
 
@@ -766,7 +770,7 @@ export default function OrdersPage() {
         if (result.created === 0 && result.merged.length === 0) {
             toast.error(`結帳處理失敗`, {
                 description: result.failed.length > 0
-                    ? `失敗客戶：${result.failed.slice(0, 5).join('、')}`
+                    ? `失敗客戶：${result.failed.slice(0, 5).map(f => f.name).join('、')}`
                     : '請稍後重試',
             })
         }
@@ -1509,12 +1513,12 @@ export default function OrdersPage() {
 
             {/* 批次結帳結果 Dialog */}
             <Dialog open={checkoutResultOpen} onOpenChange={setCheckoutResultOpen}>
-                <DialogContent className="sm:max-w-[450px]">
+                <DialogContent className="sm:max-w-[500px] max-h-[85vh] flex flex-col">
                     <DialogHeader>
                         <DialogTitle>✅ 批次結帳完成</DialogTitle>
                     </DialogHeader>
-                    <div className="space-y-3 py-2">
-                        <div className="flex gap-4 text-sm">
+                    <div className="space-y-3 py-2 overflow-y-auto flex-1 min-h-0">
+                        <div className="flex gap-4 text-sm flex-wrap">
                             {checkoutResult.created > 0 && (
                                 <div className="flex items-center gap-1.5">
                                     <span className="text-muted-foreground">📋 新建：</span>
@@ -1535,19 +1539,25 @@ export default function OrdersPage() {
                             )}
                         </div>
                         {checkoutResult.merged.length > 0 && (
-                            <div className="rounded-lg border p-3 space-y-2">
-                                <p className="text-xs font-medium text-muted-foreground">合併明細</p>
+                            <div className="rounded-lg border p-3 space-y-2 max-h-[40vh] overflow-y-auto">
+                                <p className="text-xs font-medium text-muted-foreground sticky top-0 bg-background pb-1">合併明細（{checkoutResult.merged.length}）</p>
                                 {checkoutResult.merged.map((m, i) => (
-                                    <div key={i} className="text-sm flex items-center justify-between">
-                                        <span>{m.name} → #{m.checkoutNo}</span>
-                                        <span className="text-muted-foreground">${m.oldTotal.toLocaleString()} → <span className="font-semibold text-foreground">${m.newTotal.toLocaleString()}</span></span>
+                                    <div key={i} className="text-sm flex items-center justify-between gap-2">
+                                        <span className="truncate">{m.name} → #{m.checkoutNo}</span>
+                                        <span className="text-muted-foreground whitespace-nowrap">${m.oldTotal.toLocaleString()} → <span className="font-semibold text-foreground">${m.newTotal.toLocaleString()}</span></span>
                                     </div>
                                 ))}
                             </div>
                         )}
                         {checkoutResult.failed.length > 0 && (
-                            <div className="rounded-lg border border-destructive/30 p-3">
-                                <p className="text-xs font-medium text-destructive">失敗客戶：{checkoutResult.failed.join('、')}</p>
+                            <div className="rounded-lg border border-destructive/30 p-3 max-h-[40vh] overflow-y-auto space-y-1.5">
+                                <p className="text-xs font-medium text-destructive sticky top-0 bg-background pb-1">失敗客戶（{checkoutResult.failed.length}）</p>
+                                {checkoutResult.failed.map((f, i) => (
+                                    <div key={i} className="text-sm flex items-start gap-2">
+                                        <span className="font-medium shrink-0">{f.name}</span>
+                                        <span className="text-destructive/80 text-xs">{f.reason}</span>
+                                    </div>
+                                ))}
                             </div>
                         )}
                     </div>
