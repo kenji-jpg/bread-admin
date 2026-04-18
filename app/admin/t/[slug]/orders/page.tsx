@@ -134,6 +134,8 @@ export default function OrdersPage() {
     // 綁定會員 Modal（針對待綁定 auction_orders）
     const [claimOrder, setClaimOrder] = useState<OrderWithDetails | null>(null)
     const [claimSearchKeyword, setClaimSearchKeyword] = useState('')
+    const [claimFixNickname, setClaimFixNickname] = useState('')
+    const [isFixingNickname, setIsFixingNickname] = useState(false)
     const [claimSearchResults, setClaimSearchResults] = useState<MemberOption[]>([])
     const [claimSelectedMember, setClaimSelectedMember] = useState<MemberOption | null>(null)
     const [isClaimSearching, setIsClaimSearching] = useState(false)
@@ -440,6 +442,49 @@ export default function OrdersPage() {
         setClaimSearchKeyword('')
         setClaimSearchResults([])
         setClaimUpdateNickname(true)
+        setClaimFixNickname(order.winnerNickname || '')
+    }
+
+    // 修正暱稱（打錯字時用）— 自動嘗試比對會員
+    const handleFixNickname = async () => {
+        if (!tenant?.id || !claimOrder?.auctionOrderId) return
+        const newNick = claimFixNickname.trim()
+        if (!newNick) {
+            toast.error('暱稱不可為空')
+            return
+        }
+        if (newNick === claimOrder.winnerNickname) {
+            toast.info('暱稱沒有變動')
+            return
+        }
+        setIsFixingNickname(true)
+        try {
+            const { data, error } = await supabase.rpc('admin_fix_auction_nickname_v1', {
+                p_tenant_id: tenant.id,
+                p_auction_order_id: claimOrder.auctionOrderId,
+                p_new_nickname: newNick,
+            }) as { data: { success: boolean; matched?: boolean; message?: string; member_name?: string } | null; error: Error | null }
+
+            if (error || !data?.success) {
+                toast.error(data?.message || error?.message || '修正失敗')
+                return
+            }
+
+            if (data.matched) {
+                toast.success(`暱稱修正後自動綁定到「${data.member_name}」`)
+                setClaimOrder(null)
+                fetchOrders()
+            } else {
+                toast.warning(data.message || '暱稱已修正，但仍找不到會員，請手動選擇')
+                setClaimSearchKeyword(newNick)
+                // 讓使用者繼續手動搜尋
+            }
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : '未知錯誤'
+            toast.error('修正失敗：' + msg)
+        } finally {
+            setIsFixingNickname(false)
+        }
     }
 
     // 綁定會員（呼叫 admin_claim_auction_order_v1）
@@ -1379,6 +1424,28 @@ export default function OrdersPage() {
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
+                        {/* 修正暱稱（登記時打錯字用） */}
+                        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
+                            <p className="text-xs font-medium text-amber-600">✏️ 暱稱打錯字？直接修正後自動比對會員</p>
+                            <div className="flex items-center gap-2">
+                                <Input
+                                    placeholder="輸入正確暱稱"
+                                    value={claimFixNickname}
+                                    onChange={(e) => setClaimFixNickname(e.target.value)}
+                                    className="rounded-xl flex-1"
+                                />
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={handleFixNickname}
+                                    disabled={isFixingNickname || !claimFixNickname.trim()}
+                                    className="rounded-xl border-amber-500 text-amber-600 hover:bg-amber-100 whitespace-nowrap"
+                                >
+                                    {isFixingNickname ? '修正中...' : '修正並綁定'}
+                                </Button>
+                            </div>
+                        </div>
+
                         <div className="relative">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                             <Input
