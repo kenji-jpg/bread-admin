@@ -449,7 +449,9 @@ export default function CheckoutsPage() {
 
     // 判斷是否可刪除（只有 pending/url_sent 狀態可刪除）
     const canDeleteCheckout = (status: string): boolean => {
-        return ['pending', 'url_sent'].includes(status)
+        // 允許 pending（待處理）、url_sent（待下單）、ordered（待出貨）
+        // 已出貨/已取貨的不給刪（shipped / completed）
+        return ['pending', 'url_sent', 'ordered'].includes(status)
     }
 
     // 全選 / 取消全選（僅當前頁面可刪除的項目）
