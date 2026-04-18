@@ -71,6 +71,7 @@ import {
     Link2,
     Users,
     Loader2,
+    Unlink,
 } from 'lucide-react'
 
 type OrderWithDetails = OrderItem & {
@@ -411,7 +412,7 @@ export default function OrdersPage() {
 
     // 全選 / 取消全選（所有篩選後的訂單，跨頁；排除已結帳、待綁定）
     const allSelectableIds = useMemo(() =>
-        filteredOrders.filter((o) => !o.checkout_id && !o.isUnbound).map((o) => o.id),
+        filteredOrders.filter((o) => !o.isUnbound).map((o) => o.id),
         [filteredOrders]
     )
 
@@ -628,6 +629,48 @@ export default function OrdersPage() {
         }
     }
 
+    // 批量移出結帳單（把訂單品項從結帳單 detach，結帳單金額自動重算）
+    const handleBatchMoveOut = async () => {
+        if (selectedOrders.size === 0) return
+        const targets = Array.from(selectedOrders)
+            .map((id) => orders.find((o) => o.id === id))
+            .filter((o): o is OrderWithDetails => !!o && !!o.checkout_id && !o.isUnbound)
+        if (targets.length === 0) {
+            toast.error('選中的訂單中沒有可移出的（需有結帳單）')
+            return
+        }
+        setIsSubmitting(true)
+        let moved = 0
+        const failed: string[] = []
+        try {
+            for (const order of targets) {
+                const { data, error } = await supabase.rpc('remove_checkout_item_v1', {
+                    p_tenant_id: tenant?.id,
+                    p_checkout_id: order.checkout_id,
+                    p_order_item_id: order.id,
+                }) as { data: { success: boolean; error?: string } | null; error: Error | null }
+                if (error || !data?.success) {
+                    failed.push(order.customer_name || order.member?.display_name || '未知')
+                } else {
+                    moved++
+                }
+            }
+            if (moved > 0) {
+                toast.success(`已移出 ${moved} 筆訂單（結帳單金額已重算）`)
+            }
+            if (failed.length > 0) {
+                toast.error(`${failed.length} 筆失敗：${failed.slice(0, 3).join('、')}${failed.length > 3 ? '...' : ''}`)
+            }
+            setSelectedOrders(new Set())
+            fetchOrders(false)
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : '未知錯誤'
+            toast.error('操作失敗：' + msg)
+        } finally {
+            setIsSubmitting(false)
+        }
+    }
+
     // 批量結帳 - 開啟確認 Dialog
     const handleBatchCheckout = () => {
         // 篩選出選中且已到貨的訂單
@@ -795,7 +838,11 @@ export default function OrdersPage() {
             const order = orders.find((o) => o.id === id)
             return order && !order.is_arrived && !order.checkout_id
         }).length
-        return { arrivedCount, uniqueMemberCount: uniqueMembers.size, pendingCount }
+        const inCheckoutCount = Array.from(selectedOrders).filter((id) => {
+            const order = orders.find((o) => o.id === id)
+            return order && !order.isUnbound && !!order.checkout_id
+        }).length
+        return { arrivedCount, uniqueMemberCount: uniqueMembers.size, pendingCount, inCheckoutCount }
     }, [selectedOrders, orders])
 
     if (tenantLoading) {
@@ -1026,7 +1073,7 @@ export default function OrdersPage() {
                                             }}
                                         >
                                             <TableCell className="pl-5" onClick={(e) => e.stopPropagation()}>
-                                                {!order.checkout_id && !order.isUnbound && (
+                                                {!order.isUnbound && (
                                                     <Checkbox
                                                         checked={selectedOrders.has(order.id)}
                                                         onCheckedChange={() => toggleOrderSelection(order.id)}
@@ -1683,6 +1730,18 @@ export default function OrdersPage() {
                                     >
                                         <Package className="mr-1 h-3 w-3" />
                                         標記可結帳 ({selectedStats.pendingCount})
+                                    </Button>
+                                )}
+                                {selectedStats.inCheckoutCount > 0 && (
+                                    <Button
+                                        onClick={handleBatchMoveOut}
+                                        disabled={isSubmitting}
+                                        size="xs"
+                                        variant="outline"
+                                        className="rounded-full h-7 px-3 text-xs border-amber-500 text-amber-600 hover:bg-amber-50"
+                                    >
+                                        <Unlink className="mr-1 h-3 w-3" />
+                                        移出結帳單 ({selectedStats.inCheckoutCount})
                                     </Button>
                                 )}
                                 <Button
