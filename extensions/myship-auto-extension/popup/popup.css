@@ -145,6 +145,10 @@ section {
   padding: 6px 12px;
   font-size: 13px;
   border-bottom: 1px solid #eee;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .select-all-wrap label {
@@ -158,6 +162,32 @@ section {
 
 .select-all-wrap input[type="checkbox"] {
   accent-color: #f60;
+}
+
+.quick-select {
+  display: flex;
+  gap: 4px;
+}
+
+.btn-mini {
+  padding: 3px 8px;
+  font-size: 11px;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-mini:hover {
+  border-color: #f60;
+  color: #f60;
+  background: #fff7f0;
+}
+
+.btn-mini:active {
+  background: #ffece0;
 }
 
 /* 結帳單列表 */
@@ -252,6 +282,12 @@ section {
   padding: 6px;
   background: #f8f9fa;
   border-radius: 6px;
+}
+
+.selected-amount {
+  margin-left: 4px;
+  color: #f60;
+  font-weight: 600;
 }
 
 /* 狀態訊息 */

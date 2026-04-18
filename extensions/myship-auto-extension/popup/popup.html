@@ -58,6 +58,11 @@
 
       <div id="selectAllWrap" class="select-all-wrap" style="display:none;">
         <label><input type="checkbox" id="selectAllCb"> 全選</label>
+        <div class="quick-select">
+          <button type="button" id="selectTopHalfBtn" class="btn-mini">上半</button>
+          <button type="button" id="selectBottomHalfBtn" class="btn-mini">下半</button>
+          <button type="button" id="clearSelectBtn" class="btn-mini">清除</button>
+        </div>
       </div>
 
       <div id="checkoutList" class="checkout-list">
@@ -66,6 +71,7 @@
 
       <div id="selectedInfo" class="selected-info" style="display:none;">
         已選 <span id="selectedCount">0</span> 筆
+        <span class="selected-amount">| 總金額 $<span id="selectedAmount">0</span></span>
       </div>
 
       <button id="startBtn" class="btn-primary" disabled>

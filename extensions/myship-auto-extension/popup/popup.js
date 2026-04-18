@@ -51,6 +51,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   $('#refreshBtn').addEventListener('click', () => loadCheckouts());
   $('#logoutBtn').addEventListener('click', handleLogout);
   $('#selectAllCb').addEventListener('change', handleSelectAll);
+  $('#selectTopHalfBtn').addEventListener('click', () => selectHalf('top'));
+  $('#selectBottomHalfBtn').addEventListener('click', () => selectHalf('bottom'));
+  $('#clearSelectBtn').addEventListener('click', clearSelection);
   $('#tenantSelect').addEventListener('change', (e) => {
     $('#confirmTenantBtn').disabled = !e.target.value;
   });
@@ -228,30 +231,50 @@ async function loadCheckouts() {
 }
 
 function handleSelectAll(e) {
-  const checked = e.target.checked;
+  applySelection((_, i) => e.target.checked);
+  updateSelectedInfo();
+}
+
+function selectHalf(which) {
+  const total = allCheckouts.length;
+  if (total === 0) return;
+  const half = Math.ceil(total / 2);
+  applySelection((_, i) => (which === 'top' ? i < half : i >= total - half));
+  $('#selectAllCb').checked = false;
+  updateSelectedInfo();
+}
+
+function clearSelection() {
+  applySelection(() => false);
+  $('#selectAllCb').checked = false;
+  updateSelectedInfo();
+}
+
+// 根據判斷函式決定每筆是否勾選，同步更新 UI 與 selectedCheckouts
+function applySelection(predicate) {
   const checkboxes = $$('#checkoutList input[type="checkbox"]');
   selectedCheckouts = [];
-
   checkboxes.forEach((cb, i) => {
-    cb.checked = checked;
+    const shouldSelect = !!predicate(allCheckouts[i], i);
+    cb.checked = shouldSelect;
     const item = cb.closest('.checkout-item');
-    if (checked) {
+    if (shouldSelect) {
       item.classList.add('selected');
       selectedCheckouts.push(allCheckouts[i]);
     } else {
       item.classList.remove('selected');
     }
   });
-
-  updateSelectedInfo();
 }
 
 function updateSelectedInfo() {
   const info = $('#selectedInfo');
   const count = selectedCheckouts.length;
   if (count > 0) {
+    const total = selectedCheckouts.reduce((sum, c) => sum + (Number(c.total_amount) || 0), 0);
     info.style.display = 'block';
     $('#selectedCount').textContent = count;
+    $('#selectedAmount').textContent = total.toLocaleString();
     $('#startBtn').disabled = false;
   } else {
     info.style.display = 'none';
