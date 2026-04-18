@@ -723,6 +723,7 @@ export default function CheckoutsPage() {
             const headers = [
                 '結帳編號',
                 '客戶名稱',
+                '暱稱',
                 '總金額',
                 '運費',
                 '商品數量',
@@ -755,7 +756,8 @@ export default function CheckoutsPage() {
             // 產生 CSV 資料列
             const rows = filteredData.map((item) => [
                 item.checkout_no,
-                item.customer_name || item.member_display_name || item.member_nickname || '',
+                item.member_display_name || item.customer_name || '',
+                item.member_nickname || '',
                 item.total_amount,
                 !isMyshipMethod(item.shipping_method || 'myship') ? item.shipping_fee : '',
                 item.item_count,
@@ -1861,7 +1863,7 @@ export default function CheckoutsPage() {
                             />
                         </div>
                         <div className="rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
-                            <p>📊 將匯出以下欄位：結帳編號、客戶名稱、總金額、運費、商品數量、付款狀態、出貨狀態、物流方式、是否已通知、建立時間</p>
+                            <p>📊 將匯出以下欄位：結帳編號、客戶名稱、暱稱、總金額、運費、商品數量、商品明細、付款狀態、出貨狀態、物流方式、是否已通知、建立時間</p>
                         </div>
                     </div>
                     <DialogFooter>
