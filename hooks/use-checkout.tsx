@@ -199,6 +199,7 @@ interface UseCheckoutReturn {
     mergeCheckouts: (checkoutIds: string[]) => Promise<{ success: boolean; merged_checkout_id?: string; checkout_no?: string; new_total?: number; item_count?: number; auto_free_shipping?: boolean; error?: string }>
     removeItem: (checkoutId: string, orderItemId: string) => Promise<RemoveItemResult>
     changeShippingMethod: (checkoutId: string, method: string, fee?: number) => Promise<ChangeShippingMethodResult>
+    notifyCheckout: (checkoutId: string) => Promise<{ success: boolean; notify_status?: string; notify_error?: string | null; error?: string; message?: string }>
 }
 
 export const useCheckout = (tenantId: string): UseCheckoutReturn => {
@@ -400,6 +401,40 @@ export const useCheckout = (tenantId: string): UseCheckoutReturn => {
         })
     }, [tenantId, callRpc])
 
+    // 通用結帳單通知（myship / delivery / pickup）
+    const notifyCheckout = useCallback(async (
+        checkoutId: string
+    ): Promise<{ success: boolean; notify_status?: string; notify_error?: string | null; error?: string; message?: string }> => {
+        try {
+            const { data: { session } } = await supabase.auth.getSession()
+            let accessToken = session?.access_token
+            if (!accessToken) {
+                const { data: refreshData } = await supabase.auth.refreshSession()
+                accessToken = refreshData.session?.access_token
+            }
+            if (!accessToken) {
+                return { success: false, error: 'unauthorized', message: '未登入或 session 已過期' }
+            }
+
+            const res = await fetch(
+                `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/notify-checkout-v1`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${accessToken}`,
+                        'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
+                    },
+                    body: JSON.stringify({ tenant_id: tenantId, checkout_id: checkoutId }),
+                }
+            )
+            return await res.json()
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : '網路錯誤'
+            return { success: false, error: 'network_error', message: msg }
+        }
+    }, [tenantId, supabase])
+
     return {
         loading,
         error,
@@ -413,6 +448,7 @@ export const useCheckout = (tenantId: string): UseCheckoutReturn => {
         batchDeleteCheckouts,
         mergeCheckouts,
         removeItem,
-        changeShippingMethod
+        changeShippingMethod,
+        notifyCheckout,
     }
 }
