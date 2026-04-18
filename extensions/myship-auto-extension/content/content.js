@@ -484,8 +484,8 @@
           <button class="ctrl-btn stop-btn" id="stopBtn" title="中止">⏹ 中止</button>
         </div>
         <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
-        <div id="panelQueue"></div>
         <div class="log-area" id="logArea"></div>
+        <div id="panelQueue"></div>
       </div>
     `;
 
@@ -575,8 +575,8 @@
     const entry = document.createElement('div');
     entry.className = 'log-entry';
     entry.innerHTML = `<span class="log-time">${time}</span>${isError ? '<span style="color:red;">&#10007;</span>' : '<span style="color:green;">&#10003;</span>'} ${escHtml(msg)}`;
-    logArea.appendChild(entry);
-    logArea.scrollTop = logArea.scrollHeight;
+    // 最新 log 插到最上方，不用捲動就看得到
+    logArea.insertBefore(entry, logArea.firstChild);
   }
 
   // ============================================
