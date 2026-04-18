@@ -1607,6 +1607,10 @@ export default function OrdersPage() {
                         <div className="rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
                             <p>⚠️ 所有客戶將使用相同結帳模式</p>
                             {autoMergeCheckout && <p className="mt-1">🔄 若客戶已有待處理/已設連結的結帳單，新訂單會自動合併</p>}
+                            {(checkoutShippingMethod === 'myship' || checkoutShippingMethod === 'myship_free')
+                              && tenant?.free_shipping_threshold && tenant.free_shipping_threshold > 0 && (
+                                <p className="mt-1">🎁 商品滿 ${tenant.free_shipping_threshold.toLocaleString()} 自動免運（升級為賣貨便免運）</p>
+                            )}
                         </div>
                     </div>
                     <DialogFooter className="gap-2 sm:gap-0">
