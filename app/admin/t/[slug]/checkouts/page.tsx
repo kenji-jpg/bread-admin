@@ -188,6 +188,7 @@ export default function CheckoutsPage() {
     const [batchDeleteConfirm, setBatchDeleteConfirm] = useState(false)
     const [mergeConfirmOpen, setMergeConfirmOpen] = useState(false)
     const [isMerging, setIsMerging] = useState(false)
+    const [isNotifying, setIsNotifying] = useState(false)
 
     // 下載資料 Dialog 狀態
     const [downloadDialogOpen, setDownloadDialogOpen] = useState(false)
@@ -611,6 +612,45 @@ export default function CheckoutsPage() {
         return { canMerge: true, estimatedTotal, customerName, count: selected.length, willAutoFree, shippingMethod }
     }, [selectedCheckouts, checkouts])
 
+    // 單筆發送通知
+    const handleNotifyCheckout = async (checkoutId: string, checkoutNo: string) => {
+        const result = await checkoutApiRef.current.notifyCheckout(checkoutId)
+        if (result.success) {
+            toast.success(`已通知客人（${checkoutNo}）`)
+            fetchCheckouts()
+        } else {
+            toast.error(result.message || result.error || '通知失敗')
+        }
+    }
+
+    // 批次發送通知
+    const handleBatchNotify = async () => {
+        const ids = Array.from(selectedCheckouts)
+        if (ids.length === 0) return
+        setIsNotifying(true)
+        let sent = 0
+        const failed: string[] = []
+        try {
+            for (const id of ids) {
+                const c = checkouts.find((x) => x.id === id)
+                const result = await checkoutApiRef.current.notifyCheckout(id)
+                if (result.success) {
+                    sent++
+                } else {
+                    failed.push(`${c?.checkout_no || id}（${result.message || result.error || '失敗'}）`)
+                }
+            }
+            if (sent > 0) toast.success(`已通知 ${sent} 位客人`)
+            if (failed.length > 0) {
+                toast.error(`${failed.length} 筆失敗：${failed.slice(0, 3).join('、')}${failed.length > 3 ? '...' : ''}`, { duration: 8000 })
+            }
+            setSelectedCheckouts(new Set())
+            fetchCheckouts()
+        } finally {
+            setIsNotifying(false)
+        }
+    }
+
     // 合併處理
     const handleMergeCheckouts = async () => {
         setIsMerging(true)
@@ -984,6 +1024,16 @@ export default function CheckoutsPage() {
                                     合併結帳單
                                 </Button>
                                 <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={handleBatchNotify}
+                                    disabled={isNotifying}
+                                    className="rounded-xl border-amber-500 text-amber-600 hover:bg-amber-50"
+                                >
+                                    <Bell className="h-4 w-4 mr-2" />
+                                    {isNotifying ? '通知中...' : '發送通知'}
+                                </Button>
+                                <Button
                                     variant="destructive"
                                     size="sm"
                                     onClick={handleBatchDelete}
@@ -1180,7 +1230,8 @@ export default function CheckoutsPage() {
                                                 {item.is_notified ? (
                                                     <Badge
                                                         className="bg-success/20 text-success border-success/30 cursor-pointer hover:bg-success/30"
-                                                        onClick={() => toast.info('通知功能開發中')}
+                                                        onClick={() => handleNotifyCheckout(item.id, item.checkout_no)}
+                                                        title="點擊重新發送通知"
                                                     >
                                                         <Bell className="h-3 w-3 mr-1" />
                                                         已通知
@@ -1189,7 +1240,8 @@ export default function CheckoutsPage() {
                                                     <Badge
                                                         variant="outline"
                                                         className="cursor-pointer hover:bg-muted"
-                                                        onClick={() => toast.info('通知功能開發中')}
+                                                        onClick={() => handleNotifyCheckout(item.id, item.checkout_no)}
+                                                        title="點擊發送通知"
                                                     >
                                                         <Bell className="h-3 w-3 mr-1" />
                                                         未通知
