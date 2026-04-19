@@ -127,10 +127,17 @@ const messageHandlers = {
   SET_STORE_URL: async (msg) => {
     await ensureAuth();
     const { checkoutId, storeUrl, checkoutNo, customerName, memberNickname } = msg;
-    let myshipStoreName = `${checkoutNo}_${customerName || '客人'}`;
-    if (memberNickname) {
-      myshipStoreName += `(${memberNickname})`;
-    }
+    const clean = (s) =>
+      String(s || '')
+        .replace(/\p{Extended_Pictographic}/gu, '')
+        .replace(/[\u200D\uFE0F]/g, '')
+        .replace(/[&()=;'"<>\\]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    const customer = clean(customerName) || '客人';
+    const nickname = clean(memberNickname);
+    let myshipStoreName = `${checkoutNo}_${customer}`;
+    if (nickname) myshipStoreName += `（${nickname}）`;
     myshipStoreName = myshipStoreName.substring(0, 50);
 
     // 呼叫 Edge Function: notify-myship-url

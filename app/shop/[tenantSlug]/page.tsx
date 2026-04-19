@@ -39,11 +39,13 @@ import {
   Copy,
   Search,
   ChevronDown,
+  ChevronRight,
   ArrowUpDown,
   Menu,
   Pencil,
   Check,
   GripVertical,
+  ShoppingCart,
 } from 'lucide-react'
 import Image from 'next/image'
 import Cropper from 'react-easy-crop'
@@ -249,6 +251,51 @@ interface StaffStats {
   total_sales: number
 }
 
+interface PurchaseOrderEntry {
+  order_item_id: string
+  member_id: string | null
+  member_name: string
+  member_picture: string | null
+  variant_name: string | null
+  quantity: number
+  arrived_qty: number
+  pending_qty: number
+  status: string
+  has_checkout: boolean
+  created_at: string
+}
+
+interface PurchaseProductRow {
+  product_id: string
+  name: string
+  image_url: string | null
+  price: number
+  total_qty: number
+  arrived_qty: number
+  pending_qty: number
+  orders: PurchaseOrderEntry[]
+}
+
+interface PurchaseManualRow {
+  order_item_id: string
+  item_name: string
+  member_id: string | null
+  member_name: string
+  member_picture: string | null
+  quantity: number
+  arrived_qty: number
+  pending_qty: number
+  unit_price: number
+  note: string | null
+  has_checkout: boolean
+  created_at: string
+}
+
+interface PurchaseSummary {
+  products: PurchaseProductRow[]
+  manual_items: PurchaseManualRow[]
+}
+
 // 抽出為穩定元件，避免 re-render 造成圖片閃爍
 function OrderCard({ order }: { order: OrderItem }) {
   return (
@@ -371,6 +418,11 @@ export default function ShopPage() {
   const [allOrders, setAllOrders] = useState<StaffOrderItem[]>([])
   const [staffStats, setStaffStats] = useState<StaffStats | null>(null)
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false)
+  const [adminPanelTab, setAdminPanelTab] = useState<'purchase' | 'orders'>('purchase')
+  const [purchaseSummary, setPurchaseSummary] = useState<PurchaseSummary | null>(null)
+  const [isLoadingPurchase, setIsLoadingPurchase] = useState(false)
+  const [expandedPurchaseIds, setExpandedPurchaseIds] = useState<Set<string>>(new Set())
+  const [orderSearchTerm, setOrderSearchTerm] = useState('')
   const [onlineCount, setOnlineCount] = useState(0)
 
   // 補貨 Modal
@@ -556,6 +608,72 @@ export default function ShopPage() {
       console.error('Load all orders error:', err)
     }
   }, [profile?.userId, isStaff, tenant, supabase])
+
+  // 載入採買清單（管理員）
+  const loadPurchaseSummary = useCallback(async () => {
+    if (!profile?.userId || !isStaff || !tenant) return
+    setIsLoadingPurchase(true)
+    try {
+      const { data, error } = await supabase.rpc('get_pending_purchase_summary_v1', {
+        p_tenant_id: tenant.id,
+        p_line_user_id: profile.userId,
+      })
+      if (error) throw error
+      if (data?.success) {
+        setPurchaseSummary({
+          products: data.products || [],
+          manual_items: data.manual_items || [],
+        })
+      }
+    } catch (err) {
+      console.error('Load purchase summary error:', err)
+    } finally {
+      setIsLoadingPurchase(false)
+    }
+  }, [profile?.userId, isStaff, tenant, supabase])
+
+  // 標記單筆 order_item 已到貨（手動單用）
+  const handleMarkItemArrived = useCallback(async (orderItemId: string) => {
+    if (!profile?.userId || !tenant) return
+    try {
+      const { data, error } = await supabase.rpc('mark_order_item_arrived_v1', {
+        p_tenant_id: tenant.id,
+        p_line_user_id: profile.userId,
+        p_order_item_id: orderItemId,
+        p_qty: null,
+      })
+      if (error) throw error
+      if (data?.success) {
+        toast.success('已標記到貨')
+        await Promise.all([loadPurchaseSummary(), loadAllOrders()])
+      } else {
+        toast.error(data?.error || '標記失敗')
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '標記失敗')
+    }
+  }, [profile?.userId, tenant, supabase, loadPurchaseSummary, loadAllOrders])
+
+  // 商品採買：+N 已到貨（reuse 補貨 RPC，會自動分配給 pending 訂單）
+  const handleMarkProductArrived = useCallback(async (productId: string, qty: number) => {
+    if (!tenant || qty <= 0) return
+    try {
+      const { data, error } = await supabase.rpc('restock_product_by_id_v1', {
+        p_product_id: productId,
+        p_quantity: qty,
+        p_variant_id: null,
+      })
+      if (error) throw error
+      if (data?.success) {
+        toast.success(`已標記 ${qty} 件到貨`)
+        await Promise.all([loadPurchaseSummary(), loadAllOrders()])
+      } else {
+        toast.error(data?.error || '標記失敗')
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '標記失敗')
+    }
+  }, [tenant, supabase, loadPurchaseSummary, loadAllOrders])
 
   // 初始載入
   useEffect(() => {
@@ -1570,7 +1688,7 @@ export default function ShopPage() {
               <button
                 className="relative p-2 rounded-full transition-colors"
                 style={{ color: 'white', backgroundColor: 'rgba(255,255,255,0.1)' }}
-                onClick={() => { loadAllOrders(); setIsAdminPanelOpen(true) }}
+                onClick={() => { loadAllOrders(); loadPurchaseSummary(); setAdminPanelTab('purchase'); setIsAdminPanelOpen(true) }}
               >
                 <Users className="w-5 h-5" />
               </button>
@@ -1677,7 +1795,7 @@ export default function ShopPage() {
                   <button
                     className="relative p-2 rounded-full transition-colors"
                     style={{ color: 'white' }}
-                    onClick={() => { loadAllOrders(); setIsAdminPanelOpen(true) }}
+                    onClick={() => { loadAllOrders(); loadPurchaseSummary(); setAdminPanelTab('purchase'); setIsAdminPanelOpen(true) }}
                   >
                     <Users className="w-5 h-5" />
                   </button>
@@ -3642,90 +3760,274 @@ export default function ShopPage() {
                 </Button>
               </div>
 
-              {/* 統計 */}
-              {staffStats && (
-                <div className="grid grid-cols-3 gap-2 p-4 border-b">
-                  <div className="text-center">
-                    <p className="text-lg font-bold">
-                      {staffStats.total_orders - staffStats.cancelled_count}
-                    </p>
-                    <p className="text-xs text-muted-foreground">總訂單</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-lg font-bold text-green-600">{staffStats.allocated_count}</p>
-                    <p className="text-xs text-muted-foreground">已分配</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-lg font-bold text-primary">
-                      ${staffStats.total_sales.toLocaleString()}
-                    </p>
-                    <p className="text-xs text-muted-foreground">銷售額</p>
-                  </div>
-                </div>
-              )}
+              {/* Tabs */}
+              <div className="flex border-b">
+                {([
+                  { key: 'purchase' as const, label: '📦 採買清單', badge: (purchaseSummary?.products.reduce((s, p) => s + p.pending_qty, 0) || 0) + (purchaseSummary?.manual_items.reduce((s, m) => s + m.pending_qty, 0) || 0) },
+                  { key: 'orders' as const, label: '📋 訂單明細', badge: null },
+                ]).map((t) => (
+                  <button
+                    key={t.key}
+                    type="button"
+                    onClick={() => setAdminPanelTab(t.key)}
+                    className={`flex-1 py-3 text-sm font-medium transition-colors relative ${adminPanelTab === t.key
+                      ? 'text-primary border-b-2 border-primary'
+                      : 'text-muted-foreground'
+                    }`}
+                  >
+                    {t.label}
+                    {t.badge != null && t.badge > 0 && (
+                      <span className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] text-[10px] font-bold rounded-full bg-red-500 text-white px-1">
+                        {t.badge}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
 
-              {/* 訂單列表 - 按商品分組 */}
-              <div className="p-4 overflow-y-auto h-[calc(100vh-220px)]">
-                {products.map((product) => {
-                  const productOrders = allOrders.filter(
-                    (o) => o.product_id === product.id && o.status !== 'cancelled'
-                  )
-                  if (productOrders.length === 0) return null
+              {/* Tab 1: 採買清單 */}
+              {adminPanelTab === 'purchase' && (
+                <div className="p-4 overflow-y-auto h-[calc(100vh-140px)]">
+                  {isLoadingPurchase && !purchaseSummary && (
+                    <div className="flex justify-center py-8">
+                      <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                    </div>
+                  )}
 
-                  return (
-                    <div key={product.id} className="mb-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <h3 className="text-sm font-bold">{product.name}</h3>
-                        <span className="text-xs text-muted-foreground">
-                          ${product.price} · {productOrders.length} 筆
-                        </span>
-                      </div>
-                      <div className="space-y-1">
-                        {productOrders.map((order) => (
-                          <div
-                            key={order.id}
-                            className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-muted/50 text-sm"
-                          >
-                            <div className="flex items-center gap-2 min-w-0">
-                              {order.member_picture && (
-                                <Image
-                                  src={order.member_picture}
-                                  alt=""
-                                  width={20}
-                                  height={20}
-                                  className="rounded-full flex-shrink-0"
-                                />
+                  {purchaseSummary && purchaseSummary.products.length === 0 && purchaseSummary.manual_items.length === 0 && (
+                    <div className="text-center py-12">
+                      <CheckCircle className="w-12 h-12 mx-auto mb-2 text-green-500" />
+                      <p className="text-sm text-muted-foreground">全部備齊 🎉</p>
+                    </div>
+                  )}
+
+                  {/* 商品採買區 */}
+                  {purchaseSummary && purchaseSummary.products.length > 0 && (
+                    <div className="mb-6">
+                      <h3 className="text-xs font-bold text-muted-foreground mb-2 px-1">商品（共 {purchaseSummary.products.reduce((s, p) => s + p.pending_qty, 0)} 件要買）</h3>
+                      <div className="space-y-2">
+                        {purchaseSummary.products.map((p) => {
+                          const isExpanded = expandedPurchaseIds.has(p.product_id)
+                          return (
+                            <div key={p.product_id} className="border rounded-xl overflow-hidden">
+                              <button
+                                type="button"
+                                className="w-full flex items-center gap-3 p-3 hover:bg-muted/40 transition-colors text-left"
+                                onClick={() => {
+                                  setExpandedPurchaseIds((prev) => {
+                                    const next = new Set(prev)
+                                    if (next.has(p.product_id)) next.delete(p.product_id)
+                                    else next.add(p.product_id)
+                                    return next
+                                  })
+                                }}
+                              >
+                                <div className="w-12 h-12 rounded-lg overflow-hidden bg-muted flex-shrink-0">
+                                  {p.image_url ? (
+                                    <Image src={p.image_url} alt={p.name} width={48} height={48} className="w-full h-full object-cover" />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                                      <Package className="w-5 h-5" />
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium truncate">{p.name}</p>
+                                  <p className="text-[11px] text-muted-foreground">已到 {p.arrived_qty} / {p.total_qty} · ${p.price}</p>
+                                </div>
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                  <span className="text-lg font-bold text-red-500">{p.pending_qty}</span>
+                                  <span className="text-[10px] text-muted-foreground">要買</span>
+                                  {isExpanded ? <ChevronDown className="w-4 h-4 text-muted-foreground ml-1" /> : <ChevronRight className="w-4 h-4 text-muted-foreground ml-1" />}
+                                </div>
+                              </button>
+                              {isExpanded && (
+                                <div className="bg-muted/30 px-3 py-2 space-y-1 border-t">
+                                  {p.orders.filter((o) => o.pending_qty > 0).map((o) => (
+                                    <div key={o.order_item_id} className="flex items-center gap-2 text-xs py-1">
+                                      {o.member_picture && (
+                                        <Image src={o.member_picture} alt="" width={18} height={18} className="rounded-full flex-shrink-0" />
+                                      )}
+                                      <span className="truncate flex-1">{o.member_name}</span>
+                                      {o.variant_name && <span className="text-[10px] text-muted-foreground">{o.variant_name}</span>}
+                                      <span className="text-red-500 font-medium flex-shrink-0">×{o.pending_qty}</span>
+                                    </div>
+                                  ))}
+                                  <div className="flex gap-2 pt-2">
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="flex-1 h-8 text-xs"
+                                      onClick={(e) => { e.stopPropagation(); handleMarkProductArrived(p.product_id, 1) }}
+                                    >
+                                      +1 已到
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      className="flex-1 h-8 text-xs"
+                                      onClick={(e) => { e.stopPropagation(); handleMarkProductArrived(p.product_id, p.pending_qty) }}
+                                    >
+                                      全到（+{p.pending_qty}）
+                                    </Button>
+                                  </div>
+                                </div>
                               )}
-                              <span className="truncate">{order.member_name}</span>
-                              <span className="text-muted-foreground flex-shrink-0">
-                                ×{order.quantity}
-                              </span>
                             </div>
-                            <span
-                              className={`text-xs px-1.5 py-0.5 rounded flex-shrink-0 ${order.status === 'allocated'
-                                ? 'bg-green-100 text-green-700'
-                                : order.status === 'partial'
-                                  ? 'bg-blue-100 text-blue-700'
-                                  : 'bg-yellow-100 text-yellow-700'
-                                }`}
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 手動單區 */}
+                  {purchaseSummary && purchaseSummary.manual_items.length > 0 && (
+                    <div>
+                      <h3 className="text-xs font-bold text-muted-foreground mb-2 px-1">
+                        ✍️ 手動單（共 {purchaseSummary.manual_items.reduce((s, m) => s + m.pending_qty, 0)} 件要買）
+                      </h3>
+                      <div className="space-y-1.5">
+                        {purchaseSummary.manual_items.map((m) => (
+                          <div key={m.order_item_id} className="flex items-center gap-2 p-2.5 rounded-lg border text-sm">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm truncate">{m.item_name}</p>
+                              <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-muted-foreground">
+                                {m.member_picture && (
+                                  <Image src={m.member_picture} alt="" width={14} height={14} className="rounded-full flex-shrink-0" />
+                                )}
+                                <span className="truncate">{m.member_name}</span>
+                                {m.unit_price > 0 && <span>· ${m.unit_price}</span>}
+                              </div>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8 text-xs flex-shrink-0"
+                              onClick={() => handleMarkItemArrived(m.order_item_id)}
                             >
-                              {order.status === 'allocated'
-                                ? '已配'
-                                : order.status === 'partial'
-                                  ? `${order.arrived_qty}/${order.quantity}`
-                                  : '待配'}
-                            </span>
+                              <Check className="w-3 h-3 mr-1" />已到
+                            </Button>
                           </div>
                         ))}
                       </div>
                     </div>
-                  )
-                })}
+                  )}
+                </div>
+              )}
 
-                {allOrders.filter((o) => o.status !== 'cancelled').length === 0 && (
-                  <p className="text-center text-muted-foreground py-8">尚無訂單</p>
-                )}
-              </div>
+              {/* Tab 2: 訂單明細 */}
+              {adminPanelTab === 'orders' && (
+                <>
+                  {/* 統計 */}
+                  {staffStats && (
+                    <div className="grid grid-cols-3 gap-2 p-4 border-b">
+                      <div className="text-center">
+                        <p className="text-lg font-bold text-yellow-600">{staffStats.pending_count}</p>
+                        <p className="text-xs text-muted-foreground">待到貨</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-lg font-bold text-green-600">{staffStats.allocated_count}</p>
+                        <p className="text-xs text-muted-foreground">已備齊</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-lg font-bold text-primary">
+                          ${staffStats.total_sales.toLocaleString()}
+                        </p>
+                        <p className="text-xs text-muted-foreground">銷售額</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 搜尋框 */}
+                  <div className="p-3 border-b">
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        placeholder="搜尋商品 / 會員"
+                        value={orderSearchTerm}
+                        onChange={(e) => setOrderSearchTerm(e.target.value)}
+                        className="pl-8 h-9 text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  {/* 訂單列表 - 按商品分組 */}
+                  <div className="p-4 overflow-y-auto h-[calc(100vh-260px)]">
+                    {products.map((product) => {
+                      const productOrders = allOrders.filter(
+                        (o) => o.product_id === product.id && o.status !== 'cancelled'
+                      )
+                      if (productOrders.length === 0) return null
+                      const term = orderSearchTerm.trim().toLowerCase()
+                      if (term) {
+                        const matchName = product.name.toLowerCase().includes(term)
+                        const matchMember = productOrders.some((o) => o.member_name.toLowerCase().includes(term))
+                        if (!matchName && !matchMember) return null
+                      }
+                      const pendingSum = productOrders.reduce((s, o) => s + Math.max(0, o.quantity - (o.arrived_qty || 0)), 0)
+
+                      return (
+                        <div key={product.id} className="mb-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <h3 className="text-sm font-bold">{product.name}</h3>
+                            <div className="flex items-center gap-1.5">
+                              {pendingSum > 0 && (
+                                <span className="text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">
+                                  還要 {pendingSum}
+                                </span>
+                              )}
+                              <span className="text-xs text-muted-foreground">
+                                ${product.price} · {productOrders.length} 筆
+                              </span>
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            {productOrders.map((order) => (
+                              <div
+                                key={order.id}
+                                className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-muted/50 text-sm"
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  {order.member_picture && (
+                                    <Image
+                                      src={order.member_picture}
+                                      alt=""
+                                      width={20}
+                                      height={20}
+                                      className="rounded-full flex-shrink-0"
+                                    />
+                                  )}
+                                  <span className="truncate">{order.member_name}</span>
+                                  <span className="text-muted-foreground flex-shrink-0">
+                                    ×{order.quantity}
+                                  </span>
+                                </div>
+                                <span
+                                  className={`text-xs px-1.5 py-0.5 rounded flex-shrink-0 ${order.status === 'allocated'
+                                    ? 'bg-green-100 text-green-700'
+                                    : order.status === 'partial'
+                                      ? 'bg-blue-100 text-blue-700'
+                                      : 'bg-yellow-100 text-yellow-700'
+                                    }`}
+                                >
+                                  {order.status === 'allocated'
+                                    ? '已備齊'
+                                    : order.status === 'partial'
+                                      ? `${order.arrived_qty}/${order.quantity} 已到`
+                                      : '未到'}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })}
+
+                    {allOrders.filter((o) => o.status !== 'cancelled').length === 0 && (
+                      <p className="text-center text-muted-foreground py-8">尚無訂單</p>
+                    )}
+                  </div>
+                </>
+              )}
             </motion.div>
             </div>
           </motion.div>
