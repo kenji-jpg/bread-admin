@@ -16,6 +16,25 @@
   let isPaused = false;
   let isStopped = false;
 
+  // 賣貨便禁用：&()=;'"<>\ + emoji；清掉以避免開單失敗
+  function sanitizeStoreName(s) {
+    if (!s) return '';
+    return String(s)
+      .replace(/\p{Extended_Pictographic}/gu, '')
+      .replace(/[\u200D\uFE0F]/g, '')
+      .replace(/[&()=;'"<>\\]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function buildStoreName(item) {
+    const customer = sanitizeStoreName(item.customerName);
+    const nickname = sanitizeStoreName(item.memberNickname);
+    let name = item.checkoutNo + '_' + customer;
+    if (nickname) name += '（' + nickname + '）';
+    return name.substring(0, 50);
+  }
+
   // 監聽來自 popup 的控制訊息
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'RESUME') {
@@ -142,12 +161,8 @@
       // === 只填必填欄位，其餘全部保持預設 ===
 
       // 1. 賣場名稱（必填，最多50字元）
-      // 格式: 單號_客戶名(暱稱) 或 單號_客戶名
-      let storeName = item.checkoutNo + '_' + item.customerName;
-      if (item.memberNickname) {
-        storeName += '(' + item.memberNickname + ')';
-      }
-      storeName = storeName.substring(0, 50);
+      // 格式: 單號_客戶名（暱稱） 或 單號_客戶名
+      const storeName = buildStoreName(item);
       setInputValue('input[name="Cgdm_Name"]', storeName);
       log(`賣場名稱: ${storeName}`);
 
@@ -410,12 +425,8 @@
   function findLatestStoreCode(item) {
     // 方法1：找賣場名稱包含 checkout_no 的那一行
     const rows = document.querySelectorAll('table tr, .list-item, [class*="row"]');
-    // 賣場名稱格式: 單號_客戶名(暱稱) 或 單號_客戶名
-    let storeName = item.checkoutNo + '_' + item.customerName;
-    if (item.memberNickname) {
-      storeName += '(' + item.memberNickname + ')';
-    }
-    storeName = storeName.substring(0, 50);
+    // 賣場名稱格式: 單號_客戶名（暱稱） 或 單號_客戶名
+    const storeName = buildStoreName(item);
 
     // 找所有包含 GM 編號的元素
     const allText = document.body.innerText;
