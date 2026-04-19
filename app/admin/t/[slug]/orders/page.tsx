@@ -166,7 +166,8 @@ export default function OrdersPage() {
                     auction_order:auction_orders!auction_orders_order_item_id_fkey(product_name)
                 `)
                 .eq('tenant_id', tenant.id)
-                .order('created_at', { ascending: false }),
+                .order('created_at', { ascending: false })
+                .range(0, 9999),
             supabase
                 .from('auction_orders')
                 .select('id, winner_nickname, amount, product_name, raw_input, note, auction_date, created_at')
