@@ -1184,9 +1184,9 @@ export default function CheckoutsPage() {
                                                                             return (
                                                                                 <div
                                                                                     key={idx}
-                                                                                    className="flex items-center justify-between px-4 py-2 text-sm border-b last:border-b-0 group"
+                                                                                    className="flex items-start justify-between px-4 py-2 text-sm border-b last:border-b-0 group"
                                                                                 >
-                                                                                    <span className="truncate mr-2 flex-1">{detail.name}{detail.variant_name ? `（${detail.variant_name}）` : ''}</span>
+                                                                                    <span className="mr-2 flex-1 break-words">{detail.name}{detail.variant_name ? `（${detail.variant_name}）` : ''}</span>
                                                                                     <div className="flex items-center gap-2 shrink-0 text-muted-foreground">
                                                                                         <span>x{detail.qty}</span>
                                                                                         <span className="w-16 text-right font-medium text-foreground">
