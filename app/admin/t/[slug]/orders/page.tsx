@@ -412,9 +412,9 @@ export default function OrdersPage() {
         setIsSubmitting(false)
     }
 
-    // 全選 / 取消全選（所有篩選後的訂單，跨頁；排除已結帳、待綁定）
+    // 全選 / 取消全選（所有篩選後的訂單，跨頁；排除已結帳。待綁定可勾以便批次取消）
     const allSelectableIds = useMemo(() =>
-        filteredOrders.filter((o) => !o.checkout_id && !o.isUnbound).map((o) => o.id),
+        filteredOrders.filter((o) => !o.checkout_id).map((o) => o.id),
         [filteredOrders]
     )
 
@@ -590,29 +590,61 @@ export default function OrdersPage() {
     const confirmBatchCancel = async () => {
         setIsSubmitting(true)
         try {
-            const { data, error } = await supabase.rpc('batch_delete_order_items_v1', {
-                p_tenant_id: tenant?.id,
-                p_order_item_ids: Array.from(selectedOrders),
+            const allIds = Array.from(selectedOrders)
+            // 拆分：待綁定（auction_orders）vs 一般訂單（order_items）
+            const unboundOrders = allIds
+                .map((id) => orders.find((o) => o.id === id))
+                .filter((o): o is OrderWithDetails => !!o && !!o.isUnbound && !!o.auctionOrderId)
+            const orderItemIds = allIds.filter((id) => {
+                const o = orders.find((x) => x.id === id)
+                return o && !o.isUnbound
             })
 
-            if (error) {
-                toast.error('批量取消失敗：' + error.message)
-                return
+            const deletedIds: string[] = []
+            let deletedCount = 0
+            let skippedCount = 0
+            const failedNames: string[] = []
+
+            // 1) 批次刪除一般訂單
+            if (orderItemIds.length > 0) {
+                const { data, error } = await supabase.rpc('batch_delete_order_items_v1', {
+                    p_tenant_id: tenant?.id,
+                    p_order_item_ids: orderItemIds,
+                })
+                if (error) {
+                    toast.error('批量取消失敗：' + error.message)
+                    return
+                }
+                if (!data?.success) {
+                    toast.error(data?.error || '批量取消失敗')
+                    return
+                }
+                deletedCount += data.deleted_count ?? 0
+                skippedCount += data.skipped_count ?? 0
+                if (Array.isArray(data.deleted_ids)) deletedIds.push(...data.deleted_ids)
             }
 
-            if (!data?.success) {
-                toast.error(data?.error || '批量取消失敗')
-                return
+            // 2) 逐筆刪除待綁定訂單（auction_orders）
+            for (const order of unboundOrders) {
+                const { data, error } = await supabase.rpc('delete_auction_order_v1', {
+                    p_tenant_id: tenant?.id,
+                    p_auction_order_id: order.auctionOrderId,
+                })
+                if (error || !data?.success) {
+                    failedNames.push(order.customer_name || order.winnerNickname || '未知')
+                } else {
+                    deletedCount++
+                    deletedIds.push(order.id)
+                }
             }
 
-            // 顯示結果
-            toast.success(`成功刪除 ${data.deleted_count} 筆訂單`)
-
-            if (data.skipped_count > 0) {
-                toast.warning(`${data.skipped_count} 筆因已結帳被跳過`)
+            if (deletedCount > 0) toast.success(`成功刪除 ${deletedCount} 筆訂單`)
+            if (skippedCount > 0) toast.warning(`${skippedCount} 筆因已結帳被跳過`)
+            if (failedNames.length > 0) {
+                toast.error(`${failedNames.length} 筆刪除失敗：${failedNames.slice(0, 3).join('、')}`)
             }
 
-            setOrders((prev) => prev.filter((o) => !data.deleted_ids?.includes(o.id)))
+            setOrders((prev) => prev.filter((o) => !deletedIds.includes(o.id)))
             setSelectedOrders(new Set())
         } catch (err: any) {
             toast.error('批量取消失敗：' + (err.message || '未知錯誤'))
@@ -839,9 +871,13 @@ export default function OrdersPage() {
         )
         const pendingCount = Array.from(selectedOrders).filter((id) => {
             const order = orders.find((o) => o.id === id)
-            return order && !order.is_arrived && !order.checkout_id
+            return order && !order.isUnbound && !order.is_arrived && !order.checkout_id
         }).length
-        return { arrivedCount, uniqueMemberCount: uniqueMembers.size, pendingCount }
+        const unboundCount = Array.from(selectedOrders).filter((id) => {
+            const order = orders.find((o) => o.id === id)
+            return order && order.isUnbound
+        }).length
+        return { arrivedCount, uniqueMemberCount: uniqueMembers.size, pendingCount, unboundCount }
     }, [selectedOrders, orders])
 
     if (tenantLoading) {
@@ -1072,7 +1108,7 @@ export default function OrdersPage() {
                                             }}
                                         >
                                             <TableCell className="pl-5" onClick={(e) => e.stopPropagation()}>
-                                                {!order.checkout_id && !order.isUnbound && (
+                                                {!order.checkout_id && (
                                                     <Checkbox
                                                         checked={selectedOrders.has(order.id)}
                                                         onCheckedChange={() => toggleOrderSelection(order.id)}
