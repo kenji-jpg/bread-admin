@@ -654,6 +654,44 @@ export default function OrdersPage() {
         }
     }
 
+    // 批量結單（待綁定 auction_orders → status='completed'，不再出現在待綁定列表）
+    const handleBatchCompleteUnbound = async () => {
+        if (!tenant?.id) return
+        const unboundOrders = Array.from(selectedOrders)
+            .map((id) => orders.find((o) => o.id === id))
+            .filter((o): o is OrderWithDetails => !!o && !!o.isUnbound && !!o.auctionOrderId)
+        if (unboundOrders.length === 0) {
+            toast.error('選中的訂單中沒有「待綁定」訂單')
+            return
+        }
+        setIsSubmitting(true)
+        try {
+            const auctionIds = unboundOrders.map((o) => o.auctionOrderId as string)
+            const { data, error } = await supabase.rpc('batch_complete_auction_orders_v1', {
+                p_tenant_id: tenant.id,
+                p_auction_order_ids: auctionIds,
+            }) as { data: { success: boolean; completed_count?: number; completed_ids?: string[]; skipped_count?: number; error?: string } | null; error: Error | null }
+
+            if (error || !data?.success) {
+                toast.error(data?.error || error?.message || '結單失敗')
+                return
+            }
+
+            const completedSet = new Set(data.completed_ids || [])
+            // OrderWithDetails 上 unbound 的 id 等於 auctionOrderId
+            setOrders((prev) => prev.filter((o) => !completedSet.has(o.id)))
+            setSelectedOrders(new Set())
+            toast.success(`已結單 ${data.completed_count ?? 0} 筆`)
+            if ((data.skipped_count ?? 0) > 0) {
+                toast.warning(`${data.skipped_count} 筆狀態非 pending，已跳過`)
+            }
+        } catch (err: any) {
+            toast.error('結單失敗：' + (err.message || '未知錯誤'))
+        } finally {
+            setIsSubmitting(false)
+        }
+    }
+
     // 批量標記可結帳
     const handleBatchMarkArrived = async () => {
         if (selectedOrders.size === 0) return
@@ -1787,6 +1825,17 @@ export default function OrdersPage() {
                                     >
                                         <Package className="mr-1 h-3 w-3" />
                                         標記可結帳 ({selectedStats.pendingCount})
+                                    </Button>
+                                )}
+                                {selectedStats.unboundCount > 0 && (
+                                    <Button
+                                        onClick={handleBatchCompleteUnbound}
+                                        disabled={isSubmitting}
+                                        size="xs"
+                                        className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-full h-7 px-3 text-xs"
+                                    >
+                                        <CheckCircle2 className="mr-1 h-3 w-3" />
+                                        結單 ({selectedStats.unboundCount})
                                     </Button>
                                 )}
                                 <Button

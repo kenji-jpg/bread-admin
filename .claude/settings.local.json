@@ -55,7 +55,18 @@
       "Bash(bash:*)",
       "mcp__8fec4908-0b15-4f9e-ada0-bf45b04402ce__fetch-apify-docs",
       "WebFetch(domain:github.com)",
-      "Bash(npx supabase db push)"
+      "Bash(npx supabase db push)",
+      "mcp__supabase__execute_sql",
+      "Bash(npx tsc *)",
+      "Bash(gh pr create --title 'fix\\(orders\\): 訂單列表超過 1000 筆被截斷' --body ' *)",
+      "Bash(gh pr *)",
+      "mcp__supabase__get_edge_function",
+      "mcp__supabase__deploy_edge_function",
+      "Bash(git fetch *)",
+      "Bash(git checkout *)",
+      "Bash(git pull *)",
+      "Bash(git stash *)",
+      "mcp__supabase__apply_migration"
     ]
   }
 }
