@@ -136,8 +136,17 @@ const messageHandlers = {
         .trim();
     const customer = clean(customerName) || '客人';
     const nickname = clean(memberNickname);
-    let myshipStoreName = `${checkoutNo}_${customer}`;
-    if (nickname) myshipStoreName += `（${nickname}）`;
+    // 拔掉日期前綴：260508-2378 → 2378
+    const shortNo = (checkoutNo || '').split('-').pop() || checkoutNo || '';
+    // 暱稱優先（LINE 名），格式：{shortNo}_{nickname}（{customer}）
+    let myshipStoreName;
+    if (nickname && nickname !== customer) {
+      myshipStoreName = `${shortNo}_${nickname}（${customer}）`;
+    } else if (nickname) {
+      myshipStoreName = `${shortNo}_${nickname}`;
+    } else {
+      myshipStoreName = `${shortNo}_${customer}`;
+    }
     myshipStoreName = myshipStoreName.substring(0, 50);
 
     // 呼叫 Edge Function: notify-myship-url
