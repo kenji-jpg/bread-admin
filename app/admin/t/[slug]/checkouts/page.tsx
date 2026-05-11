@@ -1093,6 +1093,7 @@ export default function CheckoutsPage() {
                                         <TableHead className="w-[72px]">付款</TableHead>
                                         <TableHead className="w-[72px]">出貨</TableHead>
                                         <TableHead className="w-[110px]">結帳模式</TableHead>
+                                        <TableHead className="w-[90px]">賣場帳號</TableHead>
                                         <TableHead className="w-[72px]">通知</TableHead>
                                         <TableHead className="w-[80px]">時間</TableHead>
                                         <TableHead className="w-[80px] pr-4">操作</TableHead>
@@ -1226,6 +1227,17 @@ export default function CheckoutsPage() {
                                             {/* 結帳模式欄位 */}
                                             <TableCell>
                                                 <ShippingMethodCell item={item} onChangeMethod={handleChangeShippingMethod} />
+                                            </TableCell>
+                                            {/* 賣貨便帳號欄位 */}
+                                            <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                                                {(() => {
+                                                    const method = (item.shipping_method as string | null) || 'myship'
+                                                    if (method !== 'myship' && method !== 'myship_free') {
+                                                        return <span>—</span>
+                                                    }
+                                                    const accountName = getShippingValue<string>(item, 'myship_account_name')
+                                                    return accountName ? <span>{accountName}</span> : <span>—</span>
+                                                })()}
                                             </TableCell>
                                             {/* 通知狀態欄位 */}
                                             <TableCell>

@@ -126,7 +126,7 @@ const messageHandlers = {
   // 上架成功後，回填 store_url 並觸發 LINE 通知
   SET_STORE_URL: async (msg) => {
     await ensureAuth();
-    const { checkoutId, storeUrl, checkoutNo, customerName, memberNickname } = msg;
+    const { checkoutId, storeUrl, checkoutNo, customerName, memberNickname, accountName } = msg;
     const clean = (s) =>
       String(s || '')
         .replace(/\p{Extended_Pictographic}/gu, '')
@@ -153,6 +153,7 @@ const messageHandlers = {
         checkout_id: checkoutId,
         store_url: storeUrl,
         myship_store_name: myshipStoreName,
+        myship_account_name: accountName || null,
       }),
     });
     const data = await res.json();

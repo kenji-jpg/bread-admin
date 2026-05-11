@@ -16,6 +16,18 @@
   let isPaused = false;
   let isStopped = false;
 
+  // 抓取賣貨便登入帳號姓名（topbar「{name}，歡迎回來」）
+  function getMyshipAccountName() {
+    try {
+      const text = document.body.innerText || '';
+      // 半形或全形逗號 + 可選空白 + 歡迎回來
+      const m = text.match(/([^\s,，\n]{1,15})\s*[,，]\s*歡迎回來/);
+      return m ? m[1].trim() : null;
+    } catch {
+      return null;
+    }
+  }
+
   // 賣貨便禁用：&()=;'"<>\ + emoji；清掉以避免開單失敗
   function sanitizeStoreName(s) {
     if (!s) return '';
@@ -253,6 +265,10 @@
     // 回填到 Supabase + 觸發 LINE 通知
     log('回填 Supabase 並通知客人...');
     try {
+      const accountName = getMyshipAccountName();
+      if (accountName) {
+        log(`賣場帳號: ${accountName}`);
+      }
       const result = await sendToBackground({
         type: 'SET_STORE_URL',
         checkoutId: processingItem.checkoutId,
@@ -260,6 +276,7 @@
         checkoutNo: processingItem.checkoutNo,
         customerName: processingItem.customerName,
         memberNickname: processingItem.memberNickname,
+        accountName: accountName,
       });
 
       if (result.success) {
