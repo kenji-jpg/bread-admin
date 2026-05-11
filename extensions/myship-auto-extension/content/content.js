@@ -42,8 +42,17 @@
   function buildStoreName(item) {
     const customer = sanitizeStoreName(item.customerName);
     const nickname = sanitizeStoreName(item.memberNickname);
-    let name = item.checkoutNo + '_' + customer;
-    if (nickname) name += '（' + nickname + '）';
+    // 拔掉日期前綴：260508-2378 → 2378
+    const shortNo = (item.checkoutNo || '').split('-').pop() || item.checkoutNo || '';
+    // 暱稱優先，LINE 名作為輔助；無暱稱時只放 LINE 名
+    let name;
+    if (nickname && nickname !== customer) {
+      name = shortNo + '_' + nickname + '（' + customer + '）';
+    } else if (nickname) {
+      name = shortNo + '_' + nickname;
+    } else {
+      name = shortNo + '_' + customer;
+    }
     return name.substring(0, 50);
   }
 

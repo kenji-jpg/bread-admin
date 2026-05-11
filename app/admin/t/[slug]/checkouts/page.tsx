@@ -353,19 +353,16 @@ export default function CheckoutsPage() {
         try {
             const displayName = storeUrlCheckout.customer_name ||
                                  storeUrlCheckout.member_display_name ||
-                                 storeUrlCheckout.member_nickname ||
                                  '顧客'
             const nickname = storeUrlCheckout.member_nickname
-            // 賣場名稱格式：名稱(暱稱)，與 Chrome 插件一致
-            const customerName = nickname && nickname !== displayName
-                ? `${displayName}(${nickname})`
-                : displayName
 
+            // 賣場名稱格式由 hook 統一處理（暱稱優先，無日期前綴）
             const result = await checkoutApiRef.current.setUrl(
                 storeUrlCheckout.id,
                 storeUrl,
                 storeUrlCheckout.checkout_no,
-                customerName
+                displayName,
+                nickname
             )
 
             if (result.success) {

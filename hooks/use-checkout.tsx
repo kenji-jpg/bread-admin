@@ -190,7 +190,7 @@ interface UseCheckoutReturn {
     error: string | null
     listCheckouts: (shippingStatus?: string, paymentStatus?: string, limit?: number, offset?: number, search?: string, shippingMethod?: string, amountMin?: number | null, amountMax?: number | null) => Promise<ListCheckoutsResult>
     getDetail: (checkoutId: string) => Promise<CheckoutDetailResult>
-    setUrl: (checkoutId: string, url: string, checkoutNo: string, customerName: string) => Promise<NotifyMyshipResult>
+    setUrl: (checkoutId: string, url: string, checkoutNo: string, displayName: string, nickname?: string | null) => Promise<NotifyMyshipResult>
     markOrdered: (checkoutId: string, orderNo?: string, note?: string) => Promise<UpdateStatusResult>
     markShipped: (checkoutId: string, note?: string) => Promise<UpdateStatusResult>
     markCompleted: (checkoutId: string, note?: string) => Promise<UpdateStatusResult>
@@ -295,8 +295,23 @@ export const useCheckout = (tenantId: string): UseCheckoutReturn => {
         checkoutId: string,
         storeUrl: string,
         checkoutNo: string,
-        customerName: string
+        displayName: string,
+        nickname?: string | null
     ): Promise<NotifyMyshipResult> => {
+        // 拔掉日期前綴：260508-2378 → 2378
+        const shortNo = (checkoutNo || '').split('-').pop() || checkoutNo
+        const dn = (displayName || '客人').trim()
+        const nn = (nickname || '').trim()
+        // 暱稱優先（LINE 名），格式：{shortNo}_{nickname}（{displayName}）
+        let myshipStoreName: string
+        if (nn && nn !== dn) {
+            myshipStoreName = `${shortNo}_${nn}（${dn}）`
+        } else if (nn) {
+            myshipStoreName = `${shortNo}_${nn}`
+        } else {
+            myshipStoreName = `${shortNo}_${dn}`
+        }
+        myshipStoreName = myshipStoreName.slice(0, 50)
         setLoading(true)
         setError(null)
 
@@ -340,7 +355,7 @@ export const useCheckout = (tenantId: string): UseCheckoutReturn => {
                         tenant_id: tenantId,
                         checkout_id: checkoutId,
                         store_url: storeUrl,
-                        myship_store_name: `${checkoutNo}_${customerName}`.slice(0, 50),
+                        myship_store_name: myshipStoreName,
                     }),
                 }
             )
