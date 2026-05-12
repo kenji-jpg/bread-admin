@@ -155,19 +155,35 @@ export default function OrdersPage() {
         if (!tenant) return
         if (showSkeleton) setIsLoading(true)
 
-        // 平行載入：order_items + 未綁定 auction_orders
-        const [orderItemsResult, unboundAuctionResult] = await Promise.all([
-            supabase
-                .from('order_items')
-                .select(`
-                    *,
-                    member:members(*),
-                    product:products(*),
-                    auction_order:auction_orders!auction_orders_order_item_id_fkey(product_name)
-                `)
-                .eq('tenant_id', tenant.id)
-                .order('created_at', { ascending: false })
-                .range(0, 9999),
+        // 客戶端分頁載入 order_items（避免 PostgREST 預設 db-max-rows=1000 限制）
+        const PAGE_SIZE = 1000
+        const fetchAllOrderItems = async (): Promise<OrderWithDetails[]> => {
+            const all: OrderWithDetails[] = []
+            let offset = 0
+            // 安全上限 50 頁 = 50000 筆，避免異常情況無限迴圈
+            for (let page = 0; page < 50; page++) {
+                const { data, error } = await supabase
+                    .from('order_items')
+                    .select(`
+                        *,
+                        member:members(*),
+                        product:products(*),
+                        auction_order:auction_orders!auction_orders_order_item_id_fkey(product_name)
+                    `)
+                    .eq('tenant_id', tenant.id)
+                    .order('created_at', { ascending: false })
+                    .range(offset, offset + PAGE_SIZE - 1)
+                if (error || !data) break
+                all.push(...(data as OrderWithDetails[]))
+                if (data.length < PAGE_SIZE) break
+                offset += PAGE_SIZE
+            }
+            return all
+        }
+
+        // 平行載入：order_items（分頁全撈）+ 未綁定 auction_orders
+        const [orderItems, unboundAuctionResult] = await Promise.all([
+            fetchAllOrderItems(),
             supabase
                 .from('auction_orders')
                 .select('id, winner_nickname, amount, product_name, raw_input, note, auction_date, created_at')
@@ -177,8 +193,6 @@ export default function OrdersPage() {
                 .is('order_item_id', null)
                 .order('created_at', { ascending: false }),
         ])
-
-        const orderItems = (orderItemsResult.data || []) as OrderWithDetails[]
 
         // 將未綁定 auction_orders 映射為 OrderWithDetails 佔位項
         const unboundItems: OrderWithDetails[] = (unboundAuctionResult.data || []).map((a) => ({
