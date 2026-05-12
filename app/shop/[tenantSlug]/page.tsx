@@ -1583,6 +1583,17 @@ export default function ShopPage() {
                     style={{ backgroundColor: '#F3F4F6', color: '#374151' }}
                     onClick={async () => {
                       await checkLineFriendship()
+                      // Fallback：API 可能因為不同 channel userId 不一致或快取而誤判
+                      // 1.5s 後若仍 false，強制放行（信任使用者點擊）
+                      setTimeout(() => {
+                        setIsLineFriend((cur) => {
+                          if (cur !== true) {
+                            localStorage.setItem('line_friend_confirmed', 'true')
+                            return true
+                          }
+                          return cur
+                        })
+                      }, 1500)
                     }}
                     disabled={isCheckingFriend}
                   >
@@ -1623,6 +1634,17 @@ export default function ShopPage() {
                     style={{ backgroundColor: '#F3F4F6', color: '#374151' }}
                     onClick={async () => {
                       await checkLineFriendship()
+                      // Fallback：webhook 可能延遲到達或 LINE Login channel != Bot channel
+                      // 1.5s 後若仍 false，強制放行
+                      setTimeout(() => {
+                        setHasMessagedOa((cur) => {
+                          if (cur !== true) {
+                            localStorage.setItem('line_messaged_confirmed', 'true')
+                            return true
+                          }
+                          return cur
+                        })
+                      }, 1500)
                     }}
                     disabled={isCheckingFriend}
                   >
