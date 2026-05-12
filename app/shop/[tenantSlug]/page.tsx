@@ -179,6 +179,7 @@ interface Tenant {
   name: string
   slug: string
   liff_id?: string | null
+  line_oa_id?: string | null
   plan?: string
   payment_info?: { bank?: string; account?: string; name?: string }
 }
@@ -383,6 +384,10 @@ export default function ShopPage() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [hasMessagedOa, setHasMessagedOa] = useState<boolean | null>(() => {
+    if (typeof window === 'undefined') return null
+    return localStorage.getItem('line_messaged_confirmed') === 'true' ? true : null
+  })
   const [isLineFriend, setIsLineFriend] = useState<boolean | null>(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('line_friend_confirmed') === 'true' ? true : null
@@ -491,14 +496,14 @@ export default function ShopPage() {
   const [noticeDontShowToday, setNoticeDontShowToday] = useState(false)
   useEffect(() => {
     if (!tenant?.id || !shopSettings.shopping_notice || showStaffUI) return
-    // 等好友檢查通過後才顯示購物須知
-    if (isLineFriend !== true) return
+    // 等好友檢查通過 + 私訊過後才顯示購物須知
+    if (isLineFriend !== true || hasMessagedOa !== true) return
     const today = new Date().toISOString().slice(0, 10)
     const key = `shopping_notice_dismissed_${tenant.id}`
     const dismissedDate = localStorage.getItem(key)
     if (dismissedDate === today) return
     setShowShoppingNotice(true)
-  }, [tenant?.id, shopSettings.shopping_notice, showStaffUI, isLineFriend])
+  }, [tenant?.id, shopSettings.shopping_notice, showStaffUI, isLineFriend, hasMessagedOa])
 
   // 載入商城資料（不依賴 isStaff，避免 staff 判定後重複載入）
   const isStaffRef = useRef(isStaff)
@@ -695,12 +700,13 @@ export default function ShopPage() {
     }
   }, [isLoggedIn, profile, tenant, loadMyOrders, loadFavorites])
 
-  // 登入後檢查 LINE 好友狀態
+  // 登入後檢查 LINE 好友 + 私訊狀態
   const checkLineFriendship = useCallback(async () => {
     if (!tenant?.id || !profile?.userId) return
     // Staff 和 dev 模式跳過檢查
     if (isStaff || isDevStaff) {
       setIsLineFriend(true)
+      setHasMessagedOa(true)
       return
     }
     setIsCheckingFriend(true)
@@ -716,22 +722,26 @@ export default function ShopPage() {
       const data = await res.json()
       console.log('[好友檢查]', { userId: profile.userId, result: data })
       const isFriend = data.isFriend === true
+      const messaged = data.hasMessagedOa === true
       setIsLineFriend(isFriend)
+      setHasMessagedOa(messaged)
       if (isFriend) localStorage.setItem('line_friend_confirmed', 'true')
+      if (messaged) localStorage.setItem('line_messaged_confirmed', 'true')
     } catch (err) {
       console.error('[好友檢查] 失敗:', err)
       // 檢查失敗時不阻擋（寬容處理）
       setIsLineFriend(true)
+      setHasMessagedOa(true)
     } finally {
       setIsCheckingFriend(false)
     }
   }, [tenant?.id, profile?.userId, isStaff, isDevStaff])
 
   useEffect(() => {
-    if (isLoggedIn && profile && tenant && isLineFriend === null) {
+    if (isLoggedIn && profile && tenant && (isLineFriend === null || hasMessagedOa === null)) {
       checkLineFriendship()
     }
-  }, [isLoggedIn, profile, tenant, isLineFriend, checkLineFriendship])
+  }, [isLoggedIn, profile, tenant, isLineFriend, hasMessagedOa, checkLineFriendship])
 
   // URL 帶 ?p=productId 時自動開啟該商品
   const autoOpenDone = useRef(false)
@@ -1515,9 +1525,9 @@ export default function ShopPage() {
         color: 'var(--shop-text)',
       } as React.CSSProperties}
     >
-      {/* LINE 好友檢查 Modal（阻擋式） */}
+      {/* LINE 護城河 Modal：1. 加好友 → 2. 傳訊息確認 */}
       <AnimatePresence>
-        {isLoggedIn && isLineFriend === false && (
+        {isLoggedIn && (isLineFriend === false || (isLineFriend === true && hasMessagedOa === false)) && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -1540,41 +1550,86 @@ export default function ShopPage() {
                 <h2 className="text-xl font-bold text-white">{tenant?.name}</h2>
                 <p className="text-sm text-white/80 mt-1">歡迎光臨 ✨</p>
               </div>
-              <div className="px-6 py-6">
-                <p className="text-sm mb-1 font-medium" style={{ color: '#4A2C17' }}>
-                  為了讓您收到訂單和出貨通知
-                </p>
-                <p className="text-sm mb-5" style={{ color: '#8B6B4A' }}>
-                  請先加入我們的 LINE 好友
-                </p>
-                <a
-                  href="https://line.me/R/ti/p/@530rmasi"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block w-full py-3 rounded-xl text-sm font-bold text-white transition-all active:scale-[0.97]"
-                  style={{ backgroundColor: '#06C755' }}
-                >
-                  加入 LINE 好友
-                </a>
-                <button
-                  className="w-full mt-3 py-3 rounded-xl text-sm font-medium transition-all active:scale-[0.97] disabled:opacity-50"
-                  style={{ backgroundColor: '#F3F4F6', color: '#374151' }}
-                  onClick={async () => {
-                    await checkLineFriendship()
-                    // 如果 API 檢查後仍然 false，第二次點擊直接放行
-                    // （可能是 LINE userId 不一致或 API 延遲）
-                    setTimeout(() => {
-                      if (!isLineFriend) {
-                        localStorage.setItem('line_friend_confirmed', 'true')
-                        setIsLineFriend(true)
-                      }
-                    }, 1500)
-                  }}
-                  disabled={isCheckingFriend}
-                >
-                  {isCheckingFriend ? '確認中...' : '我已加好友 ✓'}
-                </button>
-              </div>
+
+              {/* Step 1：尚未加好友 */}
+              {isLineFriend === false && (
+                <div className="px-6 py-6">
+                  <div className="text-xs mb-3 font-bold" style={{ color: accentColor || '#D94E2B' }}>
+                    第 1 步 / 共 2 步
+                  </div>
+                  <p className="text-sm mb-1 font-medium" style={{ color: '#4A2C17' }}>
+                    為了讓您收到訂單和出貨通知
+                  </p>
+                  <p className="text-sm mb-5" style={{ color: '#8B6B4A' }}>
+                    請先加入我們的 LINE 好友
+                  </p>
+                  {tenant?.line_oa_id ? (
+                    <a
+                      href={`https://line.me/R/ti/p/${encodeURIComponent(tenant.line_oa_id.startsWith('@') ? tenant.line_oa_id : '@' + tenant.line_oa_id)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block w-full py-3 rounded-xl text-sm font-bold text-white transition-all active:scale-[0.97]"
+                      style={{ backgroundColor: '#06C755' }}
+                    >
+                      加入 LINE 好友
+                    </a>
+                  ) : (
+                    <div className="block w-full py-3 rounded-xl text-sm font-bold text-white/70 text-center" style={{ backgroundColor: '#9CA3AF' }}>
+                      店家尚未設定 LINE OA ID
+                    </div>
+                  )}
+                  <button
+                    className="w-full mt-3 py-3 rounded-xl text-sm font-medium transition-all active:scale-[0.97] disabled:opacity-50"
+                    style={{ backgroundColor: '#F3F4F6', color: '#374151' }}
+                    onClick={async () => {
+                      await checkLineFriendship()
+                    }}
+                    disabled={isCheckingFriend}
+                  >
+                    {isCheckingFriend ? '確認中...' : '我已加好友 ✓'}
+                  </button>
+                </div>
+              )}
+
+              {/* Step 2：已加好友，尚未私訊 */}
+              {isLineFriend === true && hasMessagedOa === false && (
+                <div className="px-6 py-6">
+                  <div className="text-xs mb-3 font-bold" style={{ color: accentColor || '#D94E2B' }}>
+                    第 2 步 / 共 2 步
+                  </div>
+                  <p className="text-sm mb-1 font-medium" style={{ color: '#4A2C17' }}>
+                    最後一步：傳訊息給店家
+                  </p>
+                  <p className="text-sm mb-5" style={{ color: '#8B6B4A' }}>
+                    點下方按鈕、在 LINE 內按「傳送」即可，讓店家可以聯絡到您
+                  </p>
+                  {tenant?.line_oa_id ? (
+                    <a
+                      href={`https://line.me/R/oaMessage/${encodeURIComponent(tenant.line_oa_id.startsWith('@') ? tenant.line_oa_id : '@' + tenant.line_oa_id)}/?${encodeURIComponent('您好，我已加入好友')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block w-full py-3 rounded-xl text-sm font-bold text-white transition-all active:scale-[0.97]"
+                      style={{ backgroundColor: '#06C755' }}
+                    >
+                      📩 傳「您好」給店家
+                    </a>
+                  ) : (
+                    <div className="block w-full py-3 rounded-xl text-sm font-bold text-white/70 text-center" style={{ backgroundColor: '#9CA3AF' }}>
+                      店家尚未設定 LINE OA ID
+                    </div>
+                  )}
+                  <button
+                    className="w-full mt-3 py-3 rounded-xl text-sm font-medium transition-all active:scale-[0.97] disabled:opacity-50"
+                    style={{ backgroundColor: '#F3F4F6', color: '#374151' }}
+                    onClick={async () => {
+                      await checkLineFriendship()
+                    }}
+                    disabled={isCheckingFriend}
+                  >
+                    {isCheckingFriend ? '確認中...' : '我已傳訊息 ✓'}
+                  </button>
+                </div>
+              )}
             </motion.div>
           </motion.div>
         )}

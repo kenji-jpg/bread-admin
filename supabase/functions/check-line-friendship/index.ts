@@ -65,8 +65,20 @@ Deno.serve(async (req) => {
 
     const isFriend = lineRes.status === 200
 
+    // 查詢 has_messaged_oa（是否曾私訊過 LINE@）
+    let hasMessagedOa = false
+    if (isFriend) {
+      const { data: member } = await supabase
+        .from('members')
+        .select('has_messaged_oa')
+        .eq('tenant_id', tenant_id)
+        .eq('line_user_id', line_user_id)
+        .maybeSingle()
+      hasMessagedOa = !!member?.has_messaged_oa
+    }
+
     return new Response(
-      JSON.stringify({ isFriend }),
+      JSON.stringify({ isFriend, hasMessagedOa }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
