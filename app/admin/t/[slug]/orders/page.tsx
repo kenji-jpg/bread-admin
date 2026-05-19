@@ -272,12 +272,14 @@ export default function OrdersPage() {
 
             const productName = getProductDisplayName(order)
             const memberNickname = order.member?.nickname || ''
+            const memberDisplayName = order.member?.display_name || ''
             const searchMatch =
                 searchQuery === '' ||
                 productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 order.item_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 order.customer_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 memberNickname.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                memberDisplayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 order.sku?.toLowerCase().includes(searchQuery.toLowerCase())
 
             // 隱藏已取消訂單（除非篩選 cancelled）
