@@ -166,6 +166,8 @@ export default function CheckoutsPage() {
     const [methodFilter, setMethodFilter] = useState<string>('all')  // 物流方式篩選
     const [amountMin, setAmountMin] = useState<string>('')
     const [amountMax, setAmountMax] = useState<string>('')
+    const [dateFrom, setDateFrom] = useState<string>('')  // YYYY-MM-DD
+    const [dateTo, setDateTo] = useState<string>('')      // YYYY-MM-DD
 
     // 分頁狀態
     const [currentPage, setCurrentPage] = useState(1)
@@ -211,6 +213,9 @@ export default function CheckoutsPage() {
         try {
             const minVal = amountMin ? parseInt(amountMin, 10) : null
             const maxVal = amountMax ? parseInt(amountMax, 10) : null
+            // 日期：起含 00:00:00、迄含 23:59:59（當地時區轉 ISO）
+            const fromIso = dateFrom ? new Date(`${dateFrom}T00:00:00`).toISOString() : null
+            const toIso = dateTo ? new Date(`${dateTo}T23:59:59.999`).toISOString() : null
             const result = await checkoutApiRef.current.listCheckouts(
                 shippingFilter === 'all' ? undefined : shippingFilter,
                 paymentFilter === 'all' ? undefined : paymentFilter,
@@ -220,6 +225,8 @@ export default function CheckoutsPage() {
                 methodFilter === 'all' ? undefined : methodFilter,
                 !minVal || isNaN(minVal) ? null : minVal,
                 !maxVal || isNaN(maxVal) ? null : maxVal,
+                fromIso,
+                toIso,
             )
 
             if (result.success) {
@@ -238,7 +245,7 @@ export default function CheckoutsPage() {
         } finally {
             setIsLoading(false)
         }
-    }, [tenant?.id, shippingFilter, paymentFilter, methodFilter, pageSize, currentPage, debouncedSearch, amountMin, amountMax])
+    }, [tenant?.id, shippingFilter, paymentFilter, methodFilter, pageSize, currentPage, debouncedSearch, amountMin, amountMax, dateFrom, dateTo])
 
     // 載入結帳單詳情
     const fetchCheckoutDetail = useCallback(async (checkoutId: string) => {
@@ -285,7 +292,7 @@ export default function CheckoutsPage() {
     // 當篩選條件改變時，重置到第一頁
     useEffect(() => {
         setCurrentPage(1)
-    }, [shippingFilter, paymentFilter, methodFilter, pageSize, debouncedSearch, amountMin, amountMax])
+    }, [shippingFilter, paymentFilter, methodFilter, pageSize, debouncedSearch, amountMin, amountMax, dateFrom, dateTo])
 
     // 所有篩選（含搜尋、狀態、結帳模式）已由 RPC 伺服端處理
     const filteredCheckouts = checkouts
@@ -980,6 +987,34 @@ export default function CheckoutsPage() {
                                     className="h-8 w-8 rounded-lg"
                                     onClick={() => { setAmountMin(''); setAmountMax('') }}
                                     title="清除金額篩選"
+                                >
+                                    ×
+                                </Button>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <Input
+                                type="date"
+                                value={dateFrom}
+                                onChange={(e) => setDateFrom(e.target.value)}
+                                className="w-[150px] rounded-xl"
+                                title="起始日期"
+                            />
+                            <span className="text-muted-foreground text-sm">~</span>
+                            <Input
+                                type="date"
+                                value={dateTo}
+                                onChange={(e) => setDateTo(e.target.value)}
+                                className="w-[150px] rounded-xl"
+                                title="結束日期"
+                            />
+                            {(dateFrom || dateTo) && (
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 rounded-lg"
+                                    onClick={() => { setDateFrom(''); setDateTo('') }}
+                                    title="清除日期篩選"
                                 >
                                     ×
                                 </Button>
