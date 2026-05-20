@@ -607,14 +607,35 @@ export default function CheckoutsPage() {
         // 同一會員（用 customer_name 判斷）
         const customerNames = new Set(selected.map(c => c.customer_name))
         if (customerNames.size > 1) return { canMerge: false, reason: '不同會員無法合併' }
-        // 預估金額
-        const estimatedTotal = selected.reduce((sum, c) => sum + c.total_amount, 0)
+        // 預估金額（與 merge_checkouts_v1 RPC 一致：商品小計 + 一次運費，不是 total 直接相加）
+        // 各結帳單去掉自己的運費還原商品小計；myship_free 的 total 已扣 38 需加回
+        const goodsTotal = selected.reduce((sum, c) => {
+            const fee = c.shipping_fee ?? 0
+            const goods = (c.shipping_method as string) === 'myship_free'
+                ? c.total_amount + 38
+                : c.total_amount - fee
+            return sum + goods
+        }, 0)
         const customerName = selected[0]?.customer_name || '未知'
-        const shippingMethod = selected[0]?.shipping_method || 'myship'
+        let shippingMethod: string = selected[0]?.shipping_method || 'myship'
         const threshold = tenant?.free_shipping_threshold ?? 3500
-        const willAutoFree = threshold > 0 && estimatedTotal >= threshold && shippingMethod === 'myship'
+        // myship 達門檻自動轉免運
+        let willAutoFree = false
+        if (shippingMethod === 'myship' && threshold > 0 && goodsTotal >= threshold) {
+            shippingMethod = 'myship_free'
+            willAutoFree = true
+        }
+        let estimatedTotal: number
+        if (shippingMethod === 'myship_free') {
+            estimatedTotal = goodsTotal - 38
+        } else if (shippingMethod === 'delivery') {
+            const fee = (threshold > 0 && goodsTotal >= threshold) ? 0 : 80
+            estimatedTotal = goodsTotal + fee
+        } else {
+            estimatedTotal = goodsTotal
+        }
         return { canMerge: true, estimatedTotal, customerName, count: selected.length, willAutoFree, shippingMethod }
-    }, [selectedCheckouts, checkouts])
+    }, [selectedCheckouts, checkouts, tenant?.free_shipping_threshold])
 
     // 單筆發送通知
     const handleNotifyCheckout = async (checkoutId: string, checkoutNo: string) => {
