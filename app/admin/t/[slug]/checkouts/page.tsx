@@ -600,9 +600,18 @@ export default function CheckoutsPage() {
         const ids = Array.from(selectedCheckouts)
         if (ids.length < 2) return { canMerge: false, reason: '請選取至少 2 張' }
         const selected = ids.map(id => checkouts.find(c => c.id === id)).filter(Boolean) as CheckoutListItem[]
-        // 狀態檢查
-        if (selected.some(c => !['pending', 'url_sent'].includes(c.shipping_status))) {
-            return { canMerge: false, reason: '含有非待處理/待下單的結帳單' }
+        // 狀態檢查：允許 待處理/待下單，或 待出貨(ordered) 的宅配單
+        if (selected.some(c => !(
+            ['pending', 'url_sent'].includes(c.shipping_status) ||
+            (c.shipping_status === 'ordered' && (c.shipping_method as string) === 'delivery')
+        ))) {
+            return { canMerge: false, reason: '只能合併待處理/待下單，或待出貨的宅配單' }
+        }
+        // 付款狀態一致性：全付 or 全未付，禁止混合
+        const anyPaid = selected.some(c => c.payment_status === 'paid')
+        const allPaid = selected.every(c => c.payment_status === 'paid')
+        if (anyPaid && !allPaid) {
+            return { canMerge: false, reason: '付款狀態不一致（需都已付款或都未付款）無法合併' }
         }
         // 同一會員（用 customer_name 判斷）
         const customerNames = new Set(selected.map(c => c.customer_name))
@@ -634,7 +643,7 @@ export default function CheckoutsPage() {
         } else {
             estimatedTotal = goodsTotal
         }
-        return { canMerge: true, estimatedTotal, customerName, count: selected.length, willAutoFree, shippingMethod }
+        return { canMerge: true, estimatedTotal, customerName, count: selected.length, willAutoFree, shippingMethod, allPaid }
     }, [selectedCheckouts, checkouts, tenant?.free_shipping_threshold])
 
     // 單筆發送通知
@@ -1868,6 +1877,11 @@ export default function CheckoutsPage() {
                                 {mergeInfo.canMerge && 'willAutoFree' in mergeInfo && mergeInfo.willAutoFree && (
                                     <p className="text-green-600 font-medium">
                                         🎉 金額達免運門檻，將自動切換為賣貨便(免運)
+                                    </p>
+                                )}
+                                {mergeInfo.canMerge && 'allPaid' in mergeInfo && mergeInfo.allPaid && (
+                                    <p className="text-amber-600 font-medium">
+                                        💡 這些單已付款，合併後維持「已付款」，運費只算一次
                                     </p>
                                 )}
                                 <p className="text-muted-foreground text-xs mt-2">
