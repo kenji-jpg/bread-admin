@@ -157,6 +157,7 @@ export interface ChangeShippingMethodResult {
     new_method?: string
     old_fee?: number
     new_fee?: number
+    new_shipping_fee?: number
     new_total_amount?: number
 }
 

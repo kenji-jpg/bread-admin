@@ -572,7 +572,7 @@ export default function CheckoutsPage() {
         const oldMethod = checkout.shipping_method || 'myship'
         if (oldMethod === newMethod) return
 
-        const methodLabels: Record<string, string> = { myship: '賣貨便', myship_free: '賣貨便(免運)', delivery: '宅配', pickup: '自取' }
+        const methodLabels: Record<string, string> = { myship: '賣貨便', myship_free: '賣貨便(免運)', delivery: '宅配', seven_store: '7-11店到店', pickup: '自取' }
         if (!confirm(`確定要將出貨方式從「${methodLabels[oldMethod]}」改為「${methodLabels[newMethod]}」嗎？\n出貨狀態會重設為「待處理」。`)) return
 
         setIsUpdating(true)
@@ -584,7 +584,16 @@ export default function CheckoutsPage() {
                 return
             }
             toast.success(`出貨方式已改為「${methodLabels[newMethod]}」，金額更新為 $${result.new_total_amount?.toLocaleString()}`)
-            fetchCheckouts()
+            // 就地更新該筆，避免整個列表重載跳回最上方
+            const isMyshipNew = newMethod === 'myship' || newMethod === 'myship_free'
+            setCheckouts(prev => prev.map(c => c.id === checkoutId ? {
+                ...c,
+                shipping_method: newMethod as CheckoutListItem['shipping_method'],
+                shipping_fee: result.new_shipping_fee ?? c.shipping_fee,
+                total_amount: result.new_total_amount ?? c.total_amount,
+                shipping_status: 'pending',
+                store_url: isMyshipNew ? c.store_url : null,
+            } : c))
         } catch (error: any) {
             toast.error(error.message || '變更失敗')
         } finally {
