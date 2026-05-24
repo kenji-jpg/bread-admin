@@ -144,7 +144,7 @@ export default function OrdersPage() {
 
     // 批量結帳 Dialog 狀態
     const [batchCheckoutConfirm, setBatchCheckoutConfirm] = useState(false)
-    const [checkoutShippingMethod, setCheckoutShippingMethod] = useState<'myship' | 'myship_free' | 'delivery' | 'pickup'>('myship')
+    const [checkoutShippingMethod, setCheckoutShippingMethod] = useState<'myship' | 'myship_free' | 'delivery' | 'pickup' | 'seven_store'>('myship')
     const [autoMergeCheckout, setAutoMergeCheckout] = useState(true)
     const [checkoutResultOpen, setCheckoutResultOpen] = useState(false)
     const [checkoutResult, setCheckoutResult] = useState<{ created: number; merged: { name: string; checkoutNo: string; oldTotal: number; newTotal: number }[]; failed: { name: string; reason: string }[] }>({ created: 0, merged: [], failed: [] })
@@ -1744,7 +1744,7 @@ export default function OrdersPage() {
                             <Label>選擇結帳模式</Label>
                             <Select
                                 value={checkoutShippingMethod}
-                                onValueChange={(value) => setCheckoutShippingMethod(value as 'myship' | 'myship_free' | 'delivery' | 'pickup')}
+                                onValueChange={(value) => setCheckoutShippingMethod(value as 'myship' | 'myship_free' | 'delivery' | 'pickup' | 'seven_store')}
                             >
                                 <SelectTrigger className="w-full rounded-xl">
                                     <SelectValue />
@@ -1753,6 +1753,7 @@ export default function OrdersPage() {
                                     <SelectItem value="myship">🏪 賣貨便</SelectItem>
                                     <SelectItem value="myship_free">🏪 賣貨便(免運)</SelectItem>
                                     <SelectItem value="delivery">🚚 宅配</SelectItem>
+                                    <SelectItem value="seven_store">🏬 7-11店到店</SelectItem>
                                     <SelectItem value="pickup">🏠 自取</SelectItem>
                                 </SelectContent>
                             </Select>
