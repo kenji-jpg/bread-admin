@@ -182,6 +182,7 @@ interface Tenant {
   line_oa_id?: string | null
   plan?: string
   payment_info?: { bank?: string; account?: string; name?: string }
+  payment_info_seven_store?: { bank?: string; account?: string; name?: string } | null
 }
 
 interface ShopSettings {
@@ -376,7 +377,7 @@ export default function ShopPage() {
   // 現貨結帳 Modal 狀態
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false)
   const [checkoutStep, setCheckoutStep] = useState<'method' | 'confirm' | 'success'>('method')
-  const [selectedShipping, setSelectedShipping] = useState<'myship' | 'delivery' | 'pickup' | null>(null)
+  const [selectedShipping, setSelectedShipping] = useState<'myship' | 'delivery' | 'pickup' | 'seven_store' | null>(null)
   const [isSubmittingCheckout, setIsSubmittingCheckout] = useState(false)
   const [checkoutResult, setCheckoutResult] = useState<CheckoutResult | null>(null)
 
@@ -3580,6 +3581,25 @@ export default function ShopPage() {
                       {selectedShipping === 'delivery' && <CheckCircle className="w-5 h-5 shrink-0" style={{ color: accentColor || '#D94E2B' }} />}
                     </button>
 
+                    {/* 7-11店到店 */}
+                    <button
+                      onClick={() => setSelectedShipping('seven_store')}
+                      className="w-full flex items-center gap-3 p-3 rounded-xl transition-all"
+                      style={{
+                        border: `2px solid ${selectedShipping === 'seven_store' ? (accentColor || '#D94E2B') : '#E8D5BE'}`,
+                        backgroundColor: selectedShipping === 'seven_store' ? '#F5E6D3' : 'transparent',
+                      }}
+                    >
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: '#E8F5E9' }}>
+                        <Store className="w-5 h-5" style={{ color: '#43A047' }} />
+                      </div>
+                      <div className="flex-1 text-left">
+                        <p className="font-medium" style={{ color: '#4A2C17' }}>7-11店到店</p>
+                        <p className="text-xs" style={{ color: '#8B6B4A' }}>寄到 7-11 取貨 · 運費 $60</p>
+                      </div>
+                      {selectedShipping === 'seven_store' && <CheckCircle className="w-5 h-5 shrink-0" style={{ color: accentColor || '#D94E2B' }} />}
+                    </button>
+
                     {/* 自取 */}
                     <button
                       onClick={() => setSelectedShipping('pickup')}
@@ -3635,6 +3655,12 @@ export default function ShopPage() {
                           <span>$80</span>
                         </div>
                       )}
+                      {selectedShipping === 'seven_store' && (
+                        <div className="flex justify-between text-sm" style={{ color: '#4A2C17' }}>
+                          <span>運費（7-11店到店）</span>
+                          <span>$60</span>
+                        </div>
+                      )}
                       {selectedShipping === 'pickup' && (
                         <div className="flex justify-between text-sm" style={{ color: '#8B6B4A' }}>
                           <span>運費</span>
@@ -3643,7 +3669,7 @@ export default function ShopPage() {
                       )}
                       <div className="flex justify-between font-bold text-lg pt-2" style={{ borderTop: '2px solid #D4B896', color: '#D94E2B' }}>
                         <span>結帳金額</span>
-                        <span>${selectedShipping === 'delivery' ? checkoutEligibleTotal + 80 : checkoutEligibleTotal}</span>
+                        <span>${selectedShipping === 'delivery' ? checkoutEligibleTotal + 80 : selectedShipping === 'seven_store' ? checkoutEligibleTotal + 60 : checkoutEligibleTotal}</span>
                       </div>
                     </div>
 
@@ -3653,6 +3679,7 @@ export default function ShopPage() {
                       <span className="font-medium" style={{ color: '#4A2C17' }}>
                         {selectedShipping === 'myship' && '賣貨便（7-11 取貨）'}
                         {selectedShipping === 'delivery' && '宅配到府'}
+                        {selectedShipping === 'seven_store' && '7-11店到店'}
                         {selectedShipping === 'pickup' && '到店自取'}
                       </span>
                     </div>
@@ -3735,6 +3762,16 @@ export default function ShopPage() {
                           </p>
                         </div>
                       )}
+                      {checkoutResult.shipping_method === 'seven_store' && (
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium flex items-center gap-2" style={{ color: '#4A2C17' }}>
+                            <Store className="w-4 h-4" /> 7-11店到店
+                          </p>
+                          <p className="text-sm" style={{ color: '#8B6B4A' }}>
+                            請依匯款資訊轉帳，匯款後請私訊提供 姓名／電話／7-11 店名。
+                          </p>
+                        </div>
+                      )}
                       {checkoutResult.shipping_method === 'pickup' && (
                         <div className="space-y-1">
                           <p className="text-sm font-medium flex items-center gap-2" style={{ color: '#4A2C17' }}>
@@ -3747,24 +3784,30 @@ export default function ShopPage() {
                       )}
                     </div>
 
-                    {/* 匯款資訊（宅配/自取） */}
-                    {checkoutResult.shipping_method !== 'myship' && tenant?.payment_info && (
+                    {/* 匯款資訊（宅配/自取/店到店；店到店用專屬帳號） */}
+                    {(() => {
+                      if (checkoutResult.shipping_method === 'myship') return null
+                      const payInfo = checkoutResult.shipping_method === 'seven_store'
+                        ? (tenant?.payment_info_seven_store || tenant?.payment_info)
+                        : tenant?.payment_info
+                      if (!payInfo) return null
+                      return (
                       <div className="rounded-xl p-4 space-y-3" style={{ backgroundColor: '#F5E6D3' }}>
                         <p className="text-sm font-medium" style={{ color: '#4A2C17' }}>匯款資訊</p>
-                        {tenant.payment_info.bank && (
+                        {payInfo.bank && (
                           <div className="flex justify-between text-sm">
                             <span style={{ color: '#8B6B4A' }}>銀行</span>
-                            <span style={{ color: '#4A2C17' }}>{tenant.payment_info.bank}</span>
+                            <span style={{ color: '#4A2C17' }}>{payInfo.bank}</span>
                           </div>
                         )}
-                        {tenant.payment_info.account && (
+                        {payInfo.account && (
                           <div className="flex items-center justify-between text-sm">
                             <span style={{ color: '#8B6B4A' }}>帳號</span>
                             <div className="flex items-center gap-1.5">
-                              <span className="font-mono" style={{ color: '#4A2C17' }}>{tenant.payment_info.account}</span>
+                              <span className="font-mono" style={{ color: '#4A2C17' }}>{payInfo.account}</span>
                               <button
                                 onClick={() => {
-                                  navigator.clipboard.writeText(tenant.payment_info!.account!)
+                                  navigator.clipboard.writeText(payInfo.account!)
                                   toast.success('已複製帳號')
                                 }}
                                 className="p-1 rounded-md active:scale-95 transition-transform"
@@ -3775,14 +3818,15 @@ export default function ShopPage() {
                             </div>
                           </div>
                         )}
-                        {tenant.payment_info.name && (
+                        {payInfo.name && (
                           <div className="flex justify-between text-sm">
                             <span style={{ color: '#8B6B4A' }}>戶名</span>
-                            <span style={{ color: '#4A2C17' }}>{tenant.payment_info.name}</span>
+                            <span style={{ color: '#4A2C17' }}>{payInfo.name}</span>
                           </div>
                         )}
                       </div>
-                    )}
+                      )
+                    })()}
                   </div>
 
                   {/* 關閉按鈕 */}
