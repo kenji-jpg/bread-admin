@@ -1633,7 +1633,7 @@ export default function CheckoutsPage() {
                         <DialogTitle>
                             {(() => {
                                 const method = markOrderedCheckout?.shipping_method || 'myship'
-                                if (method === 'delivery') return '確認已收款'
+                                if (method === 'delivery' || method === 'seven_store') return '確認已收款'
                                 if (method === 'pickup') return '確認自取'
                                 return '標記客人已下單'
                             })()}
@@ -1642,7 +1642,7 @@ export default function CheckoutsPage() {
                             {(() => {
                                 const method = markOrderedCheckout?.shipping_method || 'myship'
                                 const name = markOrderedCheckout?.customer_name || markOrderedCheckout?.member_display_name || '客人'
-                                if (method === 'delivery') return `確認已收到 ${name} 的款項`
+                                if (method === 'delivery' || method === 'seven_store') return `確認已收到 ${name} 的款項`
                                 if (method === 'pickup') return `確認 ${name} 將自取商品`
                                 return `確認 ${name} 已在賣貨便下單`
                             })()}
@@ -1682,7 +1682,7 @@ export default function CheckoutsPage() {
                             {(() => {
                                 if (isUpdating) return '處理中...'
                                 const method = markOrderedCheckout?.shipping_method || 'myship'
-                                if (method === 'delivery') return '確認收款'
+                                if (method === 'delivery' || method === 'seven_store') return '確認收款'
                                 if (method === 'pickup') return '確認自取'
                                 return '確認已下單'
                             })()}
