@@ -3,12 +3,13 @@
 // ========================================
 // 結帳模式
 // ========================================
-export type ShippingMethod = 'myship' | 'delivery' | 'pickup'
+export type ShippingMethod = 'myship' | 'delivery' | 'pickup' | 'seven_store'
 
 export const SHIPPING_METHOD_OPTIONS: Record<ShippingMethod, { label: string; icon: string }> = {
   myship: { label: '賣貨便', icon: '🏪' },
   delivery: { label: '宅配', icon: '🚚' },
   pickup: { label: '自取', icon: '🏠' },
+  seven_store: { label: '7-11店到店', icon: '🏬' },
 }
 
 // ========================================

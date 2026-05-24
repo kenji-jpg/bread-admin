@@ -118,14 +118,18 @@ function ShippingMethodCell({ item, onChangeMethod }: { item: CheckoutListItem; 
 
     const colorClass: Record<string, string> = {
         myship: 'bg-orange-500/20 text-orange-500 border-orange-500/30',
+        myship_free: 'bg-orange-500/20 text-orange-500 border-orange-500/30',
         delivery: 'bg-purple-500/20 text-purple-500 border-purple-500/30',
         pickup: 'bg-cyan-500/20 text-cyan-500 border-cyan-500/30',
+        seven_store: 'bg-green-600/20 text-green-600 border-green-600/30',
     }
 
     const labels: Record<string, string> = {
         myship: '🏪 賣貨便',
+        myship_free: '🏪 賣貨便(免運)',
         delivery: '🚚 宅配',
         pickup: '🏠 自取',
+        seven_store: '🏬 7-11店到店',
     }
 
     if (!canEdit) {
@@ -145,6 +149,7 @@ function ShippingMethodCell({ item, onChangeMethod }: { item: CheckoutListItem; 
                 <SelectItem value="myship">🏪 賣貨便</SelectItem>
                 <SelectItem value="myship_free">🏪 賣貨便(免運)</SelectItem>
                 <SelectItem value="delivery">🚚 宅配</SelectItem>
+                <SelectItem value="seven_store">🏬 7-11店到店</SelectItem>
                 <SelectItem value="pickup">🏠 自取</SelectItem>
             </SelectContent>
         </Select>
@@ -600,12 +605,12 @@ export default function CheckoutsPage() {
         const ids = Array.from(selectedCheckouts)
         if (ids.length < 2) return { canMerge: false, reason: '請選取至少 2 張' }
         const selected = ids.map(id => checkouts.find(c => c.id === id)).filter(Boolean) as CheckoutListItem[]
-        // 狀態檢查：允許 待處理/待下單，或 待出貨(ordered) 的宅配單
+        // 狀態檢查：允許 待處理/待下單，或 待出貨(ordered) 的宅配/店到店單
         if (selected.some(c => !(
             ['pending', 'url_sent'].includes(c.shipping_status) ||
-            (c.shipping_status === 'ordered' && (c.shipping_method as string) === 'delivery')
+            (c.shipping_status === 'ordered' && ['delivery', 'seven_store'].includes(c.shipping_method as string))
         ))) {
-            return { canMerge: false, reason: '只能合併待處理/待下單，或待出貨的宅配單' }
+            return { canMerge: false, reason: '只能合併待處理/待下單，或待出貨的宅配/店到店單' }
         }
         // 付款狀態一致性：全付 or 全未付，禁止混合
         const anyPaid = selected.some(c => c.payment_status === 'paid')
@@ -639,6 +644,9 @@ export default function CheckoutsPage() {
             estimatedTotal = goodsTotal - 38
         } else if (shippingMethod === 'delivery') {
             const fee = (threshold > 0 && goodsTotal >= threshold) ? 0 : 80
+            estimatedTotal = goodsTotal + fee
+        } else if (shippingMethod === 'seven_store') {
+            const fee = (threshold > 0 && goodsTotal >= threshold) ? 0 : 60
             estimatedTotal = goodsTotal + fee
         } else {
             estimatedTotal = goodsTotal
@@ -989,6 +997,7 @@ export default function CheckoutsPage() {
                                 <SelectItem value="myship">🏪 賣貨便</SelectItem>
                                 <SelectItem value="myship_free">🏪 賣貨便(免運)</SelectItem>
                                 <SelectItem value="delivery">🚚 宅配</SelectItem>
+                                <SelectItem value="seven_store">🏬 7-11店到店</SelectItem>
                                 <SelectItem value="pickup">🏠 自取</SelectItem>
                             </SelectContent>
                         </Select>
