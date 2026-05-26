@@ -1388,26 +1388,25 @@ export default function CheckoutsPage() {
                                             </TableCell>
                                             <TableCell>{getPaymentBadge(item.payment_status)}</TableCell>
                                             <TableCell>{getShippingBadge(item.shipping_status)}</TableCell>
-                                            {/* 結帳模式 + 賣貨便帳號（合併在同一格） */}
+                                            {/* 結帳模式 */}
                                             <TableCell>
-                                                <div className="space-y-0.5">
-                                                    <ShippingMethodCell item={item} onChangeMethod={handleChangeShippingMethod} />
-                                                    {(() => {
-                                                        const method = (item.shipping_method as string | null) || 'myship'
-                                                        if (method !== 'myship' && method !== 'myship_free') return null
-                                                        const accountName = getShippingValue<string>(item, 'myship_account_name')
-                                                        if (!accountName) return null
-                                                        return (
-                                                            <div className="text-[10px] text-muted-foreground whitespace-nowrap truncate max-w-[115px]" title={accountName}>
-                                                                {accountName}
-                                                            </div>
-                                                        )
-                                                    })()}
-                                                </div>
+                                                <ShippingMethodCell item={item} onChangeMethod={handleChangeShippingMethod} />
                                             </TableCell>
-                                            {/* 寄件資訊欄位 */}
+                                            {/* 寄件資訊欄位（賣貨便顯示賣場所有者；其他出貨方式顯示收件人/地址/店名） */}
                                             <TableCell>
                                                 {(() => {
+                                                    const method = (item.shipping_method as string | null) || 'myship'
+                                                    // 賣貨便：客人自己在賣貨便選店，這格改顯示「賣場所有者」
+                                                    if (method === 'myship' || method === 'myship_free') {
+                                                        const accountName = getShippingValue<string>(item, 'myship_account_name')
+                                                        return accountName ? (
+                                                            <span className="text-xs text-muted-foreground truncate max-w-[120px] inline-block" title={`賣場所有者：${accountName}`}>
+                                                                {accountName}
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-xs text-muted-foreground">—</span>
+                                                        )
+                                                    }
                                                     const meta = getShippingInfoMeta(item)
                                                     if (!meta.needed) {
                                                         return <span className="text-xs text-muted-foreground">—</span>
