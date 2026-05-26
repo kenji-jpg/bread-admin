@@ -17,10 +17,24 @@
   let isStopped = false;
 
   // 抓取賣貨便登入帳號姓名（topbar「{name}，歡迎回來」）
+  // 注意：那個 <li class="nav-user-name d-none d-xl-block"> 視窗 <1200px 時
+  //      display:none，document.body.innerText 不會包含隱藏元素 → 抓不到。
+  //      改用精準選擇器 + textContent（不受 CSS 隱藏影響）。
   function getMyshipAccountName() {
     try {
+      // 優先：精準選擇器
+      const el = document.querySelector('.nav-user-name .nav-link, #OperatorAction .nav-user-name .nav-link');
+      if (el) {
+        const text = (el.textContent || '').trim();
+        // 「劉*芯，歡迎回來」格式
+        const m = text.match(/([^\s,，\n]{1,15})\s*[,，]\s*歡迎回來/);
+        if (m) return m[1].trim();
+        // 退而求其次：移除「，歡迎回來」尾綴後當名字
+        const name = text.replace(/[,，]\s*歡迎回來\s*$/, '').trim();
+        if (name && name.length <= 15) return name;
+      }
+      // 後備：原本的 body.innerText 全文比對（部分頁面 / 舊版可能適用）
       const text = document.body.innerText || '';
-      // 半形或全形逗號 + 可選空白 + 歡迎回來
       const m = text.match(/([^\s,，\n]{1,15})\s*[,，]\s*歡迎回來/);
       return m ? m[1].trim() : null;
     } catch {
