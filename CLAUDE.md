@@ -15,7 +15,7 @@
 - **部署**: Vercel (專案: bread-admin-6k1p)
 - **域名**: `plushub.cc`（www.plushub.cc）
 - **Email**: Cloudflare Email Routing（`*@plushub.cc` → Worker / Gmail 轉發）
-- **自動化**: Cloudflare Workers（賣貨便 email 自動化）+ Supabase Edge Functions（定時任務）
+- **自動化**: Cloudflare Workers（賣貨便 email 自動化）
 - **語言**: 繁體中文 (zh-TW)
 
 > ⚠️ **已移除**：n8n、Baserow — 不再使用，程式碼中無任何整合。
@@ -104,13 +104,20 @@ types/
 supabase/functions/
 ├── line-webhook/        # LINE Bot 訊息處理
 ├── notify-myship-url/   # 賣貨便取貨通知
-└── check-subscription-expiry/  # 定時任務：訂閱到期自動停用（is_active=false）+ 降級 basic（每日凌晨 2 點）
+└── check-subscription-expiry/  # 定時任務：訂閱到期自動停用（⚠️ 尚未設定 cron，暫不啟用）
 workers/
 └── myship-email/        # Cloudflare Worker（賣貨便 email 自動化）
     ├── src/index.ts     # Worker 主程式
     ├── wrangler.toml    # Cloudflare 部署設定
     └── package.json
 ```
+
+### 外部資產（不在 repo）
+
+- **Chrome 賣貨便自動開賣場插件**：source of truth 在 **`~/桌面/myship-auto-extension/`**，Chrome 以「載入未封裝項目」指向此路徑。
+  - **不再 push 到 GitHub**（`extensions/` 已加進 `.gitignore`）。所有插件改動直接編輯此路徑的檔案。
+  - 改完後在 `chrome://extensions/` 點該擴充的 🔄 重新載入即生效；建議同時 bump `manifest.json` 的 `version` 方便確認生效。
+  - 對應後端：`notify-myship-url` Edge Function + `set_myship_url_v1` RPC（會把 `store_url`/`myship_store_name`/`myship_account_name` 寫進 `checkouts.shipping_details` JSONB）。
 
 ## 資料庫架構（Supabase）
 
@@ -238,7 +245,7 @@ Supabase 專案 ID: `kashgsxlrdyuirijocld`
 ### Edge Functions
 - `line-webhook` — 接收 LINE Bot 訊息，處理下單、查詢等
 - `notify-myship-url` — 發送賣貨便取貨通知給客戶
-- `check-subscription-expiry` — 定時任務：檢查所有方案到期（不限 Pro），到期後設 `is_active=false` + 降級 basic（每日凌晨 2 點）
+- `check-subscription-expiry` — 定時任務：訂閱到期自動停用（⚠️ 尚未設定 cron，暫不啟用）
 
 ### Cloudflare Workers
 - `myship-email-worker` — 接收所有 `*@plushub.cc` email，自動轉寄 + 處理賣貨便通知
@@ -353,10 +360,7 @@ viewer       → 唯讀存取
 - **新租戶**：建立時自動設定 `plan_expires_at = NOW() + 30 天`（免費試用）
 - **現有租戶**：`plan_expires_at = NULL` 表示永久免費（祖父條款）
 - **付款續訂**：超管透過付款管理頁面確認後延長到期日
-- **到期處理**：`check-subscription-expiry` Edge Function 每日凌晨 2 點執行
-  - 到期前 7 天：儀表板顯示琥珀色「即將到期」Banner
-  - 已過期：儀表板顯示紅色「已過期」Banner
-  - 到期後：設定 `is_active = false`（停用租戶）+ 降級為 basic
+- **到期處理**：⚠️ `check-subscription-expiry` Edge Function 尚未設定 cron，暫不啟用
 - **Billing 頁面**：`/admin/t/[slug]/settings/billing`，支援 Basic/Pro 雙方案選擇 + 月繳/年繳切換 + 動態金額顯示
 
 ### 技術細節
@@ -453,7 +457,7 @@ pending → url_sent → ordered → shipped → completed
 | 2 | ~~**Supabase Auth URL**~~ | ✅ 已完成 | — |
 | 3 | ~~**自訂 404 / Error 頁面**~~ | ✅ 已完成 — `not-found.tsx` + `error.tsx` | — |
 | 4 | **CSV 匯出** | 訂單/結帳單/商品列表下載按鈕目前無功能（UI 已有 icon） | 1 天 |
-| 5 | **訂閱到期提醒 Email** | Edge Function 已自動停用但不會提前通知店家 | 1 天 |
+| 5 | **訂閱到期提醒 Email + cron 排程** | Edge Function 已有但未設定 cron + 不會提前通知店家 | 1 天 |
 
 ### Phase 2：上線後優先（🟡 Important）
 
