@@ -1239,7 +1239,7 @@ export default function CheckoutsPage() {
                         </div>
                     ) : (
                         <div className="overflow-x-auto">
-                            <Table className="min-w-[1230px]">
+                            <Table className="min-w-[1010px]">
                                 <TableHeader>
                                     <TableRow className="hover:bg-transparent">
                                         <TableHead className="w-10 pl-4">
@@ -1253,14 +1253,13 @@ export default function CheckoutsPage() {
                                         <TableHead className="w-[110px]">單號</TableHead>
                                         <TableHead className="w-[140px]">客戶</TableHead>
                                         <TableHead className="text-right w-[100px]">金額</TableHead>
-                                        <TableHead className="w-[220px]">商品明細</TableHead>
+                                        <TableHead className="w-[100px]">商品明細</TableHead>
                                         <TableHead className="w-[72px]">付款</TableHead>
                                         <TableHead className="w-[72px]">出貨</TableHead>
-                                        <TableHead className="w-[110px]">結帳模式</TableHead>
-                                        <TableHead className="w-[90px]">賣場帳號</TableHead>
+                                        <TableHead className="w-[120px]">結帳模式</TableHead>
                                         <TableHead className="w-[130px]">寄件資訊</TableHead>
-                                        <TableHead className="w-[72px]">通知</TableHead>
-                                        <TableHead className="w-[80px]">時間</TableHead>
+                                        <TableHead className="w-[44px] text-center">通知</TableHead>
+                                        <TableHead className="w-[56px]">時間</TableHead>
                                         <TableHead className="w-[80px] pr-4">操作</TableHead>
                                     </TableRow>
                                 </TableHeader>
@@ -1307,26 +1306,18 @@ export default function CheckoutsPage() {
                                                     </div>
                                                 )}
                                             </TableCell>
-                                            <TableCell className="max-w-[220px]">
+                                            <TableCell className="max-w-[100px]">
                                                 {(() => {
                                                     if (!item.checkout_items) return <span className="text-muted-foreground">-</span>
                                                     try {
                                                         const items: CheckoutItemDetail[] = JSON.parse(item.checkout_items)
                                                         if (items.length === 0) return <span className="text-muted-foreground">-</span>
 
+                                                        const totalSubtotal = items.reduce((s, it) => s + (it.subtotal ?? 0), 0)
                                                         const preview = (
-                                                            <div className="text-xs space-y-0.5">
-                                                                {items.slice(0, 3).map((detail, idx) => (
-                                                                    <div key={idx} className="truncate flex justify-between gap-2">
-                                                                        <span className="truncate">{detail.name}{detail.variant_name ? `（${detail.variant_name}）` : ''} x{detail.qty}</span>
-                                                                        <span className="shrink-0 text-muted-foreground">${detail.subtotal.toLocaleString()}</span>
-                                                                    </div>
-                                                                ))}
-                                                                {items.length > 3 && (
-                                                                    <div className="text-muted-foreground">
-                                                                        ...還有 {items.length - 3} 項
-                                                                    </div>
-                                                                )}
+                                                            <div className="text-xs whitespace-nowrap">
+                                                                <span className="font-medium">{items.length} 項</span>
+                                                                <span className="text-muted-foreground ml-1">${totalSubtotal.toLocaleString()}</span>
                                                             </div>
                                                         )
 
@@ -1389,20 +1380,22 @@ export default function CheckoutsPage() {
                                             </TableCell>
                                             <TableCell>{getPaymentBadge(item.payment_status)}</TableCell>
                                             <TableCell>{getShippingBadge(item.shipping_status)}</TableCell>
-                                            {/* 結帳模式欄位 */}
+                                            {/* 結帳模式 + 賣貨便帳號（合併在同一格） */}
                                             <TableCell>
-                                                <ShippingMethodCell item={item} onChangeMethod={handleChangeShippingMethod} />
-                                            </TableCell>
-                                            {/* 賣貨便帳號欄位 */}
-                                            <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                                                {(() => {
-                                                    const method = (item.shipping_method as string | null) || 'myship'
-                                                    if (method !== 'myship' && method !== 'myship_free') {
-                                                        return <span>—</span>
-                                                    }
-                                                    const accountName = getShippingValue<string>(item, 'myship_account_name')
-                                                    return accountName ? <span>{accountName}</span> : <span>—</span>
-                                                })()}
+                                                <div className="space-y-0.5">
+                                                    <ShippingMethodCell item={item} onChangeMethod={handleChangeShippingMethod} />
+                                                    {(() => {
+                                                        const method = (item.shipping_method as string | null) || 'myship'
+                                                        if (method !== 'myship' && method !== 'myship_free') return null
+                                                        const accountName = getShippingValue<string>(item, 'myship_account_name')
+                                                        if (!accountName) return null
+                                                        return (
+                                                            <div className="text-[10px] text-muted-foreground whitespace-nowrap truncate max-w-[115px]" title={accountName}>
+                                                                {accountName}
+                                                            </div>
+                                                        )
+                                                    })()}
+                                                </div>
                                             </TableCell>
                                             {/* 寄件資訊欄位 */}
                                             <TableCell>
@@ -1436,31 +1429,25 @@ export default function CheckoutsPage() {
                                                     )
                                                 })()}
                                             </TableCell>
-                                            {/* 通知狀態欄位 */}
-                                            <TableCell>
-                                                {item.is_notified ? (
-                                                    <Badge
-                                                        className="bg-success/20 text-success border-success/30 cursor-pointer hover:bg-success/30"
-                                                        onClick={() => handleNotifyCheckout(item.id, item.checkout_no)}
-                                                        title="點擊重新發送通知"
-                                                    >
-                                                        <Bell className="h-3 w-3 mr-1" />
-                                                        已通知
-                                                    </Badge>
-                                                ) : (
-                                                    <Badge
-                                                        variant="outline"
-                                                        className="cursor-pointer hover:bg-muted"
-                                                        onClick={() => handleNotifyCheckout(item.id, item.checkout_no)}
-                                                        title="點擊發送通知"
-                                                    >
-                                                        <Bell className="h-3 w-3 mr-1" />
-                                                        未通知
-                                                    </Badge>
-                                                )}
+                                            {/* 通知狀態（純圖示） */}
+                                            <TableCell className="text-center">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleNotifyCheckout(item.id, item.checkout_no)}
+                                                    title={item.is_notified ? '已通知（點擊重新發送）' : '未通知（點擊發送）'}
+                                                    aria-label={item.is_notified ? '已通知' : '未通知'}
+                                                    className={`inline-flex items-center justify-center h-7 w-7 rounded-md transition-colors ${item.is_notified
+                                                        ? 'text-success hover:bg-success/10'
+                                                        : 'text-muted-foreground hover:bg-muted'}`}
+                                                >
+                                                    <Bell className="h-3.5 w-3.5" />
+                                                </button>
                                             </TableCell>
                                             <TableCell className="text-muted-foreground text-xs whitespace-nowrap">
-                                                {new Date(item.created_at).toLocaleDateString('zh-TW')}
+                                                {(() => {
+                                                    const d = new Date(item.created_at)
+                                                    return `${d.getMonth() + 1}/${d.getDate()}`
+                                                })()}
                                             </TableCell>
                                             {/* 操作按鈕 - 根據結帳模式和狀態顯示下一步操作 */}
                                             <TableCell className="pr-4">
