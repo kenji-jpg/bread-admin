@@ -1239,7 +1239,7 @@ export default function CheckoutsPage() {
                         </div>
                     ) : (
                         <div className="overflow-x-auto">
-                            <Table className="min-w-[1010px]">
+                            <Table className="min-w-[1090px]">
                                 <TableHeader>
                                     <TableRow className="hover:bg-transparent">
                                         <TableHead className="w-10 pl-4">
@@ -1253,7 +1253,7 @@ export default function CheckoutsPage() {
                                         <TableHead className="w-[110px]">單號</TableHead>
                                         <TableHead className="w-[140px]">客戶</TableHead>
                                         <TableHead className="text-right w-[100px]">金額</TableHead>
-                                        <TableHead className="w-[100px]">商品明細</TableHead>
+                                        <TableHead className="w-[180px]">商品明細</TableHead>
                                         <TableHead className="w-[72px]">付款</TableHead>
                                         <TableHead className="w-[72px]">出貨</TableHead>
                                         <TableHead className="w-[120px]">結帳模式</TableHead>
@@ -1306,18 +1306,26 @@ export default function CheckoutsPage() {
                                                     </div>
                                                 )}
                                             </TableCell>
-                                            <TableCell className="max-w-[100px]">
+                                            <TableCell className="max-w-[180px]">
                                                 {(() => {
                                                     if (!item.checkout_items) return <span className="text-muted-foreground">-</span>
                                                     try {
                                                         const items: CheckoutItemDetail[] = JSON.parse(item.checkout_items)
                                                         if (items.length === 0) return <span className="text-muted-foreground">-</span>
 
-                                                        const totalSubtotal = items.reduce((s, it) => s + (it.subtotal ?? 0), 0)
                                                         const preview = (
-                                                            <div className="text-xs whitespace-nowrap">
-                                                                <span className="font-medium">{items.length} 項</span>
-                                                                <span className="text-muted-foreground ml-1">${totalSubtotal.toLocaleString()}</span>
+                                                            <div className="text-xs space-y-0.5">
+                                                                {items.slice(0, 3).map((detail, idx) => (
+                                                                    <div key={idx} className="truncate flex justify-between gap-2">
+                                                                        <span className="truncate">{detail.name}{detail.variant_name ? `（${detail.variant_name}）` : ''} x{detail.qty}</span>
+                                                                        <span className="shrink-0 text-muted-foreground">${detail.subtotal.toLocaleString()}</span>
+                                                                    </div>
+                                                                ))}
+                                                                {items.length > 3 && (
+                                                                    <div className="text-muted-foreground">
+                                                                        ...還有 {items.length - 3} 項
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         )
 
