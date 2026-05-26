@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { useTenant } from '@/hooks/use-tenant'
-import { useCheckout, type CheckoutListItem, type CheckoutDetailResult, type ListCheckoutsResult, type CheckoutItemDetail } from '@/hooks/use-checkout'
+import { useCheckout, type CheckoutListItem, type CheckoutDetailResult, type ListCheckoutsResult, type CheckoutItemDetail, type ShippingDetailsInput } from '@/hooks/use-checkout'
 import { SHIPPING_METHOD_OPTIONS, type ShippingMethod } from '@/types/database'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -69,6 +69,7 @@ import {
     Calendar,
     X,
     Merge,
+    AlertCircle,
 } from 'lucide-react'
 
 // 狀態標籤配置 (按照後端文件)
@@ -109,6 +110,31 @@ const getShippingValue = <T,>(
     }
     // 向後相容：使用舊欄位
     return item[key] ?? null
+}
+
+// 判斷一筆結帳單的寄件資訊狀態（是否需要、是否填齊、摘要）
+// myship/myship_free：客人自行於賣貨便選店，後台不需收件資訊
+const getShippingInfoMeta = (item: CheckoutListItem): { needed: boolean; complete: boolean; summary: string } => {
+    const method = (item.shipping_method as string | null) || 'myship'
+    const d = (item.shipping_details || {}) as Record<string, any>
+    const name: string = d.receiver_name || item.receiver_name || ''
+    const phone: string = d.receiver_phone || item.receiver_phone || ''
+
+    if (method === 'myship' || method === 'myship_free') {
+        return { needed: false, complete: true, summary: '' }
+    }
+    if (method === 'delivery') {
+        const addr: string = d.shipping_address || (item as any).shipping_address || ''
+        return { needed: true, complete: Boolean(name && phone && addr), summary: [name, addr].filter(Boolean).join(' ') }
+    }
+    if (method === 'seven_store') {
+        const store: string = d.seven_store_name || ''
+        return { needed: true, complete: Boolean(name && phone && store), summary: [name, store].filter(Boolean).join(' ') }
+    }
+    if (method === 'pickup') {
+        return { needed: true, complete: Boolean(name && phone), summary: [name, phone].filter(Boolean).join(' ') }
+    }
+    return { needed: false, complete: true, summary: '' }
 }
 
 // 結帳模式組件（可編輯：pending/url_sent/ordered 時可改）
@@ -184,6 +210,15 @@ export default function CheckoutsPage() {
     const [markOrderedCheckout, setMarkOrderedCheckout] = useState<CheckoutListItem | null>(null)
     const [checkoutDetail, setCheckoutDetail] = useState<CheckoutDetailResult | null>(null)
     const [isLoadingDetail, setIsLoadingDetail] = useState(false)
+
+    // 寄件資訊編輯 Dialog
+    const [shippingDetailsCheckout, setShippingDetailsCheckout] = useState<CheckoutListItem | null>(null)
+    const [sdReceiverName, setSdReceiverName] = useState('')
+    const [sdReceiverPhone, setSdReceiverPhone] = useState('')
+    const [sdAddress, setSdAddress] = useState('')
+    const [sdStoreName, setSdStoreName] = useState('')
+    const [sdStoreId, setSdStoreId] = useState('')
+    const [isSavingShipping, setIsSavingShipping] = useState(false)
 
     // 表單狀態
     const [storeUrl, setStoreUrl] = useState('')
@@ -457,6 +492,55 @@ export default function CheckoutsPage() {
     const handleCopyUrl = (url: string) => {
         navigator.clipboard.writeText(url)
         toast.success('已複製連結')
+    }
+
+    // ========================================
+    // 寄件資訊編輯
+    // ========================================
+    const openShippingDetails = (item: CheckoutListItem) => {
+        setSdReceiverName(getShippingValue<string>(item, 'receiver_name') || '')
+        setSdReceiverPhone(getShippingValue<string>(item, 'receiver_phone') || '')
+        setSdAddress(getShippingValue<string>(item, 'shipping_address') || '')
+        const d = (item.shipping_details || {}) as Record<string, any>
+        setSdStoreName(d.seven_store_name || '')
+        setSdStoreId(d.seven_store_id || '')
+        setShippingDetailsCheckout(item)
+    }
+
+    const handleSaveShippingDetails = async () => {
+        if (!shippingDetailsCheckout) return
+        const method = (shippingDetailsCheckout.shipping_method as string | null) || 'myship'
+        setIsSavingShipping(true)
+        try {
+            const fields: ShippingDetailsInput = {
+                receiver_name: sdReceiverName.trim(),
+                receiver_phone: sdReceiverPhone.trim(),
+            }
+            if (method === 'delivery') {
+                fields.shipping_address = sdAddress.trim()
+            }
+            if (method === 'seven_store') {
+                fields.seven_store_name = sdStoreName.trim()
+                fields.seven_store_id = sdStoreId.trim()
+            }
+            const result = await checkoutApiRef.current.updateShippingDetails(shippingDetailsCheckout.id, fields)
+            if (result.success) {
+                toast.success(result.message || '已更新寄件資訊')
+                // 樂觀就地更新，避免整頁重載
+                setCheckouts((prev) => prev.map((c) =>
+                    c.id === shippingDetailsCheckout.id
+                        ? { ...c, shipping_details: (result.shipping_details ?? c.shipping_details) as any }
+                        : c
+                ))
+                setShippingDetailsCheckout(null)
+            } else {
+                toast.error(result.message || result.error || '更新失敗')
+            }
+        } catch (e: any) {
+            toast.error(e.message || '更新失敗')
+        } finally {
+            setIsSavingShipping(false)
+        }
     }
 
     // ========================================
@@ -1155,7 +1239,7 @@ export default function CheckoutsPage() {
                         </div>
                     ) : (
                         <div className="overflow-x-auto">
-                            <Table className="min-w-[1100px]">
+                            <Table className="min-w-[1230px]">
                                 <TableHeader>
                                     <TableRow className="hover:bg-transparent">
                                         <TableHead className="w-10 pl-4">
@@ -1174,6 +1258,7 @@ export default function CheckoutsPage() {
                                         <TableHead className="w-[72px]">出貨</TableHead>
                                         <TableHead className="w-[110px]">結帳模式</TableHead>
                                         <TableHead className="w-[90px]">賣場帳號</TableHead>
+                                        <TableHead className="w-[130px]">寄件資訊</TableHead>
                                         <TableHead className="w-[72px]">通知</TableHead>
                                         <TableHead className="w-[80px]">時間</TableHead>
                                         <TableHead className="w-[80px] pr-4">操作</TableHead>
@@ -1317,6 +1402,38 @@ export default function CheckoutsPage() {
                                                     }
                                                     const accountName = getShippingValue<string>(item, 'myship_account_name')
                                                     return accountName ? <span>{accountName}</span> : <span>—</span>
+                                                })()}
+                                            </TableCell>
+                                            {/* 寄件資訊欄位 */}
+                                            <TableCell>
+                                                {(() => {
+                                                    const meta = getShippingInfoMeta(item)
+                                                    if (!meta.needed) {
+                                                        return <span className="text-xs text-muted-foreground">—</span>
+                                                    }
+                                                    return (
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className={`h-7 text-xs max-w-[120px] ${meta.complete
+                                                                ? 'border-success/40 text-success hover:bg-success/10'
+                                                                : 'border-destructive/40 text-destructive hover:bg-destructive/10'}`}
+                                                            onClick={() => openShippingDetails(item)}
+                                                            title={meta.complete ? meta.summary : '尚未填寫寄件資訊'}
+                                                        >
+                                                            {meta.complete ? (
+                                                                <>
+                                                                    <Package className="h-3 w-3 mr-1 shrink-0" />
+                                                                    <span className="truncate">{meta.summary || '已填'}</span>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <AlertCircle className="h-3 w-3 mr-1 shrink-0" />
+                                                                    缺資訊
+                                                                </>
+                                                            )}
+                                                        </Button>
+                                                    )
                                                 })()}
                                             </TableCell>
                                             {/* 通知狀態欄位 */}
@@ -1621,6 +1738,63 @@ export default function CheckoutsPage() {
                             className="gradient-primary rounded-xl"
                         >
                             {isUpdating ? '處理中...' : '確認並通知'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* 寄件資訊編輯 Dialog */}
+            <Dialog open={!!shippingDetailsCheckout} onOpenChange={() => setShippingDetailsCheckout(null)}>
+                <DialogContent className="glass-strong">
+                    <DialogHeader>
+                        <DialogTitle>寄件資訊</DialogTitle>
+                        <DialogDescription>
+                            {(() => {
+                                const method = (shippingDetailsCheckout?.shipping_method as string | null) || 'myship'
+                                const label = method === 'delivery' ? '宅配' : method === 'seven_store' ? '7-11店到店' : method === 'pickup' ? '自取' : ''
+                                return `${shippingDetailsCheckout?.checkout_no || ''}　${label}`
+                            })()}
+                        </DialogDescription>
+                    </DialogHeader>
+                    {shippingDetailsCheckout && (() => {
+                        const method = (shippingDetailsCheckout.shipping_method as string | null) || 'myship'
+                        return (
+                            <div className="space-y-4 py-2">
+                                <div className="space-y-2">
+                                    <Label htmlFor="sd-name">收件人姓名</Label>
+                                    <Input id="sd-name" value={sdReceiverName} onChange={(e) => setSdReceiverName(e.target.value)} placeholder="收件人姓名" />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="sd-phone">收件人電話</Label>
+                                    <Input id="sd-phone" value={sdReceiverPhone} onChange={(e) => setSdReceiverPhone(e.target.value)} placeholder="09xxxxxxxx" inputMode="tel" />
+                                </div>
+                                {method === 'delivery' && (
+                                    <div className="space-y-2">
+                                        <Label htmlFor="sd-address">宅配地址</Label>
+                                        <Input id="sd-address" value={sdAddress} onChange={(e) => setSdAddress(e.target.value)} placeholder="完整收件地址" />
+                                    </div>
+                                )}
+                                {method === 'seven_store' && (
+                                    <>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="sd-store-name">取貨 7-11 店名</Label>
+                                            <Input id="sd-store-name" value={sdStoreName} onChange={(e) => setSdStoreName(e.target.value)} placeholder="例：永康門市" />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="sd-store-id">7-11 店號（選填）</Label>
+                                            <Input id="sd-store-id" value={sdStoreId} onChange={(e) => setSdStoreId(e.target.value)} placeholder="例：123456" />
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        )
+                    })()}
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setShippingDetailsCheckout(null)} className="rounded-xl">
+                            取消
+                        </Button>
+                        <Button onClick={handleSaveShippingDetails} disabled={isSavingShipping} className="gradient-primary rounded-xl">
+                            {isSavingShipping ? '儲存中...' : '儲存'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

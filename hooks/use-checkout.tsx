@@ -201,6 +201,26 @@ interface UseCheckoutReturn {
     removeItem: (checkoutId: string, orderItemId: string) => Promise<RemoveItemResult>
     changeShippingMethod: (checkoutId: string, method: string, fee?: number) => Promise<ChangeShippingMethodResult>
     notifyCheckout: (checkoutId: string) => Promise<{ success: boolean; notify_status?: string; notify_error?: string | null; error?: string; message?: string }>
+    updateShippingDetails: (checkoutId: string, fields: ShippingDetailsInput) => Promise<UpdateShippingDetailsResult>
+}
+
+// 後台手動填寫的寄件資訊欄位（傳 undefined 表示不更動該欄位）
+export interface ShippingDetailsInput {
+    receiver_name?: string
+    receiver_phone?: string
+    shipping_address?: string
+    seven_store_name?: string
+    seven_store_id?: string
+    tracking_no?: string
+}
+
+export interface UpdateShippingDetailsResult {
+    success: boolean
+    checkout_id?: string
+    checkout_no?: string
+    shipping_details?: ShippingDetails | null
+    error?: string
+    message?: string
 }
 
 export const useCheckout = (tenantId: string): UseCheckoutReturn => {
@@ -470,5 +490,15 @@ export const useCheckout = (tenantId: string): UseCheckoutReturn => {
         removeItem,
         changeShippingMethod,
         notifyCheckout,
+        updateShippingDetails: (id, fields) => callRpc<UpdateShippingDetailsResult>('update_checkout_shipping_details_v1', {
+            p_tenant_id: tenantId,
+            p_checkout_id: id,
+            p_receiver_name: fields.receiver_name ?? null,
+            p_receiver_phone: fields.receiver_phone ?? null,
+            p_shipping_address: fields.shipping_address ?? null,
+            p_seven_store_name: fields.seven_store_name ?? null,
+            p_seven_store_id: fields.seven_store_id ?? null,
+            p_tracking_no: fields.tracking_no ?? null,
+        }),
     }
 }
