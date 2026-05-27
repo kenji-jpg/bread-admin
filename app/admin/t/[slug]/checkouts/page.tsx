@@ -45,6 +45,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { toast } from 'sonner'
 import {
@@ -218,6 +219,7 @@ export default function CheckoutsPage() {
     const [sdAddress, setSdAddress] = useState('')
     const [sdStoreName, setSdStoreName] = useState('')
     const [sdStoreId, setSdStoreId] = useState('')
+    const [sdPasteText, setSdPasteText] = useState('')
     const [isSavingShipping, setIsSavingShipping] = useState(false)
 
     // 表單狀態
@@ -504,7 +506,62 @@ export default function CheckoutsPage() {
         const d = (item.shipping_details || {}) as Record<string, any>
         setSdStoreName(d.seven_store_name || '')
         setSdStoreId(d.seven_store_id || '')
+        setSdPasteText('')
         setShippingDetailsCheckout(item)
+    }
+
+    // 從 LINE 訊息整段解析寄件資訊（依出貨方式辨識欄位類型）
+    // 範例輸入：
+    //   14798
+    //   江宜庭
+    //   0978166257
+    //   鹿慶門市
+    const parseShippingPaste = (text: string, method: string) => {
+        const lines = text.split('\n').map((l) => l.trim()).filter(Boolean)
+        let name = '', phone = '', addr = '', storeName = '', storeId = ''
+        for (const line of lines) {
+            // 純數字 → 電話 / 結帳單末碼 / 店號
+            const digitsOnly = line.replace(/\D/g, '')
+            if (/^09\d{8}$/.test(digitsOnly) && !phone) {
+                phone = digitsOnly
+                continue
+            }
+            // 短純數字（3-5 碼）→ 結帳單號碼，忽略
+            if (/^\d{3,5}$/.test(line)) continue
+            // 6 碼數字 → 7-11 店號（選填）
+            if (method === 'seven_store' && /^\d{6}$/.test(line) && !storeId) {
+                storeId = line
+                continue
+            }
+            // 宅配地址：含縣/市/區/路/街/段/巷/弄/號/樓
+            if (method === 'delivery' && /(市|縣|區|鄉|鎮|村|路|街|段|巷|弄|號|樓)/.test(line) && !addr) {
+                addr = line
+                continue
+            }
+            // 7-11 店名：結尾「門市」「店」「超商」
+            if (method === 'seven_store' && /(門市|店|超商)$/.test(line) && !storeName) {
+                storeName = line
+                continue
+            }
+            // 中文姓名 2-4 字（最先沒有姓名時抓）
+            if (/^[一-鿿]{2,4}$/.test(line) && !name) {
+                name = line
+                continue
+            }
+        }
+        return { name, phone, addr, storeName, storeId }
+    }
+
+    const handlePasteTextChange = (text: string) => {
+        setSdPasteText(text)
+        if (!shippingDetailsCheckout) return
+        const method = (shippingDetailsCheckout.shipping_method as string | null) || 'myship'
+        const parsed = parseShippingPaste(text, method)
+        if (parsed.name) setSdReceiverName(parsed.name)
+        if (parsed.phone) setSdReceiverPhone(parsed.phone)
+        if (parsed.addr) setSdAddress(parsed.addr)
+        if (parsed.storeName) setSdStoreName(parsed.storeName)
+        if (parsed.storeId) setSdStoreId(parsed.storeId)
     }
 
     const handleSaveShippingDetails = async () => {
@@ -1752,8 +1809,28 @@ export default function CheckoutsPage() {
                     </DialogHeader>
                     {shippingDetailsCheckout && (() => {
                         const method = (shippingDetailsCheckout.shipping_method as string | null) || 'myship'
+                        const placeholder = method === 'delivery'
+                            ? '貼上整段，例：\n14798\n江宜庭\n0978166257\n台北市大安區忠孝東路四段100號5樓'
+                            : method === 'seven_store'
+                                ? '貼上整段，例：\n14798\n江宜庭\n0978166257\n鹿慶門市'
+                                : '貼上整段，例：\n14798\n江宜庭\n0978166257'
                         return (
                             <div className="space-y-4 py-2">
+                                {/* 快速貼上區：自動拆解到下方欄位 */}
+                                <div className="space-y-1.5 rounded-lg border border-primary/20 bg-primary/5 p-3">
+                                    <Label htmlFor="sd-paste" className="text-xs">📋 從 LINE 訊息貼上（自動拆解到下方欄位）</Label>
+                                    <Textarea
+                                        id="sd-paste"
+                                        value={sdPasteText}
+                                        onChange={(e) => handlePasteTextChange(e.target.value)}
+                                        rows={4}
+                                        placeholder={placeholder}
+                                        className="text-sm font-mono"
+                                    />
+                                    <p className="text-[10px] text-muted-foreground">
+                                        辨識規則：純數字 09xxxxxxxx = 電話；中文 2-4 字 = 姓名；結尾「門市/店」= 7-11 店名；含「路/街/區/號」= 宅配地址。可手動微調下方欄位。
+                                    </p>
+                                </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="sd-name">收件人姓名</Label>
                                     <Input id="sd-name" value={sdReceiverName} onChange={(e) => setSdReceiverName(e.target.value)} placeholder="收件人姓名" />
