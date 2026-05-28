@@ -1358,9 +1358,17 @@ export default function OrdersPage() {
                                 <Input
                                     id="unit-price"
                                     type="number"
-                                    min={0}
                                     value={editUnitPrice}
-                                    onChange={(e) => setEditUnitPrice(parseInt(e.target.value) || 0)}
+                                    onChange={(e) => {
+                                        const v = e.target.value
+                                        // 允許負數（預匯款對沖用）；空字串視為 0
+                                        if (v === '' || v === '-') {
+                                            setEditUnitPrice(0)
+                                        } else {
+                                            const n = parseInt(v, 10)
+                                            setEditUnitPrice(isNaN(n) ? 0 : n)
+                                        }
+                                    }}
                                     className="rounded-xl"
                                 />
                                 {editingOrder?.product && editUnitPrice !== editingOrder.unit_price && (
