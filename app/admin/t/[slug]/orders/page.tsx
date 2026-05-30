@@ -818,19 +818,25 @@ export default function OrdersPage() {
                     return
                 }
 
-                // 自動合併：查詢現有 pending/url_sent 結帳單
+                // 自動合併：查詢可加入品項的現有結帳單
+                //   - pending/url_sent：任何出貨方式都可
+                //   - ordered：限 delivery/seven_store/pickup（賣貨便已建賣場故不可）
                 if (autoMergeCheckout && memberId) {
-                    const { data: existingCheckouts } = await supabase
+                    const { data: candidates } = await supabase
                         .from('checkouts')
-                        .select('id, checkout_no, total_amount, shipping_status')
+                        .select('id, checkout_no, total_amount, shipping_status, shipping_method')
                         .eq('tenant_id', tenant!.id)
                         .eq('member_id', memberId)
-                        .in('shipping_status', ['pending', 'url_sent'])
+                        .in('shipping_status', ['pending', 'url_sent', 'ordered'])
                         .order('created_at', { ascending: false })
-                        .limit(1)
 
-                    if (existingCheckouts && existingCheckouts.length > 0) {
-                        const existing = existingCheckouts[0]
+                    const existing = candidates?.find((c) => (
+                        c.shipping_status === 'pending'
+                        || c.shipping_status === 'url_sent'
+                        || (c.shipping_status === 'ordered' && ['delivery','seven_store','pickup'].includes(c.shipping_method))
+                    ))
+
+                    if (existing) {
                         // 合併：把新訂單塞進現有結帳單
                         const { data: linkData, error: linkErr } = await supabase.rpc('link_order_items_to_checkout_v1', {
                             p_tenant_id: tenant!.id,
