@@ -359,9 +359,18 @@ export default function CheckoutsPage() {
         return <Badge className={color}>{label}</Badge>
     }
 
-    const getPaymentBadge = (status: string) => {
+    const getPaymentBadge = (item: { payment_status: string; total_amount: number; paid_amount?: number }) => {
+        const status = item.payment_status
         if (status === 'paid') {
             return <Badge className="bg-success/20 text-success border-success/30">已付款</Badge>
+        }
+        if (status === 'partial') {
+            const owed = Math.max(0, item.total_amount - (item.paid_amount ?? 0))
+            return (
+                <Badge className="bg-amber-500/20 text-amber-600 border-amber-500/30" title={`已付 $${item.paid_amount ?? 0} / 應付 $${item.total_amount}`}>
+                    需補款 ${owed.toLocaleString()}
+                </Badge>
+            )
         }
         return <Badge className="bg-warning/20 text-warning border-warning/30">待付款</Badge>
     }
@@ -457,6 +466,21 @@ export default function CheckoutsPage() {
             toast.error(error.message || '標記失敗')
         } finally {
             setIsUpdating(false)
+        }
+    }
+
+    // 已收補款 (partial → paid，paid_amount = total_amount)
+    const handleMarkPaid = async (item: CheckoutListItem) => {
+        try {
+            const result = await checkoutApiRef.current.markPaid(item.id)
+            if (result.success) {
+                toast.success(result.message || '已標記補款收款')
+                fetchCheckouts()
+            } else {
+                toast.error(result.message || '標記失敗')
+            }
+        } catch (error: any) {
+            toast.error(error.message || '標記失敗')
         }
     }
 
@@ -954,7 +978,9 @@ export default function CheckoutsPage() {
                 !isMyshipMethod(item.shipping_method || 'myship') ? item.shipping_fee : '',
                 item.item_count,
                 formatItems(item.checkout_items),
-                item.payment_status === 'paid' ? '已付款' : '待付款',
+                item.payment_status === 'paid' ? '已付款'
+                    : item.payment_status === 'partial' ? `需補款 $${Math.max(0, item.total_amount - (item.paid_amount ?? 0))}`
+                    : '待付款',
                 STATUS_LABELS[item.shipping_status] || item.shipping_status,
                 SHIPPING_METHOD_LABELS[item.shipping_method || 'myship'] || item.shipping_method || '',
                 item.is_notified ? '是' : '否',
@@ -1134,6 +1160,7 @@ export default function CheckoutsPage() {
                             <SelectContent>
                                 <SelectItem value="all">全部付款</SelectItem>
                                 <SelectItem value="pending">待付款</SelectItem>
+                                <SelectItem value="partial">需補款</SelectItem>
                                 <SelectItem value="paid">已付款</SelectItem>
                             </SelectContent>
                         </Select>
@@ -1372,12 +1399,15 @@ export default function CheckoutsPage() {
 
                                                         const preview = (
                                                             <div className="text-xs space-y-0.5">
-                                                                {items.slice(0, 3).map((detail, idx) => (
-                                                                    <div key={idx} className="truncate flex justify-between gap-2">
-                                                                        <span className="truncate">{detail.name}{detail.variant_name ? `（${detail.variant_name}）` : ''} x{detail.qty}</span>
-                                                                        <span className="shrink-0 text-muted-foreground">${detail.subtotal.toLocaleString()}</span>
-                                                                    </div>
-                                                                ))}
+                                                                {items.slice(0, 3).map((detail, idx) => {
+                                                                    const isRefund = detail.subtotal < 0
+                                                                    return (
+                                                                        <div key={idx} className={`truncate flex justify-between gap-2 ${isRefund ? 'text-rose-600' : ''}`}>
+                                                                            <span className="truncate">{detail.name}{detail.variant_name ? `（${detail.variant_name}）` : ''} x{detail.qty}</span>
+                                                                            <span className={`shrink-0 ${isRefund ? 'text-rose-600' : 'text-muted-foreground'}`}>${detail.subtotal.toLocaleString()}</span>
+                                                                        </div>
+                                                                    )
+                                                                })}
                                                                 {items.length > 3 && (
                                                                     <div className="text-muted-foreground">
                                                                         ...還有 {items.length - 3} 項
@@ -1403,18 +1433,22 @@ export default function CheckoutsPage() {
                                                                     <div className="max-h-64 overflow-y-auto">
                                                                         {items.map((detail, idx) => {
                                                                             const canRemove = !['shipped', 'completed'].includes(item.shipping_status) && items.length > 0
+                                                                            const isRefund = detail.subtotal < 0
                                                                             return (
                                                                                 <div
                                                                                     key={idx}
-                                                                                    className="flex items-start justify-between px-4 py-2 text-sm border-b last:border-b-0 group"
+                                                                                    className={`flex items-start justify-between px-4 py-2 text-sm border-b last:border-b-0 group ${isRefund ? 'bg-rose-50/40 dark:bg-rose-950/20' : ''}`}
                                                                                 >
-                                                                                    <span className="mr-2 flex-1 break-words">{detail.name}{detail.variant_name ? `（${detail.variant_name}）` : ''}</span>
+                                                                                    <span className={`mr-2 flex-1 break-words ${isRefund ? 'text-rose-600 dark:text-rose-400' : ''}`}>
+                                                                                        {isRefund && <span className="mr-1">↩︎</span>}
+                                                                                        {detail.name}{detail.variant_name ? `（${detail.variant_name}）` : ''}
+                                                                                    </span>
                                                                                     <div className="flex items-center gap-2 shrink-0 text-muted-foreground">
                                                                                         <span>x{detail.qty}</span>
-                                                                                        <span className="w-16 text-right font-medium text-foreground">
+                                                                                        <span className={`w-16 text-right font-medium ${isRefund ? 'text-rose-600 dark:text-rose-400' : 'text-foreground'}`}>
                                                                                             ${detail.subtotal.toLocaleString()}
                                                                                         </span>
-                                                                                        {canRemove && detail.order_item_id && (
+                                                                                        {canRemove && detail.order_item_id && !isRefund && (
                                                                                             <button
                                                                                                 className="text-destructive/60 hover:text-destructive transition-colors ml-1 p-0.5 rounded hover:bg-destructive/10"
                                                                                                 onClick={(e) => {
@@ -1430,6 +1464,13 @@ export default function CheckoutsPage() {
                                                                                 </div>
                                                                             )
                                                                         })}
+                                                                        {/* 賣貨便達免運門檻時顯示 memo（不是真品項） */}
+                                                                        {(item.shipping_method === 'myship_free') && (
+                                                                            <div className="flex items-center justify-between px-4 py-2 text-xs bg-emerald-50/40 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border-b last:border-b-0">
+                                                                                <span>✨ 賣貨便免運</span>
+                                                                                <span className="font-medium">-$38</span>
+                                                                            </div>
+                                                                        )}
                                                                     </div>
                                                                     <div className="flex items-center justify-between px-4 py-2.5 bg-muted/50 border-t font-medium text-sm">
                                                                         <span>合計</span>
@@ -1443,7 +1484,7 @@ export default function CheckoutsPage() {
                                                     }
                                                 })()}
                                             </TableCell>
-                                            <TableCell>{getPaymentBadge(item.payment_status)}</TableCell>
+                                            <TableCell>{getPaymentBadge(item)}</TableCell>
                                             <TableCell>{getShippingBadge(item.shipping_status)}</TableCell>
                                             {/* 結帳模式 */}
                                             <TableCell>
@@ -1581,6 +1622,20 @@ export default function CheckoutsPage() {
                                                                 </div>
                                                             )
                                                         case 'ordered':
+                                                            // 需補款：優先顯示「已收補款」（補完才走出貨）
+                                                            if (item.payment_status === 'partial') {
+                                                                return (
+                                                                    <Button
+                                                                        variant="outline"
+                                                                        size="sm"
+                                                                        className="h-7 text-xs border-amber-500/40 text-amber-600 hover:bg-amber-50"
+                                                                        onClick={() => handleMarkPaid(item)}
+                                                                        title="客人已補匯差額"
+                                                                    >
+                                                                        已收補款
+                                                                    </Button>
+                                                                )
+                                                            }
                                                             // 自取模式：直接完成（不需要寄出）
                                                             if (method === 'pickup') {
                                                                 return (
@@ -1958,7 +2013,11 @@ export default function CheckoutsPage() {
                                 <div className="flex flex-wrap gap-2 pb-4 border-b">
                                     <div className="flex items-center gap-2">
                                         <span className="text-sm text-muted-foreground">付款:</span>
-                                        {getPaymentBadge(checkoutDetail.checkout?.payment_status || 'pending')}
+                                        {getPaymentBadge({
+                                            payment_status: checkoutDetail.checkout?.payment_status || 'pending',
+                                            total_amount: checkoutDetail.checkout?.total_amount || 0,
+                                            paid_amount: checkoutDetail.checkout?.paid_amount,
+                                        })}
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <span className="text-sm text-muted-foreground">出貨:</span>

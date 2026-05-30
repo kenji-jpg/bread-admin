@@ -4,7 +4,7 @@ import type { ShippingDetails, ShippingMethod } from '@/types/database'
 
 // 結帳單狀態
 type ShippingStatus = 'pending' | 'url_sent' | 'ordered' | 'shipped' | 'completed'
-type PaymentStatus = 'pending' | 'paid'
+type PaymentStatus = 'pending' | 'partial' | 'paid'
 
 // 商品明細項目（checkout_items JSON 格式）
 export interface CheckoutItemDetail {
@@ -26,6 +26,7 @@ export interface CheckoutListItem {
     checkout_no: string
     customer_name: string | null
     total_amount: number
+    paid_amount: number  // 累計已匯款金額（用來推 partial 狀態 + 算需補款 $X）
     shipping_fee: number
     item_count: number
     checkout_items: string | null  // ✅ 新增：商品明細 JSON 字串
@@ -70,6 +71,7 @@ export interface CheckoutDetailResult {
         id: string
         checkout_no: string
         total_amount: number
+        paid_amount: number
         shipping_fee: number
         shipping_status: ShippingStatus
         payment_status: PaymentStatus
@@ -193,6 +195,7 @@ interface UseCheckoutReturn {
     getDetail: (checkoutId: string) => Promise<CheckoutDetailResult>
     setUrl: (checkoutId: string, url: string, checkoutNo: string, displayName: string, nickname?: string | null) => Promise<NotifyMyshipResult>
     markOrdered: (checkoutId: string, orderNo?: string, note?: string) => Promise<UpdateStatusResult>
+    markPaid: (checkoutId: string, note?: string) => Promise<UpdateStatusResult>
     markShipped: (checkoutId: string, note?: string) => Promise<UpdateStatusResult>
     markCompleted: (checkoutId: string, note?: string) => Promise<UpdateStatusResult>
     deleteCheckout: (checkoutId: string) => Promise<DeleteCheckoutResult>
@@ -482,6 +485,7 @@ export const useCheckout = (tenantId: string): UseCheckoutReturn => {
         getDetail,
         setUrl: setUrlWithNotify,
         markOrdered: (id, orderNo, note) => updateStatus(id, 'mark_ordered', { myshipOrderNo: orderNo, note }),
+        markPaid: (id, note) => updateStatus(id, 'mark_paid', { note }),
         markShipped: (id, note) => updateStatus(id, 'mark_shipped', { note }),
         markCompleted: (id, note) => updateStatus(id, 'mark_completed', { note }),
         deleteCheckout,
