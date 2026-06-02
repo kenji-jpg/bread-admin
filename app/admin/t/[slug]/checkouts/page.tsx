@@ -230,6 +230,7 @@ export default function CheckoutsPage() {
     // 選取狀態
     const [selectedCheckouts, setSelectedCheckouts] = useState<Set<string>>(new Set())
     const [batchDeleteConfirm, setBatchDeleteConfirm] = useState(false)
+    const [deleteItemsToo, setDeleteItemsToo] = useState(false)  // 是否連同 order_items 一起硬刪
     const [mergeConfirmOpen, setMergeConfirmOpen] = useState(false)
     const [isMerging, setIsMerging] = useState(false)
     const [isNotifying, setIsNotifying] = useState(false)
@@ -673,13 +674,17 @@ export default function CheckoutsPage() {
             toast.error('請先選擇結帳單')
             return
         }
+        setDeleteItemsToo(false)  // 預設不勾
         setBatchDeleteConfirm(true)
     }
 
     const confirmBatchDelete = async () => {
         setIsUpdating(true)
         try {
-            const result = await checkoutApiRef.current.batchDeleteCheckouts(Array.from(selectedCheckouts))
+            const result = await checkoutApiRef.current.batchDeleteCheckouts(
+                Array.from(selectedCheckouts),
+                deleteItemsToo
+            )
 
             if (!result.success) {
                 toast.error(result.error || '刪除失敗')
@@ -693,8 +698,14 @@ export default function CheckoutsPage() {
                 toast.warning(`${result.skipped_count} 筆因狀態限制被跳過`)
             }
 
-            if (result.released_items > 0) {
-                toast.info(`${result.released_items} 個訂單項目已回到未結帳狀態`)
+            const affected = (result as { affected_items?: number; released_items?: number }).affected_items
+                ?? (result as { released_items?: number }).released_items ?? 0
+            if (affected > 0) {
+                toast.info(
+                    deleteItemsToo
+                        ? `${affected} 個訂單品項已刪除（庫存已恢復）`
+                        : `${affected} 個訂單項目已回到未結帳狀態`
+                )
             }
 
             setSelectedCheckouts(new Set())
@@ -2157,18 +2168,41 @@ export default function CheckoutsPage() {
                 <AlertDialogContent>
                     <AlertDialogHeader>
                         <AlertDialogTitle>確認刪除</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            已選擇 {selectedCheckouts.size} 筆結帳單，其中 {deletableCount} 筆可刪除。
-                            {deletableCount < selectedCheckouts.size && (
-                                <span className="block mt-1 text-warning">
-                                    不可刪除的結帳單（已下單/已寄出/已完成）將被跳過。
-                                </span>
-                            )}
-                            <span className="block mt-2">
-                                刪除後，相關訂單項目將回到未結帳狀態，可重新結帳。
-                            </span>
+                        <AlertDialogDescription asChild>
+                            <div className="space-y-2">
+                                <p>
+                                    已選擇 {selectedCheckouts.size} 筆結帳單，其中 {deletableCount} 筆可刪除。
+                                </p>
+                                {deletableCount < selectedCheckouts.size && (
+                                    <p className="text-warning">
+                                        不可刪除的結帳單（已寄出/已完成）將被跳過。
+                                    </p>
+                                )}
+                                <p className="text-muted-foreground">
+                                    {deleteItemsToo
+                                        ? '⚠️ 結帳單與訂單品項一併刪除，庫存自動恢復，無法復原。'
+                                        : '結帳單刪除後，訂單品項回到「訂單管理 → 待處理」，可重新結帳。'}
+                                </p>
+                            </div>
                         </AlertDialogDescription>
                     </AlertDialogHeader>
+
+                    {/* 硬刪選項 */}
+                    <label className="mt-2 flex items-start gap-2 cursor-pointer rounded-lg border border-destructive/30 bg-destructive/5 p-3 hover:bg-destructive/10 transition-colors">
+                        <Checkbox
+                            checked={deleteItemsToo}
+                            onCheckedChange={(v) => setDeleteItemsToo(v === true)}
+                            disabled={isUpdating}
+                            className="mt-0.5"
+                        />
+                        <div className="flex-1 text-sm">
+                            <div className="font-medium text-destructive">連同訂單品項一起刪除</div>
+                            <div className="text-xs text-muted-foreground mt-0.5">
+                                客人棄單時勾選。訂單品項會被刪除（不會回訂單管理），庫存自動恢復。
+                            </div>
+                        </div>
+                    </label>
+
                     <AlertDialogFooter>
                         <AlertDialogCancel disabled={isUpdating}>取消</AlertDialogCancel>
                         <AlertDialogAction

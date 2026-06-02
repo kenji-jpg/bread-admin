@@ -198,8 +198,8 @@ interface UseCheckoutReturn {
     markPaid: (checkoutId: string, note?: string) => Promise<UpdateStatusResult>
     markShipped: (checkoutId: string, note?: string) => Promise<UpdateStatusResult>
     markCompleted: (checkoutId: string, note?: string) => Promise<UpdateStatusResult>
-    deleteCheckout: (checkoutId: string) => Promise<DeleteCheckoutResult>
-    batchDeleteCheckouts: (checkoutIds: string[]) => Promise<BatchDeleteCheckoutsResult>
+    deleteCheckout: (checkoutId: string, deleteItems?: boolean) => Promise<DeleteCheckoutResult>
+    batchDeleteCheckouts: (checkoutIds: string[], deleteItems?: boolean) => Promise<BatchDeleteCheckoutsResult>
     mergeCheckouts: (checkoutIds: string[]) => Promise<{ success: boolean; merged_checkout_id?: string; checkout_no?: string; new_total?: number; item_count?: number; auto_free_shipping?: boolean; error?: string }>
     removeItem: (checkoutId: string, orderItemId: string) => Promise<RemoveItemResult>
     changeShippingMethod: (checkoutId: string, method: string, fee?: number) => Promise<ChangeShippingMethodResult>
@@ -298,23 +298,28 @@ export const useCheckout = (tenantId: string): UseCheckoutReturn => {
         })
     }, [tenantId, callRpc])
 
-    // 刪除結帳單（只有 pending/ready 狀態可刪除）
+    // 刪除結帳單（pending/url_sent/ordered 可刪；shipped/completed 擋）
+    // deleteItems=true 連同 order_items 一起硬刪 + 恢復庫存;false 軟刪只 unlink items
     const deleteCheckout = useCallback((
-        checkoutId: string
+        checkoutId: string,
+        deleteItems: boolean = false
     ): Promise<DeleteCheckoutResult> => {
         return callRpc<DeleteCheckoutResult>('delete_checkout_v1', {
             p_tenant_id: tenantId,
-            p_checkout_id: checkoutId
+            p_checkout_id: checkoutId,
+            p_delete_items: deleteItems,
         })
     }, [tenantId, callRpc])
 
     // 批量刪除結帳單（最多 100 筆）
     const batchDeleteCheckouts = useCallback((
-        checkoutIds: string[]
+        checkoutIds: string[],
+        deleteItems: boolean = false
     ): Promise<BatchDeleteCheckoutsResult> => {
         return callRpc<BatchDeleteCheckoutsResult>('batch_delete_checkouts_v1', {
             p_tenant_id: tenantId,
-            p_checkout_ids: checkoutIds
+            p_checkout_ids: checkoutIds,
+            p_delete_items: deleteItems,
         })
     }, [tenantId, callRpc])
 
