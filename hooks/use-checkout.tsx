@@ -4,7 +4,7 @@ import type { ShippingDetails, ShippingMethod } from '@/types/database'
 
 // 結帳單狀態
 type ShippingStatus = 'pending' | 'url_sent' | 'ordered' | 'shipped' | 'completed'
-type PaymentStatus = 'pending' | 'paid'
+type PaymentStatus = 'pending' | 'partial' | 'paid'
 
 // 商品明細項目（checkout_items JSON 格式）
 export interface CheckoutItemDetail {
@@ -26,6 +26,7 @@ export interface CheckoutListItem {
     checkout_no: string
     customer_name: string | null
     total_amount: number
+    paid_amount: number  // 累計已匯款金額（用來推 partial 狀態 + 算需補款 $X）
     shipping_fee: number
     item_count: number
     checkout_items: string | null  // ✅ 新增：商品明細 JSON 字串
@@ -70,6 +71,7 @@ export interface CheckoutDetailResult {
         id: string
         checkout_no: string
         total_amount: number
+        paid_amount: number
         shipping_fee: number
         shipping_status: ShippingStatus
         payment_status: PaymentStatus
@@ -193,14 +195,35 @@ interface UseCheckoutReturn {
     getDetail: (checkoutId: string) => Promise<CheckoutDetailResult>
     setUrl: (checkoutId: string, url: string, checkoutNo: string, displayName: string, nickname?: string | null) => Promise<NotifyMyshipResult>
     markOrdered: (checkoutId: string, orderNo?: string, note?: string) => Promise<UpdateStatusResult>
+    markPaid: (checkoutId: string, note?: string) => Promise<UpdateStatusResult>
     markShipped: (checkoutId: string, note?: string) => Promise<UpdateStatusResult>
     markCompleted: (checkoutId: string, note?: string) => Promise<UpdateStatusResult>
-    deleteCheckout: (checkoutId: string) => Promise<DeleteCheckoutResult>
-    batchDeleteCheckouts: (checkoutIds: string[]) => Promise<BatchDeleteCheckoutsResult>
+    deleteCheckout: (checkoutId: string, deleteItems?: boolean) => Promise<DeleteCheckoutResult>
+    batchDeleteCheckouts: (checkoutIds: string[], deleteItems?: boolean) => Promise<BatchDeleteCheckoutsResult>
     mergeCheckouts: (checkoutIds: string[]) => Promise<{ success: boolean; merged_checkout_id?: string; checkout_no?: string; new_total?: number; item_count?: number; auto_free_shipping?: boolean; error?: string }>
     removeItem: (checkoutId: string, orderItemId: string) => Promise<RemoveItemResult>
     changeShippingMethod: (checkoutId: string, method: string, fee?: number) => Promise<ChangeShippingMethodResult>
     notifyCheckout: (checkoutId: string) => Promise<{ success: boolean; notify_status?: string; notify_error?: string | null; error?: string; message?: string }>
+    updateShippingDetails: (checkoutId: string, fields: ShippingDetailsInput) => Promise<UpdateShippingDetailsResult>
+}
+
+// 後台手動填寫的寄件資訊欄位（傳 undefined 表示不更動該欄位）
+export interface ShippingDetailsInput {
+    receiver_name?: string
+    receiver_phone?: string
+    shipping_address?: string
+    seven_store_name?: string
+    seven_store_id?: string
+    tracking_no?: string
+}
+
+export interface UpdateShippingDetailsResult {
+    success: boolean
+    checkout_id?: string
+    checkout_no?: string
+    shipping_details?: ShippingDetails | null
+    error?: string
+    message?: string
 }
 
 export const useCheckout = (tenantId: string): UseCheckoutReturn => {
@@ -275,23 +298,28 @@ export const useCheckout = (tenantId: string): UseCheckoutReturn => {
         })
     }, [tenantId, callRpc])
 
-    // 刪除結帳單（只有 pending/ready 狀態可刪除）
+    // 刪除結帳單（pending/url_sent/ordered 可刪；shipped/completed 擋）
+    // deleteItems=true 連同 order_items 一起硬刪 + 恢復庫存;false 軟刪只 unlink items
     const deleteCheckout = useCallback((
-        checkoutId: string
+        checkoutId: string,
+        deleteItems: boolean = false
     ): Promise<DeleteCheckoutResult> => {
         return callRpc<DeleteCheckoutResult>('delete_checkout_v1', {
             p_tenant_id: tenantId,
-            p_checkout_id: checkoutId
+            p_checkout_id: checkoutId,
+            p_delete_items: deleteItems,
         })
     }, [tenantId, callRpc])
 
     // 批量刪除結帳單（最多 100 筆）
     const batchDeleteCheckouts = useCallback((
-        checkoutIds: string[]
+        checkoutIds: string[],
+        deleteItems: boolean = false
     ): Promise<BatchDeleteCheckoutsResult> => {
         return callRpc<BatchDeleteCheckoutsResult>('batch_delete_checkouts_v1', {
             p_tenant_id: tenantId,
-            p_checkout_ids: checkoutIds
+            p_checkout_ids: checkoutIds,
+            p_delete_items: deleteItems,
         })
     }, [tenantId, callRpc])
 
@@ -462,6 +490,7 @@ export const useCheckout = (tenantId: string): UseCheckoutReturn => {
         getDetail,
         setUrl: setUrlWithNotify,
         markOrdered: (id, orderNo, note) => updateStatus(id, 'mark_ordered', { myshipOrderNo: orderNo, note }),
+        markPaid: (id, note) => updateStatus(id, 'mark_paid', { note }),
         markShipped: (id, note) => updateStatus(id, 'mark_shipped', { note }),
         markCompleted: (id, note) => updateStatus(id, 'mark_completed', { note }),
         deleteCheckout,
@@ -470,5 +499,15 @@ export const useCheckout = (tenantId: string): UseCheckoutReturn => {
         removeItem,
         changeShippingMethod,
         notifyCheckout,
+        updateShippingDetails: (id, fields) => callRpc<UpdateShippingDetailsResult>('update_checkout_shipping_details_v1', {
+            p_tenant_id: tenantId,
+            p_checkout_id: id,
+            p_receiver_name: fields.receiver_name ?? null,
+            p_receiver_phone: fields.receiver_phone ?? null,
+            p_shipping_address: fields.shipping_address ?? null,
+            p_seven_store_name: fields.seven_store_name ?? null,
+            p_seven_store_id: fields.seven_store_id ?? null,
+            p_tracking_no: fields.tracking_no ?? null,
+        }),
     }
 }

@@ -3,10 +3,11 @@
 // ========================================
 // 結帳模式
 // ========================================
-export type ShippingMethod = 'myship' | 'delivery' | 'pickup' | 'seven_store'
+export type ShippingMethod = 'myship' | 'myship_free' | 'delivery' | 'pickup' | 'seven_store'
 
 export const SHIPPING_METHOD_OPTIONS: Record<ShippingMethod, { label: string; icon: string }> = {
   myship: { label: '賣貨便', icon: '🏪' },
+  myship_free: { label: '賣貨便(免運)', icon: '🏪' },
   delivery: { label: '宅配', icon: '🚚' },
   pickup: { label: '自取', icon: '🏠' },
   seven_store: { label: '7-11店到店', icon: '🏬' },
@@ -174,7 +175,18 @@ interface DeliveryShippingDetails extends ShippingDetailsBase {
 // 自取模式：只需基本聯絡資訊
 type PickupShippingDetails = ShippingDetailsBase
 
-export type ShippingDetails = MyshipShippingDetails | DeliveryShippingDetails | PickupShippingDetails
+// 7-11 店到店：收件人 + 取貨 7-11 門市
+interface SevenStoreShippingDetails extends ShippingDetailsBase {
+  seven_store_name?: string     // 取貨 7-11 店名
+  seven_store_id?: string       // 取貨 7-11 店號
+  tracking_no?: string          // 物流追蹤號
+}
+
+export type ShippingDetails =
+  | MyshipShippingDetails
+  | DeliveryShippingDetails
+  | PickupShippingDetails
+  | SevenStoreShippingDetails
 
 // ========================================
 // Checkout 型別

@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { useTenant } from '@/hooks/use-tenant'
-import { useCheckout, type CheckoutListItem, type CheckoutDetailResult, type ListCheckoutsResult, type CheckoutItemDetail } from '@/hooks/use-checkout'
+import { useCheckout, type CheckoutListItem, type CheckoutDetailResult, type ListCheckoutsResult, type CheckoutItemDetail, type ShippingDetailsInput } from '@/hooks/use-checkout'
 import { SHIPPING_METHOD_OPTIONS, type ShippingMethod } from '@/types/database'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -45,6 +45,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { toast } from 'sonner'
 import {
@@ -69,6 +70,7 @@ import {
     Calendar,
     X,
     Merge,
+    AlertCircle,
 } from 'lucide-react'
 
 // 狀態標籤配置 (按照後端文件)
@@ -109,6 +111,31 @@ const getShippingValue = <T,>(
     }
     // 向後相容：使用舊欄位
     return item[key] ?? null
+}
+
+// 判斷一筆結帳單的寄件資訊狀態（是否需要、是否填齊、摘要）
+// myship/myship_free：客人自行於賣貨便選店，後台不需收件資訊
+const getShippingInfoMeta = (item: CheckoutListItem): { needed: boolean; complete: boolean; summary: string } => {
+    const method = (item.shipping_method as string | null) || 'myship'
+    const d = (item.shipping_details || {}) as Record<string, any>
+    const name: string = d.receiver_name || item.receiver_name || ''
+    const phone: string = d.receiver_phone || item.receiver_phone || ''
+
+    if (method === 'myship' || method === 'myship_free') {
+        return { needed: false, complete: true, summary: '' }
+    }
+    if (method === 'delivery') {
+        const addr: string = d.shipping_address || (item as any).shipping_address || ''
+        return { needed: true, complete: Boolean(name && phone && addr), summary: [name, addr].filter(Boolean).join(' ') }
+    }
+    if (method === 'seven_store') {
+        const store: string = d.seven_store_name || ''
+        return { needed: true, complete: Boolean(name && phone && store), summary: [name, store].filter(Boolean).join(' ') }
+    }
+    if (method === 'pickup') {
+        return { needed: true, complete: Boolean(name && phone), summary: [name, phone].filter(Boolean).join(' ') }
+    }
+    return { needed: false, complete: true, summary: '' }
 }
 
 // 結帳模式組件（可編輯：pending/url_sent/ordered 時可改）
@@ -185,6 +212,16 @@ export default function CheckoutsPage() {
     const [checkoutDetail, setCheckoutDetail] = useState<CheckoutDetailResult | null>(null)
     const [isLoadingDetail, setIsLoadingDetail] = useState(false)
 
+    // 寄件資訊編輯 Dialog
+    const [shippingDetailsCheckout, setShippingDetailsCheckout] = useState<CheckoutListItem | null>(null)
+    const [sdReceiverName, setSdReceiverName] = useState('')
+    const [sdReceiverPhone, setSdReceiverPhone] = useState('')
+    const [sdAddress, setSdAddress] = useState('')
+    const [sdStoreName, setSdStoreName] = useState('')
+    const [sdStoreId, setSdStoreId] = useState('')
+    const [sdPasteText, setSdPasteText] = useState('')
+    const [isSavingShipping, setIsSavingShipping] = useState(false)
+
     // 表單狀態
     const [storeUrl, setStoreUrl] = useState('')
     const [myshipOrderNo, setMyshipOrderNo] = useState('')
@@ -193,6 +230,7 @@ export default function CheckoutsPage() {
     // 選取狀態
     const [selectedCheckouts, setSelectedCheckouts] = useState<Set<string>>(new Set())
     const [batchDeleteConfirm, setBatchDeleteConfirm] = useState(false)
+    const [deleteItemsToo, setDeleteItemsToo] = useState(false)  // 是否連同 order_items 一起硬刪
     const [mergeConfirmOpen, setMergeConfirmOpen] = useState(false)
     const [isMerging, setIsMerging] = useState(false)
     const [isNotifying, setIsNotifying] = useState(false)
@@ -322,9 +360,18 @@ export default function CheckoutsPage() {
         return <Badge className={color}>{label}</Badge>
     }
 
-    const getPaymentBadge = (status: string) => {
+    const getPaymentBadge = (item: { payment_status: string; total_amount: number; paid_amount?: number }) => {
+        const status = item.payment_status
         if (status === 'paid') {
             return <Badge className="bg-success/20 text-success border-success/30">已付款</Badge>
+        }
+        if (status === 'partial') {
+            const owed = Math.max(0, item.total_amount - (item.paid_amount ?? 0))
+            return (
+                <Badge className="bg-amber-500/20 text-amber-600 border-amber-500/30" title={`已付 $${item.paid_amount ?? 0} / 應付 $${item.total_amount}`}>
+                    需補款 ${owed.toLocaleString()}
+                </Badge>
+            )
         }
         return <Badge className="bg-warning/20 text-warning border-warning/30">待付款</Badge>
     }
@@ -423,6 +470,21 @@ export default function CheckoutsPage() {
         }
     }
 
+    // 已收補款 (partial → paid，paid_amount = total_amount)
+    const handleMarkPaid = async (item: CheckoutListItem) => {
+        try {
+            const result = await checkoutApiRef.current.markPaid(item.id)
+            if (result.success) {
+                toast.success(result.message || '已標記補款收款')
+                fetchCheckouts()
+            } else {
+                toast.error(result.message || '標記失敗')
+            }
+        } catch (error: any) {
+            toast.error(error.message || '標記失敗')
+        }
+    }
+
     // 標記已寄出 (ordered → shipped)
     const handleMarkShipped = async (item: CheckoutListItem) => {
         try {
@@ -457,6 +519,110 @@ export default function CheckoutsPage() {
     const handleCopyUrl = (url: string) => {
         navigator.clipboard.writeText(url)
         toast.success('已複製連結')
+    }
+
+    // ========================================
+    // 寄件資訊編輯
+    // ========================================
+    const openShippingDetails = (item: CheckoutListItem) => {
+        setSdReceiverName(getShippingValue<string>(item, 'receiver_name') || '')
+        setSdReceiverPhone(getShippingValue<string>(item, 'receiver_phone') || '')
+        setSdAddress(getShippingValue<string>(item, 'shipping_address') || '')
+        const d = (item.shipping_details || {}) as Record<string, any>
+        setSdStoreName(d.seven_store_name || '')
+        setSdStoreId(d.seven_store_id || '')
+        setSdPasteText('')
+        setShippingDetailsCheckout(item)
+    }
+
+    // 從 LINE 訊息整段解析寄件資訊（依出貨方式辨識欄位類型）
+    // 範例輸入：
+    //   14798
+    //   江宜庭
+    //   0978166257
+    //   鹿慶門市
+    const parseShippingPaste = (text: string, method: string) => {
+        const lines = text.split('\n').map((l) => l.trim()).filter(Boolean)
+        let name = '', phone = '', addr = '', storeName = '', storeId = ''
+        for (const line of lines) {
+            // 純數字 → 電話 / 結帳單末碼 / 店號
+            const digitsOnly = line.replace(/\D/g, '')
+            if (/^09\d{8}$/.test(digitsOnly) && !phone) {
+                phone = digitsOnly
+                continue
+            }
+            // 短純數字（3-5 碼）→ 結帳單號碼，忽略
+            if (/^\d{3,5}$/.test(line)) continue
+            // 6 碼數字 → 7-11 店號（選填）
+            if (method === 'seven_store' && /^\d{6}$/.test(line) && !storeId) {
+                storeId = line
+                continue
+            }
+            // 宅配地址：含縣/市/區/路/街/段/巷/弄/號/樓
+            if (method === 'delivery' && /(市|縣|區|鄉|鎮|村|路|街|段|巷|弄|號|樓)/.test(line) && !addr) {
+                addr = line
+                continue
+            }
+            // 7-11 店名：結尾「門市」「店」「超商」
+            if (method === 'seven_store' && /(門市|店|超商)$/.test(line) && !storeName) {
+                storeName = line
+                continue
+            }
+            // 中文姓名 2-4 字（最先沒有姓名時抓）
+            if (/^[一-鿿]{2,4}$/.test(line) && !name) {
+                name = line
+                continue
+            }
+        }
+        return { name, phone, addr, storeName, storeId }
+    }
+
+    const handlePasteTextChange = (text: string) => {
+        setSdPasteText(text)
+        if (!shippingDetailsCheckout) return
+        const method = (shippingDetailsCheckout.shipping_method as string | null) || 'myship'
+        const parsed = parseShippingPaste(text, method)
+        if (parsed.name) setSdReceiverName(parsed.name)
+        if (parsed.phone) setSdReceiverPhone(parsed.phone)
+        if (parsed.addr) setSdAddress(parsed.addr)
+        if (parsed.storeName) setSdStoreName(parsed.storeName)
+        if (parsed.storeId) setSdStoreId(parsed.storeId)
+    }
+
+    const handleSaveShippingDetails = async () => {
+        if (!shippingDetailsCheckout) return
+        const method = (shippingDetailsCheckout.shipping_method as string | null) || 'myship'
+        setIsSavingShipping(true)
+        try {
+            const fields: ShippingDetailsInput = {
+                receiver_name: sdReceiverName.trim(),
+                receiver_phone: sdReceiverPhone.trim(),
+            }
+            if (method === 'delivery') {
+                fields.shipping_address = sdAddress.trim()
+            }
+            if (method === 'seven_store') {
+                fields.seven_store_name = sdStoreName.trim()
+                fields.seven_store_id = sdStoreId.trim()
+            }
+            const result = await checkoutApiRef.current.updateShippingDetails(shippingDetailsCheckout.id, fields)
+            if (result.success) {
+                toast.success(result.message || '已更新寄件資訊')
+                // 樂觀就地更新，避免整頁重載
+                setCheckouts((prev) => prev.map((c) =>
+                    c.id === shippingDetailsCheckout.id
+                        ? { ...c, shipping_details: (result.shipping_details ?? c.shipping_details) as any }
+                        : c
+                ))
+                setShippingDetailsCheckout(null)
+            } else {
+                toast.error(result.message || result.error || '更新失敗')
+            }
+        } catch (e: any) {
+            toast.error(e.message || '更新失敗')
+        } finally {
+            setIsSavingShipping(false)
+        }
     }
 
     // ========================================
@@ -508,13 +674,17 @@ export default function CheckoutsPage() {
             toast.error('請先選擇結帳單')
             return
         }
+        setDeleteItemsToo(false)  // 預設不勾
         setBatchDeleteConfirm(true)
     }
 
     const confirmBatchDelete = async () => {
         setIsUpdating(true)
         try {
-            const result = await checkoutApiRef.current.batchDeleteCheckouts(Array.from(selectedCheckouts))
+            const result = await checkoutApiRef.current.batchDeleteCheckouts(
+                Array.from(selectedCheckouts),
+                deleteItemsToo
+            )
 
             if (!result.success) {
                 toast.error(result.error || '刪除失敗')
@@ -528,8 +698,14 @@ export default function CheckoutsPage() {
                 toast.warning(`${result.skipped_count} 筆因狀態限制被跳過`)
             }
 
-            if (result.released_items > 0) {
-                toast.info(`${result.released_items} 個訂單項目已回到未結帳狀態`)
+            const affected = (result as { affected_items?: number; released_items?: number }).affected_items
+                ?? (result as { released_items?: number }).released_items ?? 0
+            if (affected > 0) {
+                toast.info(
+                    deleteItemsToo
+                        ? `${affected} 個訂單品項已刪除（庫存已恢復）`
+                        : `${affected} 個訂單項目已回到未結帳狀態`
+                )
             }
 
             setSelectedCheckouts(new Set())
@@ -813,7 +989,9 @@ export default function CheckoutsPage() {
                 !isMyshipMethod(item.shipping_method || 'myship') ? item.shipping_fee : '',
                 item.item_count,
                 formatItems(item.checkout_items),
-                item.payment_status === 'paid' ? '已付款' : '待付款',
+                item.payment_status === 'paid' ? '已付款'
+                    : item.payment_status === 'partial' ? `需補款 $${Math.max(0, item.total_amount - (item.paid_amount ?? 0))}`
+                    : '待付款',
                 STATUS_LABELS[item.shipping_status] || item.shipping_status,
                 SHIPPING_METHOD_LABELS[item.shipping_method || 'myship'] || item.shipping_method || '',
                 item.is_notified ? '是' : '否',
@@ -993,6 +1171,7 @@ export default function CheckoutsPage() {
                             <SelectContent>
                                 <SelectItem value="all">全部付款</SelectItem>
                                 <SelectItem value="pending">待付款</SelectItem>
+                                <SelectItem value="partial">需補款</SelectItem>
                                 <SelectItem value="paid">已付款</SelectItem>
                             </SelectContent>
                         </Select>
@@ -1155,7 +1334,7 @@ export default function CheckoutsPage() {
                         </div>
                     ) : (
                         <div className="overflow-x-auto">
-                            <Table className="min-w-[1100px]">
+                            <Table className="min-w-[1090px]">
                                 <TableHeader>
                                     <TableRow className="hover:bg-transparent">
                                         <TableHead className="w-10 pl-4">
@@ -1169,13 +1348,13 @@ export default function CheckoutsPage() {
                                         <TableHead className="w-[110px]">單號</TableHead>
                                         <TableHead className="w-[140px]">客戶</TableHead>
                                         <TableHead className="text-right w-[100px]">金額</TableHead>
-                                        <TableHead className="w-[220px]">商品明細</TableHead>
+                                        <TableHead className="w-[180px]">商品明細</TableHead>
                                         <TableHead className="w-[72px]">付款</TableHead>
                                         <TableHead className="w-[72px]">出貨</TableHead>
-                                        <TableHead className="w-[110px]">結帳模式</TableHead>
-                                        <TableHead className="w-[90px]">賣場帳號</TableHead>
-                                        <TableHead className="w-[72px]">通知</TableHead>
-                                        <TableHead className="w-[80px]">時間</TableHead>
+                                        <TableHead className="w-[120px]">結帳模式</TableHead>
+                                        <TableHead className="w-[130px]">寄件資訊</TableHead>
+                                        <TableHead className="w-[44px] text-center">通知</TableHead>
+                                        <TableHead className="w-[56px]">時間</TableHead>
                                         <TableHead className="w-[80px] pr-4">操作</TableHead>
                                     </TableRow>
                                 </TableHeader>
@@ -1222,7 +1401,7 @@ export default function CheckoutsPage() {
                                                     </div>
                                                 )}
                                             </TableCell>
-                                            <TableCell className="max-w-[220px]">
+                                            <TableCell className="max-w-[180px]">
                                                 {(() => {
                                                     if (!item.checkout_items) return <span className="text-muted-foreground">-</span>
                                                     try {
@@ -1231,12 +1410,15 @@ export default function CheckoutsPage() {
 
                                                         const preview = (
                                                             <div className="text-xs space-y-0.5">
-                                                                {items.slice(0, 3).map((detail, idx) => (
-                                                                    <div key={idx} className="truncate flex justify-between gap-2">
-                                                                        <span className="truncate">{detail.name}{detail.variant_name ? `（${detail.variant_name}）` : ''} x{detail.qty}</span>
-                                                                        <span className="shrink-0 text-muted-foreground">${detail.subtotal.toLocaleString()}</span>
-                                                                    </div>
-                                                                ))}
+                                                                {items.slice(0, 3).map((detail, idx) => {
+                                                                    const isRefund = detail.subtotal < 0
+                                                                    return (
+                                                                        <div key={idx} className={`truncate flex justify-between gap-2 ${isRefund ? 'text-rose-600' : ''}`}>
+                                                                            <span className="truncate">{detail.name}{detail.variant_name ? `（${detail.variant_name}）` : ''} x{detail.qty}</span>
+                                                                            <span className={`shrink-0 ${isRefund ? 'text-rose-600' : 'text-muted-foreground'}`}>${detail.subtotal.toLocaleString()}</span>
+                                                                        </div>
+                                                                    )
+                                                                })}
                                                                 {items.length > 3 && (
                                                                     <div className="text-muted-foreground">
                                                                         ...還有 {items.length - 3} 項
@@ -1262,18 +1444,22 @@ export default function CheckoutsPage() {
                                                                     <div className="max-h-64 overflow-y-auto">
                                                                         {items.map((detail, idx) => {
                                                                             const canRemove = !['shipped', 'completed'].includes(item.shipping_status) && items.length > 0
+                                                                            const isRefund = detail.subtotal < 0
                                                                             return (
                                                                                 <div
                                                                                     key={idx}
-                                                                                    className="flex items-start justify-between px-4 py-2 text-sm border-b last:border-b-0 group"
+                                                                                    className={`flex items-start justify-between px-4 py-2 text-sm border-b last:border-b-0 group ${isRefund ? 'bg-rose-50/40 dark:bg-rose-950/20' : ''}`}
                                                                                 >
-                                                                                    <span className="mr-2 flex-1 break-words">{detail.name}{detail.variant_name ? `（${detail.variant_name}）` : ''}</span>
+                                                                                    <span className={`mr-2 flex-1 break-words ${isRefund ? 'text-rose-600 dark:text-rose-400' : ''}`}>
+                                                                                        {isRefund && <span className="mr-1">↩︎</span>}
+                                                                                        {detail.name}{detail.variant_name ? `（${detail.variant_name}）` : ''}
+                                                                                    </span>
                                                                                     <div className="flex items-center gap-2 shrink-0 text-muted-foreground">
                                                                                         <span>x{detail.qty}</span>
-                                                                                        <span className="w-16 text-right font-medium text-foreground">
+                                                                                        <span className={`w-16 text-right font-medium ${isRefund ? 'text-rose-600 dark:text-rose-400' : 'text-foreground'}`}>
                                                                                             ${detail.subtotal.toLocaleString()}
                                                                                         </span>
-                                                                                        {canRemove && detail.order_item_id && (
+                                                                                        {canRemove && detail.order_item_id && !isRefund && (
                                                                                             <button
                                                                                                 className="text-destructive/60 hover:text-destructive transition-colors ml-1 p-0.5 rounded hover:bg-destructive/10"
                                                                                                 onClick={(e) => {
@@ -1289,6 +1475,13 @@ export default function CheckoutsPage() {
                                                                                 </div>
                                                                             )
                                                                         })}
+                                                                        {/* 賣貨便達免運門檻時顯示 memo（不是真品項） */}
+                                                                        {(item.shipping_method === 'myship_free') && (
+                                                                            <div className="flex items-center justify-between px-4 py-2 text-xs bg-emerald-50/40 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border-b last:border-b-0">
+                                                                                <span>✨ 賣貨便免運</span>
+                                                                                <span className="font-medium">-$38</span>
+                                                                            </div>
+                                                                        )}
                                                                     </div>
                                                                     <div className="flex items-center justify-between px-4 py-2.5 bg-muted/50 border-t font-medium text-sm">
                                                                         <span>合計</span>
@@ -1302,48 +1495,75 @@ export default function CheckoutsPage() {
                                                     }
                                                 })()}
                                             </TableCell>
-                                            <TableCell>{getPaymentBadge(item.payment_status)}</TableCell>
+                                            <TableCell>{getPaymentBadge(item)}</TableCell>
                                             <TableCell>{getShippingBadge(item.shipping_status)}</TableCell>
-                                            {/* 結帳模式欄位 */}
+                                            {/* 結帳模式 */}
                                             <TableCell>
                                                 <ShippingMethodCell item={item} onChangeMethod={handleChangeShippingMethod} />
                                             </TableCell>
-                                            {/* 賣貨便帳號欄位 */}
-                                            <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                                            {/* 寄件資訊欄位（賣貨便顯示賣場所有者；其他出貨方式顯示收件人/地址/店名） */}
+                                            <TableCell>
                                                 {(() => {
                                                     const method = (item.shipping_method as string | null) || 'myship'
-                                                    if (method !== 'myship' && method !== 'myship_free') {
-                                                        return <span>—</span>
+                                                    // 賣貨便：客人自己在賣貨便選店，這格改顯示「賣場所有者」
+                                                    if (method === 'myship' || method === 'myship_free') {
+                                                        const accountName = getShippingValue<string>(item, 'myship_account_name')
+                                                        return accountName ? (
+                                                            <span className="text-xs text-muted-foreground truncate max-w-[120px] inline-block" title={`賣場所有者：${accountName}`}>
+                                                                {accountName}
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-xs text-muted-foreground">—</span>
+                                                        )
                                                     }
-                                                    const accountName = getShippingValue<string>(item, 'myship_account_name')
-                                                    return accountName ? <span>{accountName}</span> : <span>—</span>
+                                                    const meta = getShippingInfoMeta(item)
+                                                    if (!meta.needed) {
+                                                        return <span className="text-xs text-muted-foreground">—</span>
+                                                    }
+                                                    return (
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className={`h-7 text-xs max-w-[120px] ${meta.complete
+                                                                ? 'border-success/40 text-success hover:bg-success/10'
+                                                                : 'border-destructive/40 text-destructive hover:bg-destructive/10'}`}
+                                                            onClick={() => openShippingDetails(item)}
+                                                            title={meta.complete ? meta.summary : '尚未填寫寄件資訊'}
+                                                        >
+                                                            {meta.complete ? (
+                                                                <>
+                                                                    <Package className="h-3 w-3 mr-1 shrink-0" />
+                                                                    <span className="truncate">{meta.summary || '已填'}</span>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <AlertCircle className="h-3 w-3 mr-1 shrink-0" />
+                                                                    缺資訊
+                                                                </>
+                                                            )}
+                                                        </Button>
+                                                    )
                                                 })()}
                                             </TableCell>
-                                            {/* 通知狀態欄位 */}
-                                            <TableCell>
-                                                {item.is_notified ? (
-                                                    <Badge
-                                                        className="bg-success/20 text-success border-success/30 cursor-pointer hover:bg-success/30"
-                                                        onClick={() => handleNotifyCheckout(item.id, item.checkout_no)}
-                                                        title="點擊重新發送通知"
-                                                    >
-                                                        <Bell className="h-3 w-3 mr-1" />
-                                                        已通知
-                                                    </Badge>
-                                                ) : (
-                                                    <Badge
-                                                        variant="outline"
-                                                        className="cursor-pointer hover:bg-muted"
-                                                        onClick={() => handleNotifyCheckout(item.id, item.checkout_no)}
-                                                        title="點擊發送通知"
-                                                    >
-                                                        <Bell className="h-3 w-3 mr-1" />
-                                                        未通知
-                                                    </Badge>
-                                                )}
+                                            {/* 通知狀態（純圖示） */}
+                                            <TableCell className="text-center">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleNotifyCheckout(item.id, item.checkout_no)}
+                                                    title={item.is_notified ? '已通知（點擊重新發送）' : '未通知（點擊發送）'}
+                                                    aria-label={item.is_notified ? '已通知' : '未通知'}
+                                                    className={`inline-flex items-center justify-center h-7 w-7 rounded-md transition-colors ${item.is_notified
+                                                        ? 'text-success hover:bg-success/10'
+                                                        : 'text-muted-foreground hover:bg-muted'}`}
+                                                >
+                                                    <Bell className="h-3.5 w-3.5" />
+                                                </button>
                                             </TableCell>
                                             <TableCell className="text-muted-foreground text-xs whitespace-nowrap">
-                                                {new Date(item.created_at).toLocaleDateString('zh-TW')}
+                                                {(() => {
+                                                    const d = new Date(item.created_at)
+                                                    return `${d.getMonth() + 1}/${d.getDate()}`
+                                                })()}
                                             </TableCell>
                                             {/* 操作按鈕 - 根據結帳模式和狀態顯示下一步操作 */}
                                             <TableCell className="pr-4">
@@ -1413,6 +1633,20 @@ export default function CheckoutsPage() {
                                                                 </div>
                                                             )
                                                         case 'ordered':
+                                                            // 需補款：優先顯示「已收補款」（補完才走出貨）
+                                                            if (item.payment_status === 'partial') {
+                                                                return (
+                                                                    <Button
+                                                                        variant="outline"
+                                                                        size="sm"
+                                                                        className="h-7 text-xs border-amber-500/40 text-amber-600 hover:bg-amber-50"
+                                                                        onClick={() => handleMarkPaid(item)}
+                                                                        title="客人已補匯差額"
+                                                                    >
+                                                                        已收補款
+                                                                    </Button>
+                                                                )
+                                                            }
                                                             // 自取模式：直接完成（不需要寄出）
                                                             if (method === 'pickup') {
                                                                 return (
@@ -1626,6 +1860,83 @@ export default function CheckoutsPage() {
                 </DialogContent>
             </Dialog>
 
+            {/* 寄件資訊編輯 Dialog */}
+            <Dialog open={!!shippingDetailsCheckout} onOpenChange={() => setShippingDetailsCheckout(null)}>
+                <DialogContent className="glass-strong">
+                    <DialogHeader>
+                        <DialogTitle>寄件資訊</DialogTitle>
+                        <DialogDescription>
+                            {(() => {
+                                const method = (shippingDetailsCheckout?.shipping_method as string | null) || 'myship'
+                                const label = method === 'delivery' ? '宅配' : method === 'seven_store' ? '7-11店到店' : method === 'pickup' ? '自取' : ''
+                                return `${shippingDetailsCheckout?.checkout_no || ''}　${label}`
+                            })()}
+                        </DialogDescription>
+                    </DialogHeader>
+                    {shippingDetailsCheckout && (() => {
+                        const method = (shippingDetailsCheckout.shipping_method as string | null) || 'myship'
+                        const placeholder = method === 'delivery'
+                            ? '貼上整段，例：\n14798\n江宜庭\n0978166257\n台北市大安區忠孝東路四段100號5樓'
+                            : method === 'seven_store'
+                                ? '貼上整段，例：\n14798\n江宜庭\n0978166257\n鹿慶門市'
+                                : '貼上整段，例：\n14798\n江宜庭\n0978166257'
+                        return (
+                            <div className="space-y-4 py-2">
+                                {/* 快速貼上區：自動拆解到下方欄位 */}
+                                <div className="space-y-1.5 rounded-lg border border-primary/20 bg-primary/5 p-3">
+                                    <Label htmlFor="sd-paste" className="text-xs">📋 從 LINE 訊息貼上（自動拆解到下方欄位）</Label>
+                                    <Textarea
+                                        id="sd-paste"
+                                        value={sdPasteText}
+                                        onChange={(e) => handlePasteTextChange(e.target.value)}
+                                        rows={4}
+                                        placeholder={placeholder}
+                                        className="text-sm font-mono"
+                                    />
+                                    <p className="text-[10px] text-muted-foreground">
+                                        辨識規則：純數字 09xxxxxxxx = 電話；中文 2-4 字 = 姓名；結尾「門市/店」= 7-11 店名；含「路/街/區/號」= 宅配地址。可手動微調下方欄位。
+                                    </p>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="sd-name">收件人姓名</Label>
+                                    <Input id="sd-name" value={sdReceiverName} onChange={(e) => setSdReceiverName(e.target.value)} placeholder="收件人姓名" />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="sd-phone">收件人電話</Label>
+                                    <Input id="sd-phone" value={sdReceiverPhone} onChange={(e) => setSdReceiverPhone(e.target.value)} placeholder="09xxxxxxxx" inputMode="tel" />
+                                </div>
+                                {method === 'delivery' && (
+                                    <div className="space-y-2">
+                                        <Label htmlFor="sd-address">宅配地址</Label>
+                                        <Input id="sd-address" value={sdAddress} onChange={(e) => setSdAddress(e.target.value)} placeholder="完整收件地址" />
+                                    </div>
+                                )}
+                                {method === 'seven_store' && (
+                                    <>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="sd-store-name">取貨 7-11 店名</Label>
+                                            <Input id="sd-store-name" value={sdStoreName} onChange={(e) => setSdStoreName(e.target.value)} placeholder="例：永康門市" />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="sd-store-id">7-11 店號（選填）</Label>
+                                            <Input id="sd-store-id" value={sdStoreId} onChange={(e) => setSdStoreId(e.target.value)} placeholder="例：123456" />
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        )
+                    })()}
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setShippingDetailsCheckout(null)} className="rounded-xl">
+                            取消
+                        </Button>
+                        <Button onClick={handleSaveShippingDetails} disabled={isSavingShipping} className="gradient-primary rounded-xl">
+                            {isSavingShipping ? '儲存中...' : '儲存'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
             {/* Mark Ordered Dialog - 根據結帳模式顯示不同內容 */}
             <Dialog open={!!markOrderedCheckout} onOpenChange={() => setMarkOrderedCheckout(null)}>
                 <DialogContent className="glass-strong">
@@ -1713,7 +2024,11 @@ export default function CheckoutsPage() {
                                 <div className="flex flex-wrap gap-2 pb-4 border-b">
                                     <div className="flex items-center gap-2">
                                         <span className="text-sm text-muted-foreground">付款:</span>
-                                        {getPaymentBadge(checkoutDetail.checkout?.payment_status || 'pending')}
+                                        {getPaymentBadge({
+                                            payment_status: checkoutDetail.checkout?.payment_status || 'pending',
+                                            total_amount: checkoutDetail.checkout?.total_amount || 0,
+                                            paid_amount: checkoutDetail.checkout?.paid_amount,
+                                        })}
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <span className="text-sm text-muted-foreground">出貨:</span>
@@ -1853,18 +2168,41 @@ export default function CheckoutsPage() {
                 <AlertDialogContent>
                     <AlertDialogHeader>
                         <AlertDialogTitle>確認刪除</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            已選擇 {selectedCheckouts.size} 筆結帳單，其中 {deletableCount} 筆可刪除。
-                            {deletableCount < selectedCheckouts.size && (
-                                <span className="block mt-1 text-warning">
-                                    不可刪除的結帳單（已下單/已寄出/已完成）將被跳過。
-                                </span>
-                            )}
-                            <span className="block mt-2">
-                                刪除後，相關訂單項目將回到未結帳狀態，可重新結帳。
-                            </span>
+                        <AlertDialogDescription asChild>
+                            <div className="space-y-2">
+                                <p>
+                                    已選擇 {selectedCheckouts.size} 筆結帳單，其中 {deletableCount} 筆可刪除。
+                                </p>
+                                {deletableCount < selectedCheckouts.size && (
+                                    <p className="text-warning">
+                                        不可刪除的結帳單（已寄出/已完成）將被跳過。
+                                    </p>
+                                )}
+                                <p className="text-muted-foreground">
+                                    {deleteItemsToo
+                                        ? '⚠️ 結帳單與訂單品項一併刪除，庫存自動恢復，無法復原。'
+                                        : '結帳單刪除後，訂單品項回到「訂單管理 → 待處理」，可重新結帳。'}
+                                </p>
+                            </div>
                         </AlertDialogDescription>
                     </AlertDialogHeader>
+
+                    {/* 硬刪選項 */}
+                    <label className="mt-2 flex items-start gap-2 cursor-pointer rounded-lg border border-destructive/30 bg-destructive/5 p-3 hover:bg-destructive/10 transition-colors">
+                        <Checkbox
+                            checked={deleteItemsToo}
+                            onCheckedChange={(v) => setDeleteItemsToo(v === true)}
+                            disabled={isUpdating}
+                            className="mt-0.5"
+                        />
+                        <div className="flex-1 text-sm">
+                            <div className="font-medium text-destructive">連同訂單品項一起刪除</div>
+                            <div className="text-xs text-muted-foreground mt-0.5">
+                                客人棄單時勾選。訂單品項會被刪除（不會回訂單管理），庫存自動恢復。
+                            </div>
+                        </div>
+                    </label>
+
                     <AlertDialogFooter>
                         <AlertDialogCancel disabled={isUpdating}>取消</AlertDialogCancel>
                         <AlertDialogAction

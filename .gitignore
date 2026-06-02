@@ -45,3 +45,6 @@ supabase/.temp/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Chrome 賣貨便插件 source of truth 在 ~/桌面/myship-auto-extension/，不再 push 到 repo
+extensions/
