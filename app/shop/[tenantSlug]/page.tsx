@@ -2598,9 +2598,11 @@ export default function ShopPage() {
                       ? `現貨 (剩 ${selectedProduct.stock})`
                       : '預購'}
                   </span>
-                  <span className="text-xs" style={{ color: '#8B6B4A' }}>
-                    已售 {selectedProduct.sold_qty}
-                  </span>
+                  {selectedProduct.sold_qty >= 5 && (
+                    <span className="text-xs" style={{ color: '#8B6B4A' }}>
+                      已售 {selectedProduct.sold_qty}
+                    </span>
+                  )}
                 </div>
                 {selectedProduct.description && (
                   <p className="text-xs mt-1 leading-relaxed line-clamp-2" style={{ color: '#8B6B4A' }}>{selectedProduct.description}</p>
