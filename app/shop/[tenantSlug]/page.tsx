@@ -1498,13 +1498,14 @@ export default function ShopPage() {
     return product.price
   }
 
-  // 取得商品價格範圍文字（有不同價格規格時顯示 $min~$max）
+  // 取得商品價格範圍（有規格時以規格價為準，跟主價不一致時也用規格價顯示）
   const getPriceRange = (product: Product) => {
     if (!product.has_variants || !product.variants || product.variants.length === 0) return null
     const prices = product.variants.map(v => v.price ?? product.price)
     const min = Math.min(...prices)
     const max = Math.max(...prices)
-    if (min === max) return null // 所有規格同價
+    // 所有規格同價且與主價一致 → 回 null 用主價顯示
+    if (min === max && min === product.price) return null
     return { min, max }
   }
 
@@ -2198,7 +2199,12 @@ export default function ShopPage() {
                       <span className="text-xs" style={{ color: '#8B6B4A' }}>$</span>
                       {(() => {
                         const range = getPriceRange(product)
-                        if (range) return <span className="text-base font-bold" style={{ color: accentColor || '#8b5e3c' }}>{range.min.toLocaleString()}~{range.max.toLocaleString()}</span>
+                        if (range) {
+                          const text = range.min === range.max
+                            ? range.min.toLocaleString()
+                            : `${range.min.toLocaleString()}~${range.max.toLocaleString()}`
+                          return <span className="text-base font-bold" style={{ color: accentColor || '#8b5e3c' }}>{text}</span>
+                        }
                         return <span className="text-base font-bold" style={{ color: accentColor || '#8b5e3c' }}>{product.price.toLocaleString()}</span>
                       })()}
                       {mode === 'stock' && product.stock !== null && product.stock > 0 && (
@@ -4421,6 +4427,11 @@ export default function ShopPage() {
                         )}
                       </div>
                     ))}
+                    {newProductVariantPricing && newProductPrice && newProductVariants.some(v => v.price && parseInt(v.price) !== parseInt(newProductPrice)) && (
+                      <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
+                        ⚠️ 有規格價與主價 ${parseInt(newProductPrice).toLocaleString()} 不同，請再確認金額
+                      </div>
+                    )}
                     <button
                       type="button"
                       className="text-xs text-orange-600 font-medium"
