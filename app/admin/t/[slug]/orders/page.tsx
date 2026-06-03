@@ -49,6 +49,7 @@ import {
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Card, CardContent } from '@/components/ui/card'
+import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import type { OrderItem, Member, Product } from '@/types/database'
 import {
@@ -90,6 +91,46 @@ interface MemberOption {
     display_name: string
     line_user_id: string
     created_at?: string
+}
+
+// 結帳合併偵測：每個客人現有可合併的結帳單
+interface MergeCandidate {
+    id: string
+    checkout_no: string
+    total_amount: number
+    shipping_status: string
+    shipping_method: string
+    payment_status: string | null
+    mergeable: boolean
+}
+interface MemberCheckoutPlan {
+    memberId: string
+    memberName: string
+    lineUserId: string | null
+    orderIds: string[]
+    newItemsTotal: number
+    candidates: MergeCandidate[]
+    choice: string // 'new' | 結帳單 id
+}
+
+const SHIPPING_METHOD_LABEL: Record<string, string> = {
+    myship: '🏪 賣貨便',
+    myship_free: '🏪 賣貨便免運',
+    delivery: '🚚 宅配',
+    seven_store: '🏬 店到店',
+    pickup: '🏠 自取',
+}
+const SHIPPING_STATUS_LABEL: Record<string, string> = {
+    pending: '待處理',
+    url_sent: '賣場已開·待付款',
+    ordered: '已下單·待出貨',
+    shipped: '已出貨',
+    completed: '已完成',
+}
+const PAYMENT_STATUS_LABEL: Record<string, string> = {
+    pending: '未付款',
+    partial: '部分付款',
+    paid: '已匯款',
 }
 
 // 取得商品顯示名稱（優先順序：product.name → auction_order.product_name → item_name）+ 規格名
@@ -145,7 +186,9 @@ export default function OrdersPage() {
     // 批量結帳 Dialog 狀態
     const [batchCheckoutConfirm, setBatchCheckoutConfirm] = useState(false)
     const [checkoutShippingMethod, setCheckoutShippingMethod] = useState<'myship' | 'myship_free' | 'delivery' | 'pickup' | 'seven_store'>('myship')
-    const [autoMergeCheckout, setAutoMergeCheckout] = useState(true)
+    // 結帳合併偵測：逐人列出可合併的現有結帳單，並記錄每人選擇（併入哪張 / 開新單）
+    const [isDetectingMerge, setIsDetectingMerge] = useState(false)
+    const [checkoutPlans, setCheckoutPlans] = useState<MemberCheckoutPlan[]>([])
     const [checkoutResultOpen, setCheckoutResultOpen] = useState(false)
     const [checkoutResult, setCheckoutResult] = useState<{ created: number; merged: { name: string; checkoutNo: string; oldTotal: number; newTotal: number }[]; failed: { name: string; reason: string }[] }>({ created: 0, merged: [], failed: [] })
 
@@ -761,7 +804,7 @@ export default function OrdersPage() {
     }
 
     // 批量結帳 - 開啟確認 Dialog
-    const handleBatchCheckout = () => {
+    const handleBatchCheckout = async () => {
         // 篩選出選中且已到貨的訂單
         const arrivedOrderIds = Array.from(selectedOrders).filter((id) => {
             const order = orders.find((o) => o.id === id)
@@ -773,30 +816,92 @@ export default function OrdersPage() {
             return
         }
 
-        // 開啟確認 Dialog
+        // 開啟確認 Dialog，並開始偵測每位客人可合併的現有結帳單
         setBatchCheckoutConfirm(true)
+        await detectMergeCandidates(arrivedOrderIds)
     }
 
-    // 確認批量結帳
-    const confirmBatchCheckout = async () => {
-        // 篩選出選中且已到貨的訂單
-        const arrivedOrderIds = Array.from(selectedOrders).filter((id) => {
-            const order = orders.find((o) => o.id === id)
-            return order && order.is_arrived && !order.checkout_id
-        })
+    // 智慧偵測：一次查出所有選中客人的「未出貨」現有結帳單，逐人列出可併入選項
+    const detectMergeCandidates = async (arrivedOrderIds: string[]) => {
+        if (!tenant) return
+        setIsDetectingMerge(true)
+        setCheckoutPlans([])
+        try {
+            // 依客人分組本次選中的訂單
+            const byMember = new Map<string, OrderWithDetails[]>()
+            arrivedOrderIds.forEach((id) => {
+                const order = orders.find((o) => o.id === id)
+                if (order && order.member_id) {
+                    const arr = byMember.get(order.member_id) || []
+                    arr.push(order)
+                    byMember.set(order.member_id, arr)
+                }
+            })
 
-        // 按客戶分組
-        const ordersByMember = new Map<string, OrderWithDetails[]>()
-        arrivedOrderIds.forEach((id) => {
-            const order = orders.find((o) => o.id === id)
-            if (order && order.member_id) {
-                const existing = ordersByMember.get(order.member_id) || []
-                existing.push(order)
-                ordersByMember.set(order.member_id, existing)
+            const memberIds = Array.from(byMember.keys())
+            const candidatesByMember = new Map<string, MergeCandidate[]>()
+
+            if (memberIds.length > 0) {
+                // 單次查詢：所有客人「未出貨」(pending/url_sent/ordered) 的結帳單
+                const { data } = await supabase
+                    .from('checkouts')
+                    .select('id, checkout_no, member_id, total_amount, shipping_status, shipping_method, payment_status')
+                    .eq('tenant_id', tenant.id)
+                    .in('member_id', memberIds)
+                    .in('shipping_status', ['pending', 'url_sent', 'ordered'])
+                    .order('created_at', { ascending: false })
+
+                ;(data || []).forEach((c) => {
+                    // 可合併規則（對齊 link_order_items_to_checkout_v1）：
+                    //   pending / url_sent 任何方式皆可；ordered 限宅配/店到店/自取（賣貨便已下單鎖定）
+                    const mergeable = c.shipping_status === 'pending'
+                        || c.shipping_status === 'url_sent'
+                        || (c.shipping_status === 'ordered' && ['delivery', 'seven_store', 'pickup'].includes(c.shipping_method))
+                    const arr = candidatesByMember.get(c.member_id) || []
+                    arr.push({
+                        id: c.id,
+                        checkout_no: c.checkout_no,
+                        total_amount: c.total_amount,
+                        shipping_status: c.shipping_status,
+                        shipping_method: c.shipping_method,
+                        payment_status: c.payment_status,
+                        mergeable,
+                    })
+                    candidatesByMember.set(c.member_id, arr)
+                })
             }
-        })
 
-        if (ordersByMember.size === 0) {
+            const plans: MemberCheckoutPlan[] = Array.from(byMember.entries()).map(([memberId, memberOrders]) => {
+                const first = memberOrders[0]
+                const candidates = candidatesByMember.get(memberId) || []
+                const firstMergeable = candidates.find((c) => c.mergeable)
+                return {
+                    memberId,
+                    memberName: first.customer_name || first.member?.display_name || '未知',
+                    lineUserId: first.member?.line_user_id || null,
+                    orderIds: memberOrders.map((o) => o.id),
+                    newItemsTotal: memberOrders.reduce((s, o) => s + (o.unit_price || 0) * (o.quantity || 0), 0),
+                    candidates,
+                    // 預設：有可併的就預選最新一張，否則開新單
+                    choice: firstMergeable ? firstMergeable.id : 'new',
+                }
+            })
+            setCheckoutPlans(plans)
+        } catch (err) {
+            console.error('detect merge candidates error:', err)
+        } finally {
+            setIsDetectingMerge(false)
+        }
+    }
+
+    // 切換某客人的結帳選擇（併入某張單 / 開新單）
+    const setPlanChoice = (memberId: string, choice: string) => {
+        setCheckoutPlans((prev) => prev.map((p) => (p.memberId === memberId ? { ...p, choice } : p)))
+    }
+
+    // 確認批量結帳（依逐人偵測的選擇執行：併入指定結帳單 / 開新單）
+    const confirmBatchCheckout = async () => {
+        if (checkoutPlans.length === 0) {
             toast.error('找不到可結帳的訂單')
             return
         }
@@ -806,63 +911,40 @@ export default function OrdersPage() {
         const result: typeof checkoutResult = { created: 0, merged: [], failed: [] }
 
         // 單一客戶結帳處理
-        const processMember = async (memberOrders: OrderWithDetails[]): Promise<void> => {
+        const processPlan = async (plan: MemberCheckoutPlan): Promise<void> => {
             try {
-                const firstOrder = memberOrders[0]
-                const lineUserId = firstOrder.member?.line_user_id
-                const memberName = firstOrder.customer_name || firstOrder.member?.display_name || '未知'
-                const memberId = firstOrder.member_id
-
-                if (!lineUserId) {
-                    result.failed.push({ name: memberName, reason: '會員未綁定 LINE' })
+                // A. 併入指定的現有結帳單
+                if (plan.choice !== 'new') {
+                    const target = plan.candidates.find((c) => c.id === plan.choice)
+                    const { data: linkData, error: linkErr } = await supabase.rpc('link_order_items_to_checkout_v1', {
+                        p_tenant_id: tenant!.id,
+                        p_checkout_id: plan.choice,
+                        p_order_item_ids: plan.orderIds,
+                    })
+                    if (linkErr || !linkData?.success) {
+                        const reason = linkErr?.message || linkData?.message || linkData?.error || '合併失敗'
+                        result.failed.push({ name: plan.memberName, reason: `合併：${reason}` })
+                    } else {
+                        result.merged.push({
+                            name: plan.memberName,
+                            checkoutNo: target?.checkout_no || linkData.checkout_no,
+                            oldTotal: target?.total_amount ?? 0,
+                            newTotal: linkData.new_total,
+                        })
+                    }
                     return
                 }
 
-                // 自動合併：查詢可加入品項的現有結帳單
-                //   - pending/url_sent：任何出貨方式都可
-                //   - ordered：限 delivery/seven_store/pickup（賣貨便已建賣場故不可）
-                if (autoMergeCheckout && memberId) {
-                    const { data: candidates } = await supabase
-                        .from('checkouts')
-                        .select('id, checkout_no, total_amount, shipping_status, shipping_method')
-                        .eq('tenant_id', tenant!.id)
-                        .eq('member_id', memberId)
-                        .in('shipping_status', ['pending', 'url_sent', 'ordered'])
-                        .order('created_at', { ascending: false })
-
-                    const existing = candidates?.find((c) => (
-                        c.shipping_status === 'pending'
-                        || c.shipping_status === 'url_sent'
-                        || (c.shipping_status === 'ordered' && ['delivery','seven_store','pickup'].includes(c.shipping_method))
-                    ))
-
-                    if (existing) {
-                        // 合併：把新訂單塞進現有結帳單
-                        const { data: linkData, error: linkErr } = await supabase.rpc('link_order_items_to_checkout_v1', {
-                            p_tenant_id: tenant!.id,
-                            p_checkout_id: existing.id,
-                            p_order_item_ids: memberOrders.map((o) => o.id),
-                        })
-                        if (linkErr || !linkData?.success) {
-                            const reason = linkErr?.message || linkData?.message || linkData?.error || '合併失敗'
-                            result.failed.push({ name: memberName, reason: `合併：${reason}` })
-                        } else {
-                            result.merged.push({
-                                name: memberName,
-                                checkoutNo: existing.checkout_no,
-                                oldTotal: existing.total_amount,
-                                newTotal: linkData.new_total,
-                            })
-                        }
-                        return
-                    }
+                // B. 開新結帳單
+                if (!plan.lineUserId) {
+                    result.failed.push({ name: plan.memberName, reason: '會員未綁定 LINE' })
+                    return
                 }
 
-                // 建新結帳單
                 const { data: checkoutData, error: checkoutError } = await supabase.rpc('create_checkout_v2', {
                     p_tenant_id: tenant!.id,
-                    p_line_user_id: lineUserId,
-                    p_receiver_name: firstOrder.customer_name || firstOrder.member?.display_name || null,
+                    p_line_user_id: plan.lineUserId,
+                    p_receiver_name: plan.memberName,
                     p_receiver_phone: null,
                     p_receiver_store_id: null,
                     p_shipping_method: checkoutShippingMethod,
@@ -870,7 +952,7 @@ export default function OrdersPage() {
 
                 if (checkoutError || !checkoutData?.success) {
                     const reason = checkoutError?.message || checkoutData?.message || checkoutData?.error || '建立結帳單失敗'
-                    result.failed.push({ name: memberName, reason: `建單：${reason}` })
+                    result.failed.push({ name: plan.memberName, reason: `建單：${reason}` })
                     return
                 }
 
@@ -879,31 +961,30 @@ export default function OrdersPage() {
                     supabase,
                     tenant!.id,
                     checkoutData.checkout_id,
-                    memberOrders.map((o) => o.id)
+                    plan.orderIds
                 )
 
                 if (!linkResult.success) {
                     const reason = (linkResult as { error?: string; message?: string }).message || (linkResult as { error?: string }).error || '關聯訂單失敗'
-                    result.failed.push({ name: memberName, reason: `關聯：${reason}` })
+                    result.failed.push({ name: plan.memberName, reason: `關聯：${reason}` })
                 } else {
                     result.created++
                 }
             } catch (err) {
-                const name = memberOrders[0]?.customer_name || memberOrders[0]?.member?.display_name || '未知'
                 const reason = err instanceof Error ? err.message : '未知錯誤'
-                result.failed.push({ name, reason: `例外：${reason}` })
+                result.failed.push({ name: plan.memberName, reason: `例外：${reason}` })
             }
         }
 
-        const memberGroups = Array.from(ordersByMember.values())
-        for (const memberOrders of memberGroups) {
-            await processMember(memberOrders)
+        for (const plan of checkoutPlans) {
+            await processPlan(plan)
         }
 
         // 刷新資料
         fetchOrders()
         setSelectedOrders(new Set())
         setBatchCheckoutConfirm(false)
+        setCheckoutPlans([])
         setIsSubmitting(false)
 
         // 顯示結果 Dialog
@@ -1746,16 +1827,25 @@ export default function OrdersPage() {
 
             {/* 批量結帳確認對話框 */}
             <Dialog open={batchCheckoutConfirm} onOpenChange={setBatchCheckoutConfirm}>
-                <DialogContent className="sm:max-w-[420px]">
+                <DialogContent className="sm:max-w-[540px]">
                     <DialogHeader>
                         <DialogTitle>確認批量結帳</DialogTitle>
                         <DialogDescription>
-                            將為 <span className="font-semibold text-foreground">{selectedStats.uniqueMemberCount}</span> 位客戶建立結帳單
+                            {isDetectingMerge ? (
+                                <>偵測各客人現有結帳單中…</>
+                            ) : (
+                                <>
+                                    共 <span className="font-semibold text-foreground">{checkoutPlans.length}</span> 位客戶 ·
+                                    併入舊單 <span className="font-semibold text-amber-600">{checkoutPlans.filter((p) => p.choice !== 'new').length}</span> ·
+                                    開新單 <span className="font-semibold text-foreground">{checkoutPlans.filter((p) => p.choice === 'new').length}</span>
+                                </>
+                            )}
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="space-y-4 py-4">
+                    <div className="space-y-4 py-2">
+                        {/* 新單使用的出貨方式（僅對「開新單」的客戶生效） */}
                         <div className="space-y-2">
-                            <Label>選擇結帳模式</Label>
+                            <Label>新單出貨方式<span className="ml-1 text-xs font-normal text-muted-foreground">（僅套用到開新單的客戶；併入舊單者沿用該單方式）</span></Label>
                             <Select
                                 value={checkoutShippingMethod}
                                 onValueChange={(value) => setCheckoutShippingMethod(value as 'myship' | 'myship_free' | 'delivery' | 'pickup' | 'seven_store')}
@@ -1772,24 +1862,92 @@ export default function OrdersPage() {
                                 </SelectContent>
                             </Select>
                         </div>
-                        <div className="flex items-center space-x-2 py-2">
-                            <Checkbox
-                                id="auto-merge"
-                                checked={autoMergeCheckout}
-                                onCheckedChange={(checked) => setAutoMergeCheckout(checked === true)}
-                            />
-                            <label htmlFor="auto-merge" className="text-sm font-medium leading-none cursor-pointer">
-                                自動合併現有待處理結帳單
-                            </label>
-                        </div>
-                        <div className="rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
-                            <p>⚠️ 所有客戶將使用相同結帳模式</p>
-                            {autoMergeCheckout && <p className="mt-1">🔄 若客戶已有待處理/已設連結的結帳單，新訂單會自動合併</p>}
-                            {(checkoutShippingMethod === 'myship' || checkoutShippingMethod === 'myship_free')
-                              && tenant?.free_shipping_threshold && tenant.free_shipping_threshold > 0 && (
-                                <p className="mt-1">🎁 商品滿 ${tenant.free_shipping_threshold.toLocaleString()} 自動免運（升級為賣貨便免運）</p>
+
+                        {/* 逐人偵測：現有可合併的結帳單 */}
+                        <div className="space-y-2">
+                            <Label>逐人合併偵測</Label>
+                            {isDetectingMerge ? (
+                                <div className="space-y-2">
+                                    <Skeleton className="h-16 w-full rounded-lg" />
+                                    <Skeleton className="h-16 w-full rounded-lg" />
+                                </div>
+                            ) : (
+                                <div className="max-h-[42vh] space-y-2 overflow-y-auto pr-1">
+                                    {checkoutPlans.map((plan) => (
+                                        <div key={plan.memberId} className="rounded-lg border border-border p-3 space-y-2">
+                                            <div className="flex items-center justify-between gap-2">
+                                                <span className="text-sm font-semibold text-foreground truncate">{plan.memberName}</span>
+                                                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                                                    本次 {plan.orderIds.length} 筆 · ${plan.newItemsTotal.toLocaleString()}
+                                                </span>
+                                            </div>
+
+                                            {plan.candidates.length === 0 ? (
+                                                <p className="text-xs text-emerald-600">✅ 無未出貨舊單，將開新單</p>
+                                            ) : (
+                                                <div className="space-y-1.5">
+                                                    {plan.candidates.map((c) => {
+                                                        const selected = plan.choice === c.id
+                                                        return (
+                                                            <button
+                                                                key={c.id}
+                                                                type="button"
+                                                                disabled={!c.mergeable}
+                                                                onClick={() => c.mergeable && setPlanChoice(plan.memberId, c.id)}
+                                                                className={cn(
+                                                                    'w-full rounded-lg border px-2.5 py-2 text-left text-xs transition',
+                                                                    !c.mergeable
+                                                                        ? 'cursor-not-allowed border-dashed border-border opacity-60'
+                                                                        : selected
+                                                                            ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                                                                            : 'border-border hover:border-primary/50'
+                                                                )}
+                                                            >
+                                                                <div className="flex items-center justify-between gap-2">
+                                                                    <span className="font-medium text-foreground">
+                                                                        {SHIPPING_METHOD_LABEL[c.shipping_method] || c.shipping_method} · #{c.checkout_no}
+                                                                    </span>
+                                                                    <span className="text-foreground">${c.total_amount.toLocaleString()}</span>
+                                                                </div>
+                                                                <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11px] text-muted-foreground">
+                                                                    <span>{SHIPPING_STATUS_LABEL[c.shipping_status] || c.shipping_status}</span>
+                                                                    <span>·</span>
+                                                                    <span>{PAYMENT_STATUS_LABEL[c.payment_status || 'pending'] || c.payment_status}</span>
+                                                                    {!c.mergeable && <span className="text-destructive">· 🔒 無法合併（賣貨便已下單）</span>}
+                                                                    {selected && c.mergeable && <span className="ml-auto font-medium text-primary">✓ 併入此單</span>}
+                                                                </div>
+                                                            </button>
+                                                        )
+                                                    })}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setPlanChoice(plan.memberId, 'new')}
+                                                        className={cn(
+                                                            'w-full rounded-lg border px-2.5 py-2 text-left text-xs transition',
+                                                            plan.choice === 'new'
+                                                                ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                                                                : 'border-border hover:border-primary/50'
+                                                        )}
+                                                    >
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="font-medium text-foreground">➕ 開新單（不合併）</span>
+                                                            {plan.choice === 'new' && <span className="font-medium text-primary">✓</span>}
+                                                        </div>
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
                             )}
                         </div>
+
+                        {(checkoutShippingMethod === 'myship' || checkoutShippingMethod === 'myship_free')
+                          && tenant?.free_shipping_threshold && tenant.free_shipping_threshold > 0 && (
+                            <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
+                                🎁 商品滿 ${tenant.free_shipping_threshold.toLocaleString()} 自動免運（升級為賣貨便免運）
+                            </div>
+                        )}
                     </div>
                     <DialogFooter className="gap-2 sm:gap-0">
                         <Button variant="outline" onClick={() => setBatchCheckoutConfirm(false)} className="rounded-xl">
@@ -1797,7 +1955,7 @@ export default function OrdersPage() {
                         </Button>
                         <Button
                             onClick={confirmBatchCheckout}
-                            disabled={isSubmitting}
+                            disabled={isSubmitting || isDetectingMerge || checkoutPlans.length === 0}
                             className="bg-success hover:bg-success/90 text-success-foreground rounded-xl"
                         >
                             <Receipt className="mr-2 h-4 w-4" />
