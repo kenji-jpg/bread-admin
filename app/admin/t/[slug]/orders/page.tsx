@@ -62,6 +62,7 @@ import {
     CheckCircle2,
     PackageCheck,
     Trash2,
+    Ban,
     MessageSquare,
     Receipt,
     ChevronLeft,
@@ -759,7 +760,7 @@ export default function OrdersPage() {
             const ids = Array.from(selectedOrders)
             const { error } = await supabase
                 .from('order_items')
-                .update({ is_arrived: true, arrived_qty: 1, status: 'allocated' })
+                .update({ is_arrived: true, arrived_qty: 1, status: 'allocated', cancelled_at: null })
                 .in('id', ids)
                 .eq('tenant_id', tenant?.id)
             if (error) throw error
@@ -788,12 +789,43 @@ export default function OrdersPage() {
         try {
             const { error } = await supabase
                 .from('order_items')
-                .update({ is_arrived: false, arrived_qty: 0, status: 'pending' })
+                .update({ is_arrived: false, arrived_qty: 0, status: 'pending', cancelled_at: null })
                 .in('id', ids)
                 .eq('tenant_id', tenant?.id)
             if (error) throw error
             toast.success(`已將 ${ids.length} 筆訂單改回待到貨`)
             setOrders(prev => prev.map(o => ids.includes(o.id) ? { ...o, is_arrived: false, arrived_qty: 0, status: 'pending' } : o))
+            setSelectedOrders(new Set())
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : '未知錯誤'
+            toast.error('操作失敗：' + msg)
+        } finally {
+            setIsSubmitting(false)
+        }
+    }
+
+    // 批量標記配貨失敗（status=cancelled + cancelled_at；保留紀錄，客人會在「我的訂單」看到失敗）
+    const handleBatchMarkFailed = async () => {
+        const ids = Array.from(selectedOrders).filter((id) => {
+            const order = orders.find((o) => o.id === id)
+            return order && !order.isUnbound && order.status !== 'cancelled' && !order.checkout_id
+        })
+        if (ids.length === 0) {
+            toast.error('選中的訂單中沒有可標記配貨失敗的（需未結帳、未取消）')
+            return
+        }
+        if (!confirm(`確定將 ${ids.length} 筆訂單標記為「配貨失敗」？\n\n客人會在自己的「我的訂單」看到此狀態（30 天內）。此操作可再改回待到貨/可結帳。`)) return
+        setIsSubmitting(true)
+        try {
+            const nowIso = new Date().toISOString()
+            const { error } = await supabase
+                .from('order_items')
+                .update({ status: 'cancelled', cancelled_at: nowIso, is_arrived: false, arrived_qty: 0 })
+                .in('id', ids)
+                .eq('tenant_id', tenant?.id)
+            if (error) throw error
+            toast.success(`已將 ${ids.length} 筆訂單標記為配貨失敗`)
+            setOrders(prev => prev.map(o => ids.includes(o.id) ? { ...o, status: 'cancelled', is_arrived: false, arrived_qty: 0 } : o))
             setSelectedOrders(new Set())
         } catch (err) {
             const msg = err instanceof Error ? err.message : '未知錯誤'
@@ -1018,7 +1050,12 @@ export default function OrdersPage() {
             const order = orders.find((o) => o.id === id)
             return order && order.isUnbound
         }).length
-        return { arrivedCount, uniqueMemberCount: uniqueMembers.size, pendingCount, unboundCount }
+        // 可標記「配貨失敗」：已綁定、未結帳、尚未取消（待到貨或可結帳皆可）
+        const failableCount = Array.from(selectedOrders).filter((id) => {
+            const order = orders.find((o) => o.id === id)
+            return order && !order.isUnbound && order.status !== 'cancelled' && !order.checkout_id
+        }).length
+        return { arrivedCount, uniqueMemberCount: uniqueMembers.size, pendingCount, unboundCount, failableCount }
     }, [selectedOrders, orders])
 
     if (tenantLoading) {
@@ -2025,6 +2062,17 @@ export default function OrdersPage() {
                                     >
                                         <CheckCircle2 className="mr-1 h-3 w-3" />
                                         結單 ({selectedStats.unboundCount})
+                                    </Button>
+                                )}
+                                {selectedStats.failableCount > 0 && (
+                                    <Button
+                                        onClick={handleBatchMarkFailed}
+                                        disabled={isSubmitting}
+                                        size="xs"
+                                        className="bg-destructive/80 hover:bg-destructive text-destructive-foreground rounded-full h-7 px-3 text-xs"
+                                    >
+                                        <Ban className="mr-1 h-3 w-3" />
+                                        配貨失敗 ({selectedStats.failableCount})
                                     </Button>
                                 )}
                                 <Button
