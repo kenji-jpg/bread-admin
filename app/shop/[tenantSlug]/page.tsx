@@ -155,6 +155,7 @@ interface Product {
   is_limited: boolean
   limit_qty: number | null
   status: string
+  show_in_shop?: boolean
   is_expired: boolean
   is_sold_out: boolean
   created_at: string
@@ -375,6 +376,8 @@ export default function ShopPage() {
     return null
   }) // null = 尚未檢查, true from localStorage = 之前已確認
   const [productTypeFilter, setProductTypeFilter] = useState<'all' | 'stock' | 'preorder'>('all')
+  // 管理者商城顯示篩選：上架中 / 未上架 / 全部（僅管理模式用；客人永遠只看到已上架）
+  const [shopVisFilter, setShopVisFilter] = useState<'shown' | 'hidden' | 'all'>('shown')
   const [isCheckingFriend, setIsCheckingFriend] = useState(false)
   // 桌面版判斷
   const [isDesktop, setIsDesktop] = useState(false)
@@ -823,27 +826,25 @@ export default function ShopPage() {
           if (payload.new.session_id !== null) return
           const newData = payload.new
 
-          // 商品被下架、停用、或移出商城
-          if (newData.status !== 'active' || newData.show_in_shop === false) {
-            if (isStaff && newData.show_in_shop) {
-              // 管理者：下架的商城商品仍要顯示，重新載入
-              loadShop()
-            } else {
-              // 客人：直接移除
-              setProducts((prev) => prev.filter((p) => p.id !== newData.id))
-            }
+          // 已刪除 → 一律移除
+          if (newData.status === 'deleted') {
+            setProducts((prev) => prev.filter((p) => p.id !== newData.id))
             return
           }
 
+          // 客人：停用或移出商城 → 移除（管理者保留所有未刪除商品）
+          if (!isStaff && (newData.status !== 'active' || newData.show_in_shop === false)) {
+            setProducts((prev) => prev.filter((p) => p.id !== newData.id))
+            return
+          }
+
+          // 管理者任何狀態、或客人端有效商品 → 就地更新；不在列表就重新載入
           setProducts((prev) => {
             const exists = prev.some((p) => p.id === newData.id)
-
-            // 商品不在列表中但現在符合條件 → 重新載入商城
             if (!exists) {
               loadShop()
               return prev
             }
-
             return prev.map((p) =>
               p.id === newData.id
                 ? {
@@ -858,6 +859,7 @@ export default function ShopPage() {
                   image_url: newData.image_url,
                   limit_qty: newData.limit_qty,
                   is_limited: newData.is_limited,
+                  show_in_shop: newData.show_in_shop,
                   is_sold_out: newData.is_limited && newData.stock != null && newData.stock <= 0,
                   is_expired: newData.end_time ? new Date(newData.end_time) < new Date() : false,
                 }
@@ -876,7 +878,9 @@ export default function ShopPage() {
         },
         (payload) => {
           if (payload.new.session_id !== null) return
-          if (payload.new.show_in_shop && (payload.new.status === 'active' || isStaff)) {
+          if (payload.new.status === 'deleted') return
+          // 管理者：任何新商品都要顯示；客人：只有已上架且啟用才載入
+          if (isStaff || (payload.new.show_in_shop && payload.new.status === 'active')) {
             loadShop()
           }
         }
@@ -1404,6 +1408,16 @@ export default function ShopPage() {
 
   const orderItemCount = orders.filter((o) => o.status !== 'cancelled').length
 
+  // 商城顯示可視性篩選：
+  //  - 客人 / 客人視角：永遠只看到「已上架（show_in_shop !== false）」
+  //  - 管理模式：依 shopVisFilter（上架中 / 未上架 / 全部）
+  const passVisibility = (p: Product) => {
+    if (!showStaffUI) return p.show_in_shop !== false
+    if (shopVisFilter === 'shown') return p.show_in_shop !== false
+    if (shopVisFilter === 'hidden') return p.show_in_shop === false
+    return true
+  }
+
   // 管理員：每個商品的訂單統計
   const getProductStats = (productId: string) => {
     const productOrders = allOrders.filter((o) => o.product_id === productId)
@@ -1913,11 +1927,11 @@ export default function ShopPage() {
 
       {/* 排序 & 商品數量 */}
       {(() => {
-        const baseProducts = selectedCategory === '__favorites__'
+        const baseProducts = (selectedCategory === '__favorites__'
           ? products.filter(p => favoriteIds.has(p.id))
           : selectedCategory
             ? products.filter(p => p.category === selectedCategory)
-            : products
+            : products).filter(passVisibility)
         const afterSearch = searchQuery.trim()
           ? baseProducts.filter(p => p.name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
           : baseProducts
@@ -1933,7 +1947,26 @@ export default function ShopPage() {
         }
         return (
           <div className="flex items-center justify-between px-3 lg:px-16 py-2 max-w-7xl mx-auto">
-            <span className="text-xs" style={{ color: '#8B6B4A' }}>{filteredCount} 件商品</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs" style={{ color: '#8B6B4A' }}>{filteredCount} 件商品</span>
+              {showStaffUI && (
+                <div className="flex items-center gap-1">
+                  {([['shown', '上架中'], ['hidden', '未上架'], ['all', '全部']] as const).map(([key, label]) => (
+                    <button
+                      key={key}
+                      className="text-[11px] px-2 py-0.5 rounded-full transition-colors"
+                      style={{
+                        backgroundColor: shopVisFilter === key ? (accentColor || '#8b5e3c') : '#F3F4F6',
+                        color: shopVisFilter === key ? '#fff' : '#8B6B4A',
+                      }}
+                      onClick={() => setShopVisFilter(key)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <div className="relative">
               <button
                 className="flex items-center gap-1 text-xs transition-colors"
@@ -1977,6 +2010,7 @@ export default function ShopPage() {
             : selectedCategory
               ? products.filter(p => p.category === selectedCategory)
               : products)
+            .filter(passVisibility)
             .filter(p => !searchQuery.trim() || p.name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
             .filter(p => productTypeFilter === 'all' || (productTypeFilter === 'stock' ? p.is_limited : !p.is_limited))
             .slice()
@@ -2026,6 +2060,7 @@ export default function ShopPage() {
               // 雙模式：is_limited=true 時 stock<=0 才完銷，預購模式永不完銷
               const isSoldOut = product.is_sold_out || (product.is_limited && product.stock !== null && product.stock <= 0)
               const isInactive = product.status !== 'active'
+              const isHidden = showStaffUI && product.show_in_shop === false // 客人看不到（僅管理模式標示）
               const isUnavailable = isExpired || isSoldOut || isInactive
               const isHot = product.sold_qty >= 5
               const timeRemaining = product.end_time ? getTimeRemaining(product.end_time) : null
@@ -2039,7 +2074,7 @@ export default function ShopPage() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.03 }}
                   className={`relative transition-all duration-200 flex flex-col group bg-white rounded-2xl overflow-hidden shadow-sm ${(isUnavailable && !showStaffUI) ? 'opacity-60' : 'cursor-pointer hover:-translate-y-1 hover:shadow-lg'
-                    } ${isInactive && showStaffUI ? 'opacity-50' : ''}`}
+                    } ${(isInactive || isHidden) && showStaffUI ? 'opacity-50' : ''} ${isHidden ? 'ring-2 ring-amber-400' : ''}`}
                   onClick={() => {
                     if (showStaffUI) {
                       handleSelectProduct(product)
@@ -2067,8 +2102,16 @@ export default function ShopPage() {
                     </motion.div>
                   )}
 
+                  {/* 客人看不到（未上架）標示 — 僅管理模式 */}
+                  {isHidden && (
+                    <div className="absolute top-2 left-2 z-20 px-1.5 py-0.5 rounded-md text-[10px] font-medium flex items-center gap-0.5 shadow" style={{ backgroundColor: '#B45309', color: '#fff' }}>
+                      <EyeOff className="w-3 h-3" />
+                      客人看不到
+                    </div>
+                  )}
+
                   {/* 左上 badge：倒數時間 */}
-                  {timeRemaining && (
+                  {timeRemaining && !isHidden && (
                     <div className="absolute top-2 left-2 z-10 px-1.5 py-0.5 rounded-full text-[10px] bg-orange-500 text-white">
                       <Clock className="inline w-3 h-3 mr-0.5" />
                       {timeRemaining}
@@ -2810,8 +2853,8 @@ export default function ShopPage() {
                           </button>
                         )}
 
-                        {/* 商城顯示 ON/OFF */}
-                        {selectedProduct.status !== 'active' ? (
+                        {/* 商城顯示 ON/OFF（依 show_in_shop 判斷；只影響客人看不看得到） */}
+                        {selectedProduct.show_in_shop === false ? (
                           <button
                             className="h-12 rounded-xl text-sm font-medium flex items-center justify-center gap-1 disabled:opacity-40"
                             style={{ backgroundColor: '#16A34A', color: '#fff' }}
