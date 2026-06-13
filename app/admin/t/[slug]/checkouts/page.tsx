@@ -209,6 +209,10 @@ export default function CheckoutsPage() {
     const [storeUrlCheckout, setStoreUrlCheckout] = useState<CheckoutListItem | null>(null)
     const [viewDetailsCheckout, setViewDetailsCheckout] = useState<CheckoutListItem | null>(null)
     const [markOrderedCheckout, setMarkOrderedCheckout] = useState<CheckoutListItem | null>(null)
+    // 記收款 Dialog（累加進 paid_amount，取代「負項商品當收據」）
+    const [paymentCheckout, setPaymentCheckout] = useState<CheckoutListItem | null>(null)
+    const [paymentAmount, setPaymentAmount] = useState('')
+    const [isAddingPayment, setIsAddingPayment] = useState(false)
     const [checkoutDetail, setCheckoutDetail] = useState<CheckoutDetailResult | null>(null)
     const [isLoadingDetail, setIsLoadingDetail] = useState(false)
 
@@ -482,6 +486,41 @@ export default function CheckoutsPage() {
             }
         } catch (error: any) {
             toast.error(error.message || '標記失敗')
+        }
+    }
+
+    // 開啟「記收款」Dialog，預填尚欠金額
+    const openPaymentDialog = (item: CheckoutListItem) => {
+        const owed = Math.max(0, item.total_amount - (item.paid_amount ?? 0))
+        setPaymentAmount(owed > 0 ? String(owed) : '')
+        setPaymentCheckout(item)
+    }
+
+    // 記一筆收款（累加進 paid_amount，自動重算付款狀態）
+    const handleAddPayment = async () => {
+        if (!paymentCheckout) return
+        const amt = parseInt(paymentAmount, 10)
+        if (!amt || amt === 0) { toast.error('請輸入金額'); return }
+        setIsAddingPayment(true)
+        try {
+            const result = await checkoutApiRef.current.addPayment(paymentCheckout.id, amt)
+            if (result.success) {
+                const owed = result.still_owed ?? 0
+                toast.success(`已記收款 $${amt.toLocaleString()}`, {
+                    description: result.payment_status === 'paid'
+                        ? '已付清'
+                        : `已付 $${(result.paid_amount ?? 0).toLocaleString()} · 尚欠 $${owed.toLocaleString()}`,
+                })
+                setPaymentCheckout(null)
+                setPaymentAmount('')
+                fetchCheckouts()
+            } else {
+                toast.error(result.error || '記錄失敗')
+            }
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : '記錄失敗')
+        } finally {
+            setIsAddingPayment(false)
         }
     }
 
@@ -1495,7 +1534,16 @@ export default function CheckoutsPage() {
                                                     }
                                                 })()}
                                             </TableCell>
-                                            <TableCell>{getPaymentBadge(item)}</TableCell>
+                                            <TableCell>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => openPaymentDialog(item)}
+                                                    title="點擊記一筆收款"
+                                                    className="transition hover:opacity-70 cursor-pointer"
+                                                >
+                                                    {getPaymentBadge(item)}
+                                                </button>
+                                            </TableCell>
                                             <TableCell>{getShippingBadge(item.shipping_status)}</TableCell>
                                             {/* 結帳模式 */}
                                             <TableCell>
@@ -1932,6 +1980,59 @@ export default function CheckoutsPage() {
                         </Button>
                         <Button onClick={handleSaveShippingDetails} disabled={isSavingShipping} className="gradient-primary rounded-xl">
                             {isSavingShipping ? '儲存中...' : '儲存'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* 記收款 Dialog */}
+            <Dialog open={!!paymentCheckout} onOpenChange={(open) => { if (!open) { setPaymentCheckout(null); setPaymentAmount('') } }}>
+                <DialogContent className="glass-strong sm:max-w-[420px]">
+                    <DialogHeader>
+                        <DialogTitle>記一筆收款</DialogTitle>
+                        <DialogDescription>
+                            {paymentCheckout && (
+                                <>#{paymentCheckout.checkout_no} · {paymentCheckout.customer_name || paymentCheckout.member_display_name || '客人'}</>
+                            )}
+                        </DialogDescription>
+                    </DialogHeader>
+                    {paymentCheckout && (
+                        <div className="space-y-4 py-2">
+                            <div className="grid grid-cols-3 gap-2 text-sm">
+                                <div className="rounded-lg bg-muted/50 p-2 text-center">
+                                    <div className="text-xs text-muted-foreground">應付</div>
+                                    <div className="font-semibold">${paymentCheckout.total_amount.toLocaleString()}</div>
+                                </div>
+                                <div className="rounded-lg bg-muted/50 p-2 text-center">
+                                    <div className="text-xs text-muted-foreground">已付</div>
+                                    <div className="font-semibold">${(paymentCheckout.paid_amount ?? 0).toLocaleString()}</div>
+                                </div>
+                                <div className="rounded-lg bg-amber-500/10 p-2 text-center">
+                                    <div className="text-xs text-muted-foreground">尚欠</div>
+                                    <div className="font-semibold text-amber-600">${Math.max(0, paymentCheckout.total_amount - (paymentCheckout.paid_amount ?? 0)).toLocaleString()}</div>
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="payment-amount">本次收款金額（NT$）<span className="ml-1 text-xs font-normal text-muted-foreground">可輸入負數修正多記</span></Label>
+                                <Input
+                                    id="payment-amount"
+                                    type="number"
+                                    inputMode="numeric"
+                                    value={paymentAmount}
+                                    onChange={(e) => setPaymentAmount(e.target.value)}
+                                    placeholder="例如 1600"
+                                    className="rounded-xl"
+                                    autoFocus
+                                    onKeyDown={(e) => { if (e.key === 'Enter' && !isAddingPayment) handleAddPayment() }}
+                                />
+                            </div>
+                            <p className="text-xs text-muted-foreground">收款只累加到「已付金額」，不會新增商品品項，免運與金額計算不受影響。</p>
+                        </div>
+                    )}
+                    <DialogFooter className="gap-2 sm:gap-0">
+                        <Button variant="outline" onClick={() => { setPaymentCheckout(null); setPaymentAmount('') }} className="rounded-xl">取消</Button>
+                        <Button onClick={handleAddPayment} disabled={isAddingPayment} className="rounded-xl">
+                            {isAddingPayment ? '記錄中...' : '記收款'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

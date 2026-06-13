@@ -196,6 +196,7 @@ interface UseCheckoutReturn {
     setUrl: (checkoutId: string, url: string, checkoutNo: string, displayName: string, nickname?: string | null) => Promise<NotifyMyshipResult>
     markOrdered: (checkoutId: string, orderNo?: string, note?: string) => Promise<UpdateStatusResult>
     markPaid: (checkoutId: string, note?: string) => Promise<UpdateStatusResult>
+    addPayment: (checkoutId: string, amount: number) => Promise<{ success: boolean; paid_amount?: number; total_amount?: number; payment_status?: string; still_owed?: number; error?: string }>
     markShipped: (checkoutId: string, note?: string) => Promise<UpdateStatusResult>
     markCompleted: (checkoutId: string, note?: string) => Promise<UpdateStatusResult>
     deleteCheckout: (checkoutId: string, deleteItems?: boolean) => Promise<DeleteCheckoutResult>
@@ -491,6 +492,11 @@ export const useCheckout = (tenantId: string): UseCheckoutReturn => {
         setUrl: setUrlWithNotify,
         markOrdered: (id, orderNo, note) => updateStatus(id, 'mark_ordered', { myshipOrderNo: orderNo, note }),
         markPaid: (id, note) => updateStatus(id, 'mark_paid', { note }),
+        addPayment: (id, amount) => callRpc('add_checkout_payment_v1', {
+            p_tenant_id: tenantId,
+            p_checkout_id: id,
+            p_amount: amount,
+        }),
         markShipped: (id, note) => updateStatus(id, 'mark_shipped', { note }),
         markCompleted: (id, note) => updateStatus(id, 'mark_completed', { note }),
         deleteCheckout,
