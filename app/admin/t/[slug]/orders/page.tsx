@@ -6,7 +6,6 @@ import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
 import { useTenant } from '@/hooks/use-tenant'
-import { linkOrderItemsToCheckout } from '@/hooks/use-secure-mutations'
 import { useSidebar } from '@/hooks/use-sidebar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -104,6 +103,11 @@ interface MergeCandidate {
     payment_status: string | null
     mergeable: boolean
 }
+// 三桶分類：
+//   direct     → 無任何可合併舊單，直接開新單（零風險，可一鍵批次）
+//   auto_merge → 有「待處理 + 未付款」的可合併舊單，自動併入（省運費，低風險）
+//   review     → 有「已付/部分付/賣場已開」的可合併舊單，需人工判斷併入 or 開新單
+type CheckoutBucket = 'direct' | 'auto_merge' | 'review'
 interface MemberCheckoutPlan {
     memberId: string
     memberName: string
@@ -112,6 +116,7 @@ interface MemberCheckoutPlan {
     newItemsTotal: number
     candidates: MergeCandidate[]
     choice: string // 'new' | 結帳單 id
+    bucket: CheckoutBucket
 }
 
 const SHIPPING_METHOD_LABEL: Record<string, string> = {
@@ -192,6 +197,8 @@ export default function OrdersPage() {
     const [checkoutPlans, setCheckoutPlans] = useState<MemberCheckoutPlan[]>([])
     const [checkoutResultOpen, setCheckoutResultOpen] = useState(false)
     const [checkoutResult, setCheckoutResult] = useState<{ created: number; merged: { name: string; checkoutNo: string; oldTotal: number; newTotal: number }[]; failed: { name: string; reason: string }[] }>({ created: 0, merged: [], failed: [] })
+    // 批次處理進度（分批送出時顯示 done/total）
+    const [checkoutProgress, setCheckoutProgress] = useState<{ done: number; total: number } | null>(null)
 
     const supabase = createClient()
 
@@ -903,10 +910,32 @@ export default function OrdersPage() {
                 })
             }
 
+            // 「自動併入」安全條件：可合併 + 待處理 + 未付款（賣場未開、客人還沒付錢，併入只是湊運費）
+            const isAutoSafe = (c: MergeCandidate) =>
+                c.mergeable && c.shipping_status === 'pending'
+                && (!c.payment_status || c.payment_status === 'pending')
+
             const plans: MemberCheckoutPlan[] = Array.from(byMember.entries()).map(([memberId, memberOrders]) => {
                 const first = memberOrders[0]
                 const candidates = candidatesByMember.get(memberId) || []
-                const firstMergeable = candidates.find((c) => c.mergeable)
+                const mergeable = candidates.filter((c) => c.mergeable)
+
+                let bucket: CheckoutBucket
+                let choice: string
+                if (mergeable.length === 0) {
+                    // 無可合併舊單 → 直接開新單
+                    bucket = 'direct'
+                    choice = 'new'
+                } else if (mergeable.every(isAutoSafe)) {
+                    // 全部可合併舊單都「待處理且未付款」→ 自動併入最新一張
+                    bucket = 'auto_merge'
+                    choice = mergeable[0].id
+                } else {
+                    // 有「已付/部分付/賣場已開」的可合併舊單 → 人工審核，預設開新單（不自動合併）
+                    bucket = 'review'
+                    choice = 'new'
+                }
+
                 return {
                     memberId,
                     memberName: first.customer_name || first.member?.display_name || '未知',
@@ -914,8 +943,8 @@ export default function OrdersPage() {
                     orderIds: memberOrders.map((o) => o.id),
                     newItemsTotal: memberOrders.reduce((s, o) => s + (o.unit_price || 0) * (o.quantity || 0), 0),
                     candidates,
-                    // 預設：有可併的就預選最新一張，否則開新單
-                    choice: firstMergeable ? firstMergeable.id : 'new',
+                    choice,
+                    bucket,
                 }
             })
             setCheckoutPlans(plans)
@@ -931,95 +960,69 @@ export default function OrdersPage() {
         setCheckoutPlans((prev) => prev.map((p) => (p.memberId === memberId ? { ...p, choice } : p)))
     }
 
-    // 確認批量結帳（依逐人偵測的選擇執行：併入指定結帳單 / 開新單）
-    const confirmBatchCheckout = async () => {
-        if (checkoutPlans.length === 0) {
-            toast.error('找不到可結帳的訂單')
+    // 批次結帳：把指定的逐人計畫送到後端 batch_checkout_members_v1（單一往返、單一交易）
+    // 分批 40 人/次，避免單一交易過久觸發 statement timeout；邊跑邊更新進度
+    const processPlans = async (plansToProcess: MemberCheckoutPlan[]) => {
+        if (!tenant) return
+        if (plansToProcess.length === 0) {
+            toast.error('沒有可處理的客戶')
             return
         }
 
         setIsSubmitting(true)
-
         const result: typeof checkoutResult = { created: 0, merged: [], failed: [] }
+        const CHUNK = 40
 
-        // 單一客戶結帳處理
-        const processPlan = async (plan: MemberCheckoutPlan): Promise<void> => {
-            try {
-                // A. 併入指定的現有結帳單
-                if (plan.choice !== 'new') {
-                    const target = plan.candidates.find((c) => c.id === plan.choice)
-                    const { data: linkData, error: linkErr } = await supabase.rpc('link_order_items_to_checkout_v1', {
-                        p_tenant_id: tenant!.id,
-                        p_checkout_id: plan.choice,
-                        p_order_item_ids: plan.orderIds,
-                    })
-                    if (linkErr || !linkData?.success) {
-                        const reason = linkErr?.message || linkData?.message || linkData?.error || '合併失敗'
-                        result.failed.push({ name: plan.memberName, reason: `合併：${reason}` })
-                    } else {
-                        result.merged.push({
-                            name: plan.memberName,
-                            checkoutNo: target?.checkout_no || linkData.checkout_no,
-                            oldTotal: target?.total_amount ?? 0,
-                            newTotal: linkData.new_total,
-                        })
-                    }
-                    return
-                }
+        try {
+            for (let i = 0; i < plansToProcess.length; i += CHUNK) {
+                const chunk = plansToProcess.slice(i, i + CHUNK)
+                setCheckoutProgress({ done: i, total: plansToProcess.length })
 
-                // B. 開新結帳單
-                if (!plan.lineUserId) {
-                    result.failed.push({ name: plan.memberName, reason: '會員未綁定 LINE' })
-                    return
-                }
+                const payload = chunk.map((p) => ({
+                    line_user_id: p.lineUserId,
+                    member_name: p.memberName,
+                    choice: p.choice,
+                    shipping_method: checkoutShippingMethod,
+                    order_item_ids: p.orderIds,
+                }))
 
-                const { data: checkoutData, error: checkoutError } = await supabase.rpc('create_checkout_v2', {
-                    p_tenant_id: tenant!.id,
-                    p_line_user_id: plan.lineUserId,
-                    p_receiver_name: plan.memberName,
-                    p_receiver_phone: null,
-                    p_receiver_store_id: null,
-                    p_shipping_method: checkoutShippingMethod,
+                const { data, error } = await supabase.rpc('batch_checkout_members_v1', {
+                    p_tenant_id: tenant.id,
+                    p_plans: payload,
+                    p_new_shipping_method: checkoutShippingMethod,
                 })
 
-                if (checkoutError || !checkoutData?.success) {
-                    const reason = checkoutError?.message || checkoutData?.message || checkoutData?.error || '建立結帳單失敗'
-                    result.failed.push({ name: plan.memberName, reason: `建單：${reason}` })
-                    return
+                if (error || !data?.success) {
+                    const reason = error?.message || data?.error || '批次處理失敗'
+                    chunk.forEach((p) => result.failed.push({ name: p.memberName, reason }))
+                    continue
                 }
 
-                // 關聯訂單項目
-                const linkResult = await linkOrderItemsToCheckout(
-                    supabase,
-                    tenant!.id,
-                    checkoutData.checkout_id,
-                    plan.orderIds
-                )
-
-                if (!linkResult.success) {
-                    const reason = (linkResult as { error?: string; message?: string }).message || (linkResult as { error?: string }).error || '關聯訂單失敗'
-                    result.failed.push({ name: plan.memberName, reason: `關聯：${reason}` })
-                } else {
-                    result.created++
-                }
-            } catch (err) {
-                const reason = err instanceof Error ? err.message : '未知錯誤'
-                result.failed.push({ name: plan.memberName, reason: `例外：${reason}` })
+                result.created += data.created || 0
+                if (Array.isArray(data.merged)) result.merged.push(...data.merged)
+                if (Array.isArray(data.failed)) result.failed.push(...data.failed)
             }
+        } catch (err) {
+            const reason = err instanceof Error ? err.message : '未知錯誤'
+            plansToProcess.forEach((p) => result.failed.push({ name: p.memberName, reason: `例外：${reason}` }))
         }
 
-        for (const plan of checkoutPlans) {
-            await processPlan(plan)
-        }
+        // 從清單移除已處理的客戶；若全部處理完則關閉 Dialog
+        const processedMemberIds = new Set(plansToProcess.map((p) => p.memberId))
+        const processedOrderIds = new Set(plansToProcess.flatMap((p) => p.orderIds))
+        const remaining = checkoutPlans.filter((p) => !processedMemberIds.has(p.memberId))
+        setCheckoutPlans(remaining)
+        setSelectedOrders((prev) => {
+            const next = new Set(prev)
+            processedOrderIds.forEach((id) => next.delete(id))
+            return next
+        })
+        if (remaining.length === 0) setBatchCheckoutConfirm(false)
 
-        // 刷新資料
-        fetchOrders()
-        setSelectedOrders(new Set())
-        setBatchCheckoutConfirm(false)
-        setCheckoutPlans([])
+        setCheckoutProgress(null)
         setIsSubmitting(false)
+        fetchOrders()
 
-        // 顯示結果 Dialog
         setCheckoutResult(result)
         setCheckoutResultOpen(true)
 
@@ -1078,6 +1081,13 @@ export default function OrdersPage() {
     // 全選狀態判定（基於所有篩選結果，非僅當前頁）
     const isAllSelected = allSelectableIds.length > 0 &&
         allSelectableIds.every((id) => selectedOrders.has(id))
+
+    // 批次結帳三桶分類（供確認 Dialog 使用）
+    const directPlans = checkoutPlans.filter((p) => p.bucket === 'direct')
+    const autoMergePlans = checkoutPlans.filter((p) => p.bucket === 'auto_merge')
+    const reviewPlans = checkoutPlans.filter((p) => p.bucket === 'review')
+    const autoPlans = [...directPlans, ...autoMergePlans] // 可一鍵自動處理（開新單 + 自動併入）
+    const autoOrderCount = autoPlans.reduce((s, p) => s + p.orderIds.length, 0)
 
     return (
         <motion.div
@@ -1873,8 +1883,9 @@ export default function OrdersPage() {
                             ) : (
                                 <>
                                     共 <span className="font-semibold text-foreground">{checkoutPlans.length}</span> 位客戶 ·
-                                    併入舊單 <span className="font-semibold text-amber-600">{checkoutPlans.filter((p) => p.choice !== 'new').length}</span> ·
-                                    開新單 <span className="font-semibold text-foreground">{checkoutPlans.filter((p) => p.choice === 'new').length}</span>
+                                    直接開單 <span className="font-semibold text-emerald-600">{directPlans.length}</span> ·
+                                    自動併入 <span className="font-semibold text-blue-600">{autoMergePlans.length}</span> ·
+                                    需審核 <span className="font-semibold text-amber-600">{reviewPlans.length}</span>
                                 </>
                             )}
                         </DialogDescription>
@@ -1900,84 +1911,123 @@ export default function OrdersPage() {
                             </Select>
                         </div>
 
-                        {/* 逐人偵測：現有可合併的結帳單 */}
-                        <div className="space-y-2">
-                            <Label>逐人合併偵測</Label>
-                            {isDetectingMerge ? (
-                                <div className="space-y-2">
-                                    <Skeleton className="h-16 w-full rounded-lg" />
-                                    <Skeleton className="h-16 w-full rounded-lg" />
-                                </div>
-                            ) : (
-                                <div className="max-h-[42vh] space-y-2 overflow-y-auto pr-1">
-                                    {checkoutPlans.map((plan) => (
-                                        <div key={plan.memberId} className="rounded-lg border border-border p-3 space-y-2">
-                                            <div className="flex items-center justify-between gap-2">
-                                                <span className="text-sm font-semibold text-foreground truncate">{plan.memberName}</span>
-                                                <span className="text-xs text-muted-foreground whitespace-nowrap">
-                                                    本次 {plan.orderIds.length} 筆 · ${plan.newItemsTotal.toLocaleString()}
-                                                </span>
-                                            </div>
-
-                                            {plan.candidates.length === 0 ? (
-                                                <p className="text-xs text-emerald-600">✅ 無未出貨舊單，將開新單</p>
-                                            ) : (
-                                                <div className="space-y-1.5">
-                                                    {plan.candidates.map((c) => {
-                                                        const selected = plan.choice === c.id
-                                                        return (
-                                                            <button
-                                                                key={c.id}
-                                                                type="button"
-                                                                disabled={!c.mergeable}
-                                                                onClick={() => c.mergeable && setPlanChoice(plan.memberId, c.id)}
-                                                                className={cn(
-                                                                    'w-full rounded-lg border px-2.5 py-2 text-left text-xs transition',
-                                                                    !c.mergeable
-                                                                        ? 'cursor-not-allowed border-dashed border-border opacity-60'
-                                                                        : selected
-                                                                            ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                                                                            : 'border-border hover:border-primary/50'
-                                                                )}
-                                                            >
-                                                                <div className="flex items-center justify-between gap-2">
-                                                                    <span className="font-medium text-foreground">
-                                                                        {SHIPPING_METHOD_LABEL[c.shipping_method] || c.shipping_method} · #{c.checkout_no}
-                                                                    </span>
-                                                                    <span className="text-foreground">${c.total_amount.toLocaleString()}</span>
-                                                                </div>
-                                                                <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11px] text-muted-foreground">
-                                                                    <span>{SHIPPING_STATUS_LABEL[c.shipping_status] || c.shipping_status}</span>
-                                                                    <span>·</span>
-                                                                    <span>{PAYMENT_STATUS_LABEL[c.payment_status || 'pending'] || c.payment_status}</span>
-                                                                    {!c.mergeable && <span className="text-destructive">· 🔒 無法合併（賣貨便已下單）</span>}
-                                                                    {selected && c.mergeable && <span className="ml-auto font-medium text-primary">✓ 併入此單</span>}
-                                                                </div>
-                                                            </button>
-                                                        )
-                                                    })}
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setPlanChoice(plan.memberId, 'new')}
-                                                        className={cn(
-                                                            'w-full rounded-lg border px-2.5 py-2 text-left text-xs transition',
-                                                            plan.choice === 'new'
-                                                                ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                                                                : 'border-border hover:border-primary/50'
-                                                        )}
-                                                    >
-                                                        <div className="flex items-center justify-between">
-                                                            <span className="font-medium text-foreground">➕ 開新單（不合併）</span>
-                                                            {plan.choice === 'new' && <span className="font-medium text-primary">✓</span>}
-                                                        </div>
-                                                    </button>
-                                                </div>
-                                            )}
+                        {isDetectingMerge ? (
+                            <div className="space-y-2">
+                                <Skeleton className="h-16 w-full rounded-lg" />
+                                <Skeleton className="h-16 w-full rounded-lg" />
+                            </div>
+                        ) : (
+                            <>
+                                {/* A 桶：可直接開單（無待合併舊單）— 彙總，不需逐人看 */}
+                                {directPlans.length > 0 && (
+                                    <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 dark:border-emerald-900/40 dark:bg-emerald-950/20 p-3">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">✅ 可直接開單</span>
+                                            <span className="text-xs text-emerald-600 dark:text-emerald-500 whitespace-nowrap">
+                                                {directPlans.length} 人 · {directPlans.reduce((s, p) => s + p.orderIds.length, 0)} 筆
+                                            </span>
                                         </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
+                                        <p className="mt-1 text-xs text-muted-foreground">這些客人沒有未出貨的舊單，將以上方「新單出貨方式」直接開立新結帳單。</p>
+                                    </div>
+                                )}
+
+                                {/* B 桶：自動合併（待處理 + 未付款的舊單）— 彙總可展開 */}
+                                {autoMergePlans.length > 0 && (
+                                    <details className="rounded-lg border border-blue-200 bg-blue-50/50 dark:border-blue-900/40 dark:bg-blue-950/20 p-3">
+                                        <summary className="flex cursor-pointer items-center justify-between gap-2 list-none">
+                                            <span className="text-sm font-semibold text-blue-700 dark:text-blue-400">🔄 自動合併</span>
+                                            <span className="text-xs text-blue-600 dark:text-blue-500 whitespace-nowrap">{autoMergePlans.length} 人 · 點此展開</span>
+                                        </summary>
+                                        <p className="mt-1 text-xs text-muted-foreground">這些客人有「待處理且未付款」的舊單，會自動把本次品項併入該單一起出貨（湊免運、省一次運費）。</p>
+                                        <div className="mt-2 space-y-1">
+                                            {autoMergePlans.map((plan) => {
+                                                const target = plan.candidates.find((c) => c.id === plan.choice)
+                                                return (
+                                                    <div key={plan.memberId} className="flex items-center justify-between gap-2 text-xs">
+                                                        <span className="truncate text-foreground">{plan.memberName}</span>
+                                                        <span className="text-muted-foreground whitespace-nowrap">→ 併入 #{target?.checkout_no || '舊單'}</span>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    </details>
+                                )}
+
+                                {/* C 桶：需人工審核（已付/部分付/賣場已開的可合併舊單）— 逐人決定 */}
+                                {reviewPlans.length > 0 && (
+                                    <div className="space-y-2">
+                                        <Label className="text-amber-700 dark:text-amber-500">
+                                            ⚠️ 需人工確認（{reviewPlans.length} 人）
+                                            <span className="ml-1 text-xs font-normal text-muted-foreground">這些客人的舊單已付款或賣場已開，預設「開新單」，需併入請手動點選</span>
+                                        </Label>
+                                        <div className="max-h-[36vh] space-y-2 overflow-y-auto pr-1">
+                                            {reviewPlans.map((plan) => (
+                                                <div key={plan.memberId} className="rounded-lg border border-amber-200 dark:border-amber-900/40 p-3 space-y-2">
+                                                    <div className="flex items-center justify-between gap-2">
+                                                        <span className="text-sm font-semibold text-foreground truncate">{plan.memberName}</span>
+                                                        <span className="text-xs text-muted-foreground whitespace-nowrap">
+                                                            本次 {plan.orderIds.length} 筆 · ${plan.newItemsTotal.toLocaleString()}
+                                                        </span>
+                                                    </div>
+                                                    <div className="space-y-1.5">
+                                                        {plan.candidates.map((c) => {
+                                                            const selected = plan.choice === c.id
+                                                            const isPaid = c.payment_status === 'paid' || c.payment_status === 'partial'
+                                                            return (
+                                                                <button
+                                                                    key={c.id}
+                                                                    type="button"
+                                                                    disabled={!c.mergeable}
+                                                                    onClick={() => c.mergeable && setPlanChoice(plan.memberId, c.id)}
+                                                                    className={cn(
+                                                                        'w-full rounded-lg border px-2.5 py-2 text-left text-xs transition',
+                                                                        !c.mergeable
+                                                                            ? 'cursor-not-allowed border-dashed border-border opacity-60'
+                                                                            : selected
+                                                                                ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                                                                                : 'border-border hover:border-primary/50'
+                                                                    )}
+                                                                >
+                                                                    <div className="flex items-center justify-between gap-2">
+                                                                        <span className="font-medium text-foreground">
+                                                                            {SHIPPING_METHOD_LABEL[c.shipping_method] || c.shipping_method} · #{c.checkout_no}
+                                                                        </span>
+                                                                        <span className="text-foreground">${c.total_amount.toLocaleString()}</span>
+                                                                    </div>
+                                                                    <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11px] text-muted-foreground">
+                                                                        <span>{SHIPPING_STATUS_LABEL[c.shipping_status] || c.shipping_status}</span>
+                                                                        <span>·</span>
+                                                                        <span className={cn(isPaid && 'font-medium text-amber-600 dark:text-amber-500')}>{PAYMENT_STATUS_LABEL[c.payment_status || 'pending'] || c.payment_status}</span>
+                                                                        {isPaid && c.mergeable && <span className="text-amber-600 dark:text-amber-500">· ⚠️ 併入會更動金額並重新通知</span>}
+                                                                        {!c.mergeable && <span className="text-destructive">· 🔒 無法合併（賣貨便已下單）</span>}
+                                                                        {selected && c.mergeable && <span className="ml-auto font-medium text-primary">✓ 併入此單</span>}
+                                                                    </div>
+                                                                </button>
+                                                            )
+                                                        })}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setPlanChoice(plan.memberId, 'new')}
+                                                            className={cn(
+                                                                'w-full rounded-lg border px-2.5 py-2 text-left text-xs transition',
+                                                                plan.choice === 'new'
+                                                                    ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                                                                    : 'border-border hover:border-primary/50'
+                                                            )}
+                                                        >
+                                                            <div className="flex items-center justify-between">
+                                                                <span className="font-medium text-foreground">➕ 開新單（不合併）</span>
+                                                                {plan.choice === 'new' && <span className="font-medium text-primary">✓</span>}
+                                                            </div>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </>
+                        )}
 
                         {(checkoutShippingMethod === 'myship' || checkoutShippingMethod === 'myship_free')
                           && tenant?.free_shipping_threshold && tenant.free_shipping_threshold > 0 && (
@@ -1985,19 +2035,36 @@ export default function OrdersPage() {
                                 🎁 商品滿 ${tenant.free_shipping_threshold.toLocaleString()} 自動免運（升級為賣貨便免運）
                             </div>
                         )}
+
+                        {checkoutProgress && (
+                            <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground flex items-center gap-2">
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                處理中… {checkoutProgress.done} / {checkoutProgress.total}
+                            </div>
+                        )}
                     </div>
-                    <DialogFooter className="gap-2 sm:gap-0">
-                        <Button variant="outline" onClick={() => setBatchCheckoutConfirm(false)} className="rounded-xl">
+                    <DialogFooter className="flex-col gap-2 sm:flex-row sm:gap-2">
+                        <Button variant="outline" onClick={() => setBatchCheckoutConfirm(false)} disabled={isSubmitting} className="rounded-xl sm:mr-auto">
                             取消
                         </Button>
                         <Button
-                            onClick={confirmBatchCheckout}
-                            disabled={isSubmitting || isDetectingMerge || checkoutPlans.length === 0}
+                            onClick={() => processPlans(autoPlans)}
+                            disabled={isSubmitting || isDetectingMerge || autoPlans.length === 0}
                             className="bg-success hover:bg-success/90 text-success-foreground rounded-xl"
                         >
                             <Receipt className="mr-2 h-4 w-4" />
-                            {isSubmitting ? '處理中...' : '確認結帳'}
+                            {isSubmitting ? '處理中...' : `⚡ 直接處理 ${autoPlans.length} 人（${autoOrderCount} 筆）`}
                         </Button>
+                        {reviewPlans.length > 0 && (
+                            <Button
+                                onClick={() => processPlans(reviewPlans)}
+                                disabled={isSubmitting || isDetectingMerge}
+                                variant="outline"
+                                className="rounded-xl border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-400 dark:hover:bg-amber-950/30"
+                            >
+                                ✓ 確認審核 {reviewPlans.length} 人
+                            </Button>
+                        )}
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
