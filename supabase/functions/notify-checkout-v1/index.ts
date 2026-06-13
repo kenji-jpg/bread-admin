@@ -1,5 +1,6 @@
 // ============================================
-// 🔔 Edge Function: notify-checkout-v1 (v13)
+// 🔔 Edge Function: notify-checkout-v1 (v14)
+// v14: 賣貨便免運(myship_free)的開賣場通知顯示「✨ 賣貨便免運 -$38（已折抵）」
 // v13: 補款通知在「達免運(運費=0)」時顯示「運費 $X 免收（已折抵本次補款）」說明
 //      門檻金額讀租戶 free_shipping_threshold（預設 3500）
 // v12: 訊息格式調整（千分位、退款品項說明、不加括號）
@@ -109,9 +110,11 @@ function buildMessage(
   if (shippingMethod === 'myship' || shippingMethod === 'myship_free') {
     if (!storeUrl) return { ok: false, error: '賣貨便結帳單尚未設定賣場連結' }
     const paySuffix = shippingFee === 0 ? '（免運取貨付款）' : '（取貨付款）'
+    // 賣貨便免運：明列折抵的 -$38，讓客人知道金額已扣免運
+    const freeLine = shippingMethod === 'myship_free' ? `✨ 賣貨便免運 -$38（已折抵）\n` : ''
     return { ok: true, message:
       `🛒 您的商品已開立賣場囉！\n\n📋 單號：${checkoutNo}\n` + itemsBlock +
-      `\n💰 金額：$${totalAmount.toLocaleString()}${paySuffix}\n\n👉 請點擊下方連結前往 7-11 下單：\n${storeUrl}\n\n⚠️ 請於 3 天內完成下單，逾期將會自動視為棄單處理。`,
+      `\n${freeLine}💰 金額：$${totalAmount.toLocaleString()}${paySuffix}\n\n👉 請點擊下方連結前往 7-11 下單：\n${storeUrl}\n\n⚠️ 請於 3 天內完成下單，逾期將會自動視為棄單處理。`,
     }
   }
 
