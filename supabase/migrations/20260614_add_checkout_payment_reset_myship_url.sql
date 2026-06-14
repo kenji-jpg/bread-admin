@@ -37,9 +37,9 @@ BEGIN
     UPDATE checkouts SET paid_amount = v_new_paid, updated_at = NOW()
     WHERE id = p_checkout_id AND tenant_id = p_tenant_id;
 
+    -- 只要賣貨便賣場已開(url_sent)就重置（不論付清或部分）
     IF v_checkout.shipping_method IN ('myship','myship_free')
-       AND v_checkout.shipping_status = 'url_sent'
-       AND v_new_paid < v_checkout.total_amount THEN
+       AND v_checkout.shipping_status = 'url_sent' THEN
         UPDATE checkouts
         SET store_url = NULL, myship_store_name = NULL,
             shipping_status = 'pending', is_notified = false, updated_at = NOW()
