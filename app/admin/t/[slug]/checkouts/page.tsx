@@ -1535,14 +1535,19 @@ export default function CheckoutsPage() {
                                                 })()}
                                             </TableCell>
                                             <TableCell>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => openPaymentDialog(item)}
-                                                    title="點擊記一筆收款"
-                                                    className="transition hover:opacity-70 cursor-pointer"
-                                                >
+                                                <div className="flex flex-col items-start gap-1">
                                                     {getPaymentBadge(item)}
-                                                </button>
+                                                    {item.shipping_status !== 'completed' && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openPaymentDialog(item)}
+                                                            title="記一筆收款（累加已付金額）"
+                                                            className="text-[11px] font-medium text-primary hover:underline cursor-pointer"
+                                                        >
+                                                            ＋ 記收款
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </TableCell>
                                             <TableCell>{getShippingBadge(item.shipping_status)}</TableCell>
                                             {/* 結帳模式 */}
