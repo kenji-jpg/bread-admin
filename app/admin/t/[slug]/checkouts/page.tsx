@@ -196,6 +196,7 @@ export default function CheckoutsPage() {
     const [shippingFilter, setShippingFilter] = useState<string>('all')
     const [paymentFilter, setPaymentFilter] = useState<string>('all')
     const [methodFilter, setMethodFilter] = useState<string>('all')  // 物流方式篩選
+    const [sortBy, setSortBy] = useState<string>('created_desc')  // 排序方式
     const [amountMin, setAmountMin] = useState<string>('')
     const [amountMax, setAmountMax] = useState<string>('')
     const [dateFrom, setDateFrom] = useState<string>('')  // YYYY-MM-DD
@@ -274,6 +275,7 @@ export default function CheckoutsPage() {
                 !maxVal || isNaN(maxVal) ? null : maxVal,
                 fromIso,
                 toIso,
+                sortBy,
             )
 
             if (result.success) {
@@ -292,7 +294,7 @@ export default function CheckoutsPage() {
         } finally {
             setIsLoading(false)
         }
-    }, [tenant?.id, shippingFilter, paymentFilter, methodFilter, pageSize, currentPage, debouncedSearch, amountMin, amountMax, dateFrom, dateTo])
+    }, [tenant?.id, shippingFilter, paymentFilter, methodFilter, sortBy, pageSize, currentPage, debouncedSearch, amountMin, amountMax, dateFrom, dateTo])
 
     // 載入結帳單詳情
     const fetchCheckoutDetail = useCallback(async (checkoutId: string) => {
@@ -339,7 +341,7 @@ export default function CheckoutsPage() {
     // 當篩選條件改變時，重置到第一頁
     useEffect(() => {
         setCurrentPage(1)
-    }, [shippingFilter, paymentFilter, methodFilter, pageSize, debouncedSearch, amountMin, amountMax, dateFrom, dateTo])
+    }, [shippingFilter, paymentFilter, methodFilter, sortBy, pageSize, debouncedSearch, amountMin, amountMax, dateFrom, dateTo])
 
     // 所有篩選（含搜尋、狀態、結帳模式）已由 RPC 伺服端處理
     const filteredCheckouts = checkouts
@@ -1226,6 +1228,17 @@ export default function CheckoutsPage() {
                                 <SelectItem value="delivery">🚚 宅配</SelectItem>
                                 <SelectItem value="seven_store">🏬 7-11店到店</SelectItem>
                                 <SelectItem value="pickup">🏠 自取</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <Select value={sortBy} onValueChange={setSortBy}>
+                            <SelectTrigger className="w-[150px] rounded-xl">
+                                <SelectValue placeholder="排序" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="created_desc">🕒 最新優先</SelectItem>
+                                <SelectItem value="amount_desc">💰 金額高→低</SelectItem>
+                                <SelectItem value="amount_asc">💰 金額低→高</SelectItem>
+                                <SelectItem value="owed_desc">🟡 尚欠高→低</SelectItem>
                             </SelectContent>
                         </Select>
                         <div className="flex items-center gap-1">

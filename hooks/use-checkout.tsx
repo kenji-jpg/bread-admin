@@ -191,7 +191,7 @@ export interface BatchDeleteCheckoutsResult {
 interface UseCheckoutReturn {
     loading: boolean
     error: string | null
-    listCheckouts: (shippingStatus?: string, paymentStatus?: string, limit?: number, offset?: number, search?: string, shippingMethod?: string, amountMin?: number | null, amountMax?: number | null, dateFrom?: string | null, dateTo?: string | null) => Promise<ListCheckoutsResult>
+    listCheckouts: (shippingStatus?: string, paymentStatus?: string, limit?: number, offset?: number, search?: string, shippingMethod?: string, amountMin?: number | null, amountMax?: number | null, dateFrom?: string | null, dateTo?: string | null, sort?: string) => Promise<ListCheckoutsResult>
     getDetail: (checkoutId: string) => Promise<CheckoutDetailResult>
     setUrl: (checkoutId: string, url: string, checkoutNo: string, displayName: string, nickname?: string | null) => Promise<NotifyMyshipResult>
     markOrdered: (checkoutId: string, orderNo?: string, note?: string) => Promise<UpdateStatusResult>
@@ -260,7 +260,8 @@ export const useCheckout = (tenantId: string): UseCheckoutReturn => {
         amountMin?: number | null,
         amountMax?: number | null,
         dateFrom?: string | null,
-        dateTo?: string | null
+        dateTo?: string | null,
+        sort?: string
     ): Promise<ListCheckoutsResult> => {
         return callRpc<ListCheckoutsResult>('list_checkouts_v1', {
             p_tenant_id: tenantId,
@@ -274,6 +275,7 @@ export const useCheckout = (tenantId: string): UseCheckoutReturn => {
             p_amount_max: amountMax ?? null,
             p_date_from: dateFrom || null,
             p_date_to: dateTo || null,
+            p_sort: sort || 'created_desc',
         })
     }, [tenantId, callRpc])
 
