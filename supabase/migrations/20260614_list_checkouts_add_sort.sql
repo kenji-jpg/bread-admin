@@ -1,5 +1,8 @@
 -- list_checkouts_v1 加 p_sort 參數：支援結帳單列表排序（伺服器端，跨分頁正確）
 --   created_desc(預設) / amount_desc(金額高→低) / amount_asc / owed_desc(尚欠高→低)
+-- ⚠️ 先 DROP 舊的 11 參數版本，否則改簽名會新增多載 → 呼叫變歧義（踩過這坑）
+DROP FUNCTION IF EXISTS public.list_checkouts_v1(uuid, text, text, text, text, integer, integer, integer, integer, timestamp with time zone, timestamp with time zone);
+
 CREATE OR REPLACE FUNCTION public.list_checkouts_v1(p_tenant_id uuid, p_shipping_status text DEFAULT NULL::text, p_payment_status text DEFAULT NULL::text, p_shipping_method text DEFAULT NULL::text, p_search text DEFAULT NULL::text, p_limit integer DEFAULT 50, p_offset integer DEFAULT 0, p_amount_min integer DEFAULT NULL::integer, p_amount_max integer DEFAULT NULL::integer, p_date_from timestamp with time zone DEFAULT NULL::timestamp with time zone, p_date_to timestamp with time zone DEFAULT NULL::timestamp with time zone, p_sort text DEFAULT 'created_desc'::text)
  RETURNS jsonb
  LANGUAGE plpgsql
