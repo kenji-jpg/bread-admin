@@ -1,6 +1,6 @@
 # CLAUDE.md - PlusHub 團購管理後台
 
-> 最後更新：2026-02-20
+> 最後更新：2026-07-08
 
 ## 專案概述
 
@@ -196,6 +196,10 @@ Supabase 專案 ID: `kashgsxlrdyuirijocld`
 **結帳**（封裝在 `use-checkout.tsx`）
 - `create_checkout_v2` / `list_checkouts_v1` / `get_checkout_detail_v1`
 - `update_checkout_status_v1` / `delete_checkout_v1` / `batch_delete_checkouts_v1`
+- `merge_checkouts_v1` — 合併多張結帳單（同會員、付款一致）
+- `batch_checkout_members_v1` — 批次結帳多人（一次交易，開新單直呼 `create_checkout_v2_original` 繞過 rate limit）
+- `add_checkout_payment_v1` — 記一筆收款（累加 `paid_amount`，取代「負項商品當收據」；賣貨便 url_sent 記款會清賣場退回 pending）
+- `list_checkouts_v1` 回傳含 `outstanding_amount`（= 總額 − 已付，賣貨便插件開賣場用尚欠額）+ `p_sort`（排序：created_desc / amount_desc / amount_asc / owed_desc）
 
 **競標**
 - `get_auction_orders_v1` / `create_auction_order_v1`
@@ -521,6 +525,16 @@ pending → url_sent → ordered → shipped → completed
 - **【完成】多租戶 LIFF 隔離**：`app/s/layout.tsx` 從 URL 解析 tenantSlug 查詢 `tenants.liff_id`，動態傳給 `LiffProvider`。各租戶可使用專屬 LIFF App
 - **【完成】自訂 404 / Error 頁面**：`app/not-found.tsx`（品牌化 404）+ `app/error.tsx`（錯誤邊界，含重試按鈕）
 - **【完成】RPC `get_dashboard_init_v1` 擴展**：`current_tenant` 回傳 `plan_expires_at`、`subscription_starts_at`、`next_billing_date`，確保前端能讀取訂閱到期資訊
+
+### 2026-07 批次結帳 / 付款 / 通知強化
+
+- **【完成】批次結帳三桶分流**：訂單管理「結帳」自動把客人分三桶 — `direct`（無舊單→開新單）/ `auto_merge`（待付款舊單→自動併入）/ `review`（已付/賣場已開→人工審核，預設開新單）。後端 `batch_checkout_members_v1` 一次交易處理多人、分批 40 人/次、進度顯示。
+- **【完成】記收款（付款單一來源）**：結帳單頁付款欄「＋記收款」按鈕 → `add_checkout_payment_v1` 累加 `paid_amount`。**停用「負項商品當收據」**（負項會被 SUM 進商品總額，扭曲免運/金額）。
+- **【完成】預付 → 一次賣貨便收尾款**：賣貨便記收款後若賣場已開(url_sent)→ 清賣場、退回 pending；`list_checkouts_v1` 回 `outstanding_amount`；插件 v1.1.2+ 賣場價格改讀尚欠額（避免拆兩個賣場付兩次運費）。
+- **【完成】結帳單列表排序**：`list_checkouts_v1` 加 `p_sort`（金額高→低 / 低→高 / 尚欠高→低 / 最新），前端篩選列加排序下拉。
+- **【完成】免運通知透明化**：`notify-checkout-v1` v13/v14（補款通知「達免運·運費已折抵」+ 賣貨便免運 -$38）、`notify-myship-url` v12（開賣場通知補免運說明 + 用尚欠額）。兩支通知函式原始碼已納入 `supabase/functions/`。
+- **【完成】客人端訂單顯示時效**（`get_shop_member_orders_v1`）：等待配貨/確定購入 = 永久；配貨失敗(cancelled) = 30 天；已進入結帳流程 = **45 天**（已完成則即時消失）；負項不顯示。
+- **【備註】一次性出貨通知**：後台目前**無「已寄出通知」功能**（notify 只有開賣場/補款）。批次通知已寄出客人是用 pg_net 從 DB 直接推 LINE（`net.http_post`，token 留 DB 內）。判斷未通知的可靠訊號：宅配/店到店 `shipping_status='shipped'`（發完會標 completed）。待辦：做「批次已寄出通知」按鈕 + `shipped_notified_at` 戳記。
 
 ## 參考文件
 
