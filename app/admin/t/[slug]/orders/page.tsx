@@ -866,11 +866,25 @@ export default function OrdersPage() {
         setIsDetectingMerge(true)
         setCheckoutPlans([])
         try {
-            // 依客人分組本次選中的訂單
-            const byMember = new Map<string, OrderWithDetails[]>()
+            // 先取出本次選中訂單所屬的客人（去重）
+            const selectedMemberIds = new Set<string>()
             arrivedOrderIds.forEach((id) => {
                 const order = orders.find((o) => o.id === id)
-                if (order && order.member_id) {
+                if (order && order.member_id) selectedMemberIds.add(order.member_id)
+            })
+
+            // 依客人分組：只要勾到某客人任一筆，就自動補齊「該客人所有可結帳訂單」
+            // （可結帳 = 已到貨、未結帳、未取消、非待綁定；對齊 statusFilter='ready'）
+            const byMember = new Map<string, OrderWithDetails[]>()
+            orders.forEach((order) => {
+                if (
+                    order.member_id &&
+                    selectedMemberIds.has(order.member_id) &&
+                    !order.isUnbound &&
+                    order.status !== 'cancelled' &&
+                    order.is_arrived &&
+                    !order.checkout_id
+                ) {
                     const arr = byMember.get(order.member_id) || []
                     arr.push(order)
                     byMember.set(order.member_id, arr)

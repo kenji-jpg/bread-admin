@@ -1198,6 +1198,7 @@ export default function CheckoutsPage() {
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">全部狀態</SelectItem>
+                                <SelectItem value="not_completed">🚩 未完成（排除已完成）</SelectItem>
                                 <SelectItem value="pending">待處理</SelectItem>
                                 <SelectItem value="url_sent">待下單</SelectItem>
                                 <SelectItem value="ordered">待出貨</SelectItem>
