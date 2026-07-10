@@ -952,22 +952,6 @@ export default function OrdersPage() {
                 })
             }
 
-            // 智慧出貨方式：查各客人「最近一張結帳單」的出貨方式（不限狀態），開新單時沿用
-            const lastMethodByMember = new Map<string, string>()
-            if (memberIds.length > 0) {
-                const { data: methodRows } = await supabase
-                    .from('checkouts')
-                    .select('member_id, shipping_method, created_at')
-                    .eq('tenant_id', tenant.id)
-                    .in('member_id', memberIds)
-                    .order('created_at', { ascending: false })
-                ;(methodRows || []).forEach((r) => {
-                    if (r.member_id && r.shipping_method && !lastMethodByMember.has(r.member_id)) {
-                        lastMethodByMember.set(r.member_id, r.shipping_method)
-                    }
-                })
-            }
-
             // 「自動併入」安全條件：可合併 + 待處理 + 未付款（賣場未開、客人還沒付錢，併入只是湊運費）
             const isAutoSafe = (c: MergeCandidate) =>
                 c.mergeable && c.shipping_status === 'pending'
@@ -994,10 +978,8 @@ export default function OrdersPage() {
                     choice = 'new'
                 }
 
-                // 智慧出貨方式：優先沿用「未出貨舊單」的方式，其次「最近一張單」的方式，都沒有才預設賣貨便
-                const shippingMethod = candidates[0]?.shipping_method
-                    || lastMethodByMember.get(memberId)
-                    || 'myship'
+                // 出貨方式：盡量走賣貨便 —— 開新單一律賣貨便；只有客人有「未出貨舊單」要併入時，才跟著那張舊單的方式
+                const shippingMethod = candidates[0]?.shipping_method || 'myship'
 
                 return {
                     memberId,
@@ -1972,7 +1954,7 @@ export default function OrdersPage() {
                                 新單出貨方式
                                 <span className="ml-1 text-xs font-normal text-muted-foreground">
                                     {isSmartCheckout
-                                        ? '（智慧結帳預設沿用各客人既有/上次方式；在此選擇會整批覆蓋）'
+                                        ? '（開新單一律預設賣貨便；在此選擇可整批覆蓋成其他方式）'
                                         : '（僅套用到開新單的客戶；併入舊單者沿用該單方式）'}
                                 </span>
                             </Label>
@@ -1986,7 +1968,7 @@ export default function OrdersPage() {
                                 }}
                             >
                                 <SelectTrigger className="w-full rounded-xl">
-                                    <SelectValue placeholder="🤖 每人智慧沿用（可在此整批覆蓋）" />
+                                    <SelectValue placeholder="🏪 開新單預設賣貨便（可整批覆蓋）" />
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="myship">🏪 賣貨便</SelectItem>
@@ -2022,7 +2004,7 @@ export default function OrdersPage() {
                                             return (
                                                 <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">
                                                     出貨方式：{Array.from(dist.entries()).map(([m, n]) => `${SHIPPING_METHOD_LABEL[m] || m} ${n}`).join('・')}
-                                                    <span className="text-muted-foreground">（智慧沿用各客人既有/上次方式，可用上方選單整批覆蓋）</span>
+                                                    <span className="text-muted-foreground">（開新單預設賣貨便，可用上方選單整批覆蓋）</span>
                                                 </p>
                                             )
                                         })()}
