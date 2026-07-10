@@ -1135,6 +1135,11 @@ export default function OrdersPage() {
     const reviewPlans = checkoutPlans.filter((p) => p.bucket === 'review')
     const autoPlans = [...directPlans, ...autoMergePlans] // 可一鍵自動處理（開新單 + 自動併入）
     const autoOrderCount = autoPlans.reduce((s, p) => s + p.orderIds.length, 0)
+    // 免運試算：開新單且商品總額達門檻的賣貨便客人，建單時會自動升級「賣貨便免運」
+    const freeShipThreshold = tenant?.free_shipping_threshold ?? 0
+    const directFreeShipCount = freeShipThreshold > 0
+        ? directPlans.filter((p) => p.shippingMethod === 'myship' && p.newItemsTotal >= freeShipThreshold).length
+        : 0
 
     return (
         <motion.div
@@ -2008,6 +2013,12 @@ export default function OrdersPage() {
                                                 </p>
                                             )
                                         })()}
+                                        {/* 免運試算：達門檻的賣貨便新單，建單時自動升級免運、折 $38 */}
+                                        {directFreeShipCount > 0 && (
+                                            <p className="mt-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+                                                ✨ 其中 {directFreeShipCount} 人達免運門檻 ${freeShipThreshold.toLocaleString()}，開單後自動升級賣貨便免運（折 $38）
+                                            </p>
+                                        )}
                                     </div>
                                 )}
 
