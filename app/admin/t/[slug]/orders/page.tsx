@@ -72,6 +72,7 @@ import {
     Link2,
     Users,
     Loader2,
+    Sparkles,
 } from 'lucide-react'
 
 type OrderWithDetails = OrderItem & {
@@ -117,6 +118,7 @@ interface MemberCheckoutPlan {
     candidates: MergeCandidate[]
     choice: string // 'new' | 結帳單 id
     bucket: CheckoutBucket
+    shippingMethod: string // 開新單時的出貨方式（智慧沿用該客人既有/上次的方式）
 }
 
 const SHIPPING_METHOD_LABEL: Record<string, string> = {
@@ -191,6 +193,8 @@ export default function OrdersPage() {
 
     // 批量結帳 Dialog 狀態
     const [batchCheckoutConfirm, setBatchCheckoutConfirm] = useState(false)
+    const [isSmartCheckout, setIsSmartCheckout] = useState(false) // true=智慧結帳（掃全部訂單），false=選取結帳
+    const [smartMethodOverride, setSmartMethodOverride] = useState('') // 智慧結帳時整批覆蓋出貨方式（''=未覆蓋，沿用各客人）
     const [checkoutShippingMethod, setCheckoutShippingMethod] = useState<'myship' | 'myship_free' | 'delivery' | 'pickup' | 'seven_store'>('myship')
     // 結帳合併偵測：逐人列出可合併的現有結帳單，並記錄每人選擇（併入哪張 / 開新單）
     const [isDetectingMerge, setIsDetectingMerge] = useState(false)
@@ -842,6 +846,16 @@ export default function OrdersPage() {
         }
     }
 
+    // 判斷一筆訂單是否「可結帳」（已到貨、未結帳、未取消、非待綁定）
+    const isCheckoutable = (o: OrderWithDetails) =>
+        !o.isUnbound && o.status !== 'cancelled' && o.is_arrived && !o.checkout_id && !!o.member_id
+
+    // 全站可結帳訂單數（智慧結帳按鈕徽章用）
+    const checkoutableCount = useMemo(
+        () => orders.filter(isCheckoutable).length,
+        [orders]
+    )
+
     // 批量結帳 - 開啟確認 Dialog
     const handleBatchCheckout = async () => {
         // 篩選出選中且已到貨的訂單
@@ -856,8 +870,22 @@ export default function OrdersPage() {
         }
 
         // 開啟確認 Dialog，並開始偵測每位客人可合併的現有結帳單
+        setIsSmartCheckout(false)
         setBatchCheckoutConfirm(true)
         await detectMergeCandidates(arrivedOrderIds)
+    }
+
+    // 🤖 智慧結帳 - 掃描全站所有可結帳訂單（不需先勾選），自動分桶 + 每人智慧出貨方式，先預覽再執行
+    const handleSmartCheckout = async () => {
+        const allCheckoutableIds = orders.filter(isCheckoutable).map((o) => o.id)
+        if (allCheckoutableIds.length === 0) {
+            toast.error('目前沒有可結帳的訂單（需已到貨、未結帳）')
+            return
+        }
+        setIsSmartCheckout(true)
+        setSmartMethodOverride('')
+        setBatchCheckoutConfirm(true)
+        await detectMergeCandidates(allCheckoutableIds)
     }
 
     // 智慧偵測：一次查出所有選中客人的「未出貨」現有結帳單，逐人列出可併入選項
@@ -924,6 +952,22 @@ export default function OrdersPage() {
                 })
             }
 
+            // 智慧出貨方式：查各客人「最近一張結帳單」的出貨方式（不限狀態），開新單時沿用
+            const lastMethodByMember = new Map<string, string>()
+            if (memberIds.length > 0) {
+                const { data: methodRows } = await supabase
+                    .from('checkouts')
+                    .select('member_id, shipping_method, created_at')
+                    .eq('tenant_id', tenant.id)
+                    .in('member_id', memberIds)
+                    .order('created_at', { ascending: false })
+                ;(methodRows || []).forEach((r) => {
+                    if (r.member_id && r.shipping_method && !lastMethodByMember.has(r.member_id)) {
+                        lastMethodByMember.set(r.member_id, r.shipping_method)
+                    }
+                })
+            }
+
             // 「自動併入」安全條件：可合併 + 待處理 + 未付款（賣場未開、客人還沒付錢，併入只是湊運費）
             const isAutoSafe = (c: MergeCandidate) =>
                 c.mergeable && c.shipping_status === 'pending'
@@ -950,6 +994,11 @@ export default function OrdersPage() {
                     choice = 'new'
                 }
 
+                // 智慧出貨方式：優先沿用「未出貨舊單」的方式，其次「最近一張單」的方式，都沒有才預設賣貨便
+                const shippingMethod = candidates[0]?.shipping_method
+                    || lastMethodByMember.get(memberId)
+                    || 'myship'
+
                 return {
                     memberId,
                     memberName: first.customer_name || first.member?.display_name || '未知',
@@ -959,6 +1008,7 @@ export default function OrdersPage() {
                     candidates,
                     choice,
                     bucket,
+                    shippingMethod,
                 }
             })
             setCheckoutPlans(plans)
@@ -996,7 +1046,8 @@ export default function OrdersPage() {
                     line_user_id: p.lineUserId,
                     member_name: p.memberName,
                     choice: p.choice,
-                    shipping_method: checkoutShippingMethod,
+                    // 智慧結帳：每人沿用既有/上次方式（可整批覆蓋）；一般選取結帳：沿用全域選單
+                    shipping_method: isSmartCheckout ? (p.shippingMethod || checkoutShippingMethod) : checkoutShippingMethod,
                     order_item_ids: p.orderIds,
                 }))
 
@@ -1118,6 +1169,16 @@ export default function OrdersPage() {
                     <p className="text-muted-foreground mt-1">管理與追蹤所有訂單</p>
                 </div>
                 <div className="flex items-center gap-2">
+                    {checkoutableCount > 0 && (
+                        <Button
+                            onClick={handleSmartCheckout}
+                            disabled={isSubmitting || isDetectingMerge}
+                            className="rounded-xl bg-success hover:bg-success/90 text-success-foreground"
+                        >
+                            <Sparkles className="mr-2 h-4 w-4" />
+                            智慧結帳 ({checkoutableCount})
+                        </Button>
+                    )}
                     <Link href={`/admin/t/${tenant.slug}/orders/manual`}>
                         <Button variant="outline" className="rounded-xl">
                             <PenLine className="mr-2 h-4 w-4" />
@@ -1890,10 +1951,10 @@ export default function OrdersPage() {
             <Dialog open={batchCheckoutConfirm} onOpenChange={setBatchCheckoutConfirm}>
                 <DialogContent className="sm:max-w-[540px]">
                     <DialogHeader>
-                        <DialogTitle>確認批量結帳</DialogTitle>
+                        <DialogTitle>{isSmartCheckout ? '🤖 智慧結帳預覽' : '確認批量結帳'}</DialogTitle>
                         <DialogDescription>
                             {isDetectingMerge ? (
-                                <>偵測各客人現有結帳單中…</>
+                                <>{isSmartCheckout ? '掃描全部可結帳訂單、判斷合併中…' : '偵測各客人現有結帳單中…'}</>
                             ) : (
                                 <>
                                     共 <span className="font-semibold text-foreground">{checkoutPlans.length}</span> 位客戶 ·
@@ -1905,15 +1966,27 @@ export default function OrdersPage() {
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-2">
-                        {/* 新單使用的出貨方式（僅對「開新單」的客戶生效） */}
+                        {/* 新單出貨方式：智慧結帳預設「每人沿用既有/上次方式」，此處為整批覆蓋 */}
                         <div className="space-y-2">
-                            <Label>新單出貨方式<span className="ml-1 text-xs font-normal text-muted-foreground">（僅套用到開新單的客戶；併入舊單者沿用該單方式）</span></Label>
+                            <Label>
+                                新單出貨方式
+                                <span className="ml-1 text-xs font-normal text-muted-foreground">
+                                    {isSmartCheckout
+                                        ? '（智慧結帳預設沿用各客人既有/上次方式；在此選擇會整批覆蓋）'
+                                        : '（僅套用到開新單的客戶；併入舊單者沿用該單方式）'}
+                                </span>
+                            </Label>
                             <Select
-                                value={checkoutShippingMethod}
-                                onValueChange={(value) => setCheckoutShippingMethod(value as 'myship' | 'myship_free' | 'delivery' | 'pickup' | 'seven_store')}
+                                value={isSmartCheckout ? smartMethodOverride : checkoutShippingMethod}
+                                onValueChange={(value) => {
+                                    setCheckoutShippingMethod(value as 'myship' | 'myship_free' | 'delivery' | 'pickup' | 'seven_store')
+                                    if (isSmartCheckout) setSmartMethodOverride(value)
+                                    // 整批覆蓋：把所有客人的開新單方式改成選定值
+                                    setCheckoutPlans((prev) => prev.map((p) => ({ ...p, shippingMethod: value })))
+                                }}
                             >
                                 <SelectTrigger className="w-full rounded-xl">
-                                    <SelectValue />
+                                    <SelectValue placeholder="🤖 每人智慧沿用（可在此整批覆蓋）" />
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="myship">🏪 賣貨便</SelectItem>
@@ -1941,7 +2014,18 @@ export default function OrdersPage() {
                                                 {directPlans.length} 人 · {directPlans.reduce((s, p) => s + p.orderIds.length, 0)} 筆
                                             </span>
                                         </div>
-                                        <p className="mt-1 text-xs text-muted-foreground">這些客人沒有未出貨的舊單，將以上方「新單出貨方式」直接開立新結帳單。</p>
+                                        <p className="mt-1 text-xs text-muted-foreground">這些客人沒有未出貨的舊單，將直接開立新結帳單。</p>
+                                        {/* 每人智慧出貨方式的分佈（賣貨便 N・宅配 M…） */}
+                                        {(() => {
+                                            const dist = new Map<string, number>()
+                                            directPlans.forEach((p) => dist.set(p.shippingMethod, (dist.get(p.shippingMethod) || 0) + 1))
+                                            return (
+                                                <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">
+                                                    出貨方式：{Array.from(dist.entries()).map(([m, n]) => `${SHIPPING_METHOD_LABEL[m] || m} ${n}`).join('・')}
+                                                    <span className="text-muted-foreground">（智慧沿用各客人既有/上次方式，可用上方選單整批覆蓋）</span>
+                                                </p>
+                                            )
+                                        })()}
                                     </div>
                                 )}
 

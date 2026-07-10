@@ -6,7 +6,7 @@ interface Env {
 }
 
 // 賣貨便 email 類型
-type MyshipEmailType = 'order_confirmed' | 'pickup_completed' | 'order_cancelled' | 'unknown'
+type MyshipEmailType = 'order_confirmed' | 'pickup_completed' | 'pickup_overdue' | 'order_cancelled' | 'unknown'
 
 interface ParsedEmail {
   type: MyshipEmailType
@@ -25,6 +25,11 @@ function detectTypeFromSubject(subject: string): MyshipEmailType {
   if (subject.includes('訂單成立通知')) {
     return 'order_confirmed'
   }
+  // ⚠️ 未取貨提醒要放在 pickup_completed 之前判斷（主旨含「取貨」但非「完成取貨」）
+  if (subject.includes('未於3天') || subject.includes('未取貨') ||
+      subject.includes('尚未領取') || subject.includes('尚未取貨')) {
+    return 'pickup_overdue'
+  }
   if (subject.includes('完成取貨') || subject.includes('完成取件')) {
     return 'pickup_completed'
   }
@@ -40,6 +45,11 @@ function detectTypeFromSubject(subject: string): MyshipEmailType {
 function detectTypeFromBody(content: string): MyshipEmailType {
   if (content.includes('有新的訂單成立') || content.includes('訂單成立')) {
     return 'order_confirmed'
+  }
+  // 未取貨提醒放在 pickup_completed 之前（內文含「尚未領取包裹」）
+  if (content.includes('尚未領取包裹') || content.includes('尚未領取') ||
+      content.includes('未於3天內') || content.includes('3天內尚未')) {
+    return 'pickup_overdue'
   }
   if (content.includes('買家已完成取件') || content.includes('完成取件') ||
       content.includes('買家完成取貨') || content.includes('完成取貨')) {
@@ -203,6 +213,30 @@ async function handlePickupCompleted(parsed: ParsedEmail, env: Env): Promise<voi
 }
 
 /**
+ * 處理「買家未於 3 天內取貨」提醒 email
+ * 用 CM 訂單編號比對 checkout（不改狀態），發一則提醒 LINE 給客人
+ */
+async function handlePickupOverdue(parsed: ParsedEmail, env: Env): Promise<void> {
+  if (!parsed.orderNo) {
+    console.error('[pickup_overdue] Missing CM order no:', JSON.stringify(parsed))
+    return
+  }
+
+  console.log(`[pickup_overdue] orderNo=${parsed.orderNo}, email=${parsed.recipientEmail}`)
+
+  const result = await callSupabaseRpc(env, 'process_myship_not_picked_up_email', {
+    p_myship_order_no: parsed.orderNo,
+    p_recipient_email: parsed.recipientEmail,
+  })
+
+  if (result.success) {
+    console.log(`[pickup_overdue] OK: checkout=${result.checkout_no}, notified customer`)
+  } else {
+    console.error(`[pickup_overdue] FAIL: ${result.error}`, JSON.stringify(parsed))
+  }
+}
+
+/**
  * 處理訂單取消 email
  * 用 CM 訂單編號比對 checkout，狀態 ordered → url_sent，清除 CM 編號
  */
@@ -313,6 +347,9 @@ export default {
         case 'pickup_completed':
           await handlePickupCompleted(emailData, env)
           break
+        case 'pickup_overdue':
+          await handlePickupOverdue(emailData, env)
+          break
         case 'order_cancelled':
           await handleOrderCancelled(emailData, env)
           break
@@ -355,6 +392,14 @@ export default {
 
         if (body.type === 'pickup_completed' && body.order_no) {
           const result = await callSupabaseRpc(env, 'process_myship_completed_email', {
+            p_myship_order_no: body.order_no,
+            p_recipient_email: body.email || null,
+          })
+          return Response.json(result)
+        }
+
+        if (body.type === 'pickup_overdue' && body.order_no) {
+          const result = await callSupabaseRpc(env, 'process_myship_not_picked_up_email', {
             p_myship_order_no: body.order_no,
             p_recipient_email: body.email || null,
           })
