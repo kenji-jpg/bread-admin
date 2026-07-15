@@ -119,6 +119,8 @@ interface MemberCheckoutPlan {
     choice: string // 'new' | 結帳單 id
     bucket: CheckoutBucket
     shippingMethod: string // 開新單時的出貨方式（智慧沿用該客人既有/上次的方式）
+    cancelCount: number // 此客人主動取消次數（警示用）
+    isWatchlist: boolean // 是否在注意名單（警示用）
 }
 
 const SHIPPING_METHOD_LABEL: Record<string, string> = {
@@ -379,6 +381,9 @@ export default function OrdersPage() {
             return <Badge className="bg-muted/60 text-muted-foreground border-muted">待綁定</Badge>
         }
         if (order.status === 'cancelled') {
+            if ((order as any).cancel_reason === 'customer') {
+                return <Badge className="bg-amber-500/20 text-amber-600 border-amber-500/30">客人取消</Badge>
+            }
             return <Badge className="bg-destructive/20 text-destructive border-destructive/30">配貨失敗</Badge>
         }
         if (order.checkout_id) {
@@ -831,18 +836,76 @@ export default function OrdersPage() {
             const nowIso = new Date().toISOString()
             const { error } = await supabase
                 .from('order_items')
-                .update({ status: 'cancelled', cancelled_at: nowIso, is_arrived: false, arrived_qty: 0 })
+                .update({ status: 'cancelled', cancelled_at: nowIso, is_arrived: false, arrived_qty: 0, cancel_reason: 'supply_failed' })
                 .in('id', ids)
                 .eq('tenant_id', tenant?.id)
             if (error) throw error
             toast.success(`已將 ${ids.length} 筆訂單標記為配貨失敗`)
-            setOrders(prev => prev.map(o => ids.includes(o.id) ? { ...o, status: 'cancelled', is_arrived: false, arrived_qty: 0 } : o))
+            setOrders(prev => prev.map(o => ids.includes(o.id) ? { ...o, status: 'cancelled', is_arrived: false, arrived_qty: 0, cancel_reason: 'supply_failed' } as OrderWithDetails : o))
             setSelectedOrders(new Set())
         } catch (err) {
             const msg = err instanceof Error ? err.message : '未知錯誤'
             toast.error('操作失敗：' + msg)
         } finally {
             setIsSubmitting(false)
+        }
+    }
+
+    // 批量「客人取消」（喊單後反悔）：status=cancelled + cancel_reason=customer，會計入該會員的取消次數
+    const handleBatchCancelCustomer = async () => {
+        const ids = Array.from(selectedOrders).filter((id) => {
+            const order = orders.find((o) => o.id === id)
+            return order && !order.isUnbound && order.status !== 'cancelled' && !order.checkout_id
+        })
+        if (ids.length === 0) {
+            toast.error('選中的訂單中沒有可標記客人取消的（需未結帳、未取消）')
+            return
+        }
+        if (!confirm(`確定將 ${ids.length} 筆標記為「客人取消」？\n\n會計入這些客人的「取消次數」，之後下單時你會看到 ⚠️ 提醒。此操作可再改回待到貨/可結帳。`)) return
+        setIsSubmitting(true)
+        try {
+            const nowIso = new Date().toISOString()
+            const { error } = await supabase
+                .from('order_items')
+                .update({ status: 'cancelled', cancelled_at: nowIso, is_arrived: false, arrived_qty: 0, cancel_reason: 'customer' })
+                .in('id', ids)
+                .eq('tenant_id', tenant?.id)
+            if (error) throw error
+            toast.success(`已將 ${ids.length} 筆標記為客人取消`)
+            setOrders(prev => prev.map(o => ids.includes(o.id) ? { ...o, status: 'cancelled', is_arrived: false, arrived_qty: 0, cancel_reason: 'customer' } as OrderWithDetails : o))
+            setSelectedOrders(new Set())
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : '未知錯誤'
+            toast.error('操作失敗：' + msg)
+        } finally {
+            setIsSubmitting(false)
+        }
+    }
+
+    // 切換會員「注意名單」旗標
+    const handleToggleWatchlist = async (memberId: string, name: string, current: boolean) => {
+        const next = !current
+        let note: string | null = null
+        if (next) {
+            note = window.prompt(`把「${name}」加入注意名單，備註原因（可留空）：`, '')
+            if (note === null) return // 取消
+        } else {
+            if (!confirm(`把「${name}」移出注意名單？`)) return
+        }
+        try {
+            const { data, error } = await supabase.rpc('toggle_member_watchlist_v1', {
+                p_tenant_id: tenant?.id,
+                p_member_id: memberId,
+                p_is_watchlist: next,
+                p_note: note,
+            })
+            if (error || !data?.success) throw new Error(error?.message || data?.error || '操作失敗')
+            toast.success(next ? `已把 ${name} 加入注意名單` : `已把 ${name} 移出注意名單`)
+            setOrders(prev => prev.map(o => o.member_id === memberId && o.member
+                ? { ...o, member: { ...o.member, is_watchlist: next, watchlist_note: note } as any } : o))
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : '未知錯誤'
+            toast.error('操作失敗：' + msg)
         }
     }
 
@@ -855,6 +918,18 @@ export default function OrdersPage() {
         () => orders.filter(isCheckoutable).length,
         [orders]
     )
+
+    // 每位會員「客人取消」次數（cancel_reason=customer 的已取消訂單數），前端即時彙總
+    const memberCancelCounts = useMemo(() => {
+        const map = new Map<string, number>()
+        for (const o of orders) {
+            const mid = o.member_id
+            if (mid && o.status === 'cancelled' && (o as any).cancel_reason === 'customer') {
+                map.set(mid, (map.get(mid) || 0) + 1)
+            }
+        }
+        return map
+    }, [orders])
 
     // 批量結帳 - 開啟確認 Dialog
     const handleBatchCheckout = async () => {
@@ -991,6 +1066,8 @@ export default function OrdersPage() {
                     choice,
                     bucket,
                     shippingMethod,
+                    cancelCount: memberCancelCounts.get(memberId) || 0,
+                    isWatchlist: !!(first.member as any)?.is_watchlist,
                 }
             })
             setCheckoutPlans(plans)
@@ -1367,13 +1444,30 @@ export default function OrdersPage() {
                                                 )}
                                             </TableCell>
                                             <TableCell className="font-medium">
-                                                <div>
-                                                    {order.customer_name || order.member?.display_name || '匿名'}
+                                                <div className="flex flex-wrap items-center gap-1">
+                                                    <span>{order.customer_name || order.member?.display_name || '匿名'}</span>
                                                     {order.member?.nickname && (
-                                                        <span className="ml-1 text-xs text-muted-foreground">({order.member.nickname})</span>
+                                                        <span className="text-xs text-muted-foreground">({order.member.nickname})</span>
                                                     )}
                                                     {order.note && (
-                                                        <MessageSquare className="inline-block ml-1 h-3 w-3 text-muted-foreground" />
+                                                        <MessageSquare className="h-3 w-3 text-muted-foreground" />
+                                                    )}
+                                                    {/* ⚠️ 客人取消次數 */}
+                                                    {order.member_id && (memberCancelCounts.get(order.member_id) || 0) > 0 && (
+                                                        <Badge className="bg-amber-500/20 text-amber-600 border-amber-500/30 h-4 px-1 text-[10px]" title="此客人主動取消的訂單次數">
+                                                            ⚠️ 取消{memberCancelCounts.get(order.member_id)}次
+                                                        </Badge>
+                                                    )}
+                                                    {/* 🚩 注意名單（點擊切換） */}
+                                                    {order.member_id && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => { e.stopPropagation(); handleToggleWatchlist(order.member_id!, order.customer_name || order.member?.display_name || '此客人', !!(order.member as any)?.is_watchlist) }}
+                                                            title={(order.member as any)?.is_watchlist ? ((order.member as any)?.watchlist_note || '注意名單（點擊移除）') : '加入注意名單'}
+                                                            className={`text-xs leading-none ${(order.member as any)?.is_watchlist ? 'opacity-100' : 'opacity-25 hover:opacity-70'}`}
+                                                        >
+                                                            🚩
+                                                        </button>
                                                     )}
                                                 </div>
                                             </TableCell>
@@ -1953,6 +2047,24 @@ export default function OrdersPage() {
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-2">
+                        {/* ⚠️ 下單前警示：注意名單 / 常取消的客人 */}
+                        {!isDetectingMerge && (() => {
+                            const flagged = checkoutPlans.filter((p) => p.isWatchlist || p.cancelCount > 0)
+                            if (flagged.length === 0) return null
+                            return (
+                                <div className="rounded-lg border border-amber-300 bg-amber-50/60 dark:border-amber-800 dark:bg-amber-950/20 p-3 text-xs">
+                                    <p className="font-semibold text-amber-700 dark:text-amber-400">⚠️ 有 {flagged.length} 位需留意（仍會照常結帳）</p>
+                                    <div className="mt-1 space-y-0.5 text-amber-700/90 dark:text-amber-400/90">
+                                        {flagged.map((p) => (
+                                            <div key={p.memberId}>
+                                                {p.isWatchlist && '🚩'}{p.memberName}
+                                                {p.cancelCount > 0 && <span className="text-muted-foreground"> · 曾取消 {p.cancelCount} 次</span>}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )
+                        })()}
                         {/* 新單出貨方式：智慧結帳預設「每人沿用既有/上次方式」，此處為整批覆蓋 */}
                         <div className="space-y-2">
                             <Label>
@@ -2220,6 +2332,17 @@ export default function OrdersPage() {
                                     >
                                         <CheckCircle2 className="mr-1 h-3 w-3" />
                                         結單 ({selectedStats.unboundCount})
+                                    </Button>
+                                )}
+                                {selectedStats.failableCount > 0 && (
+                                    <Button
+                                        onClick={handleBatchCancelCustomer}
+                                        disabled={isSubmitting}
+                                        size="xs"
+                                        className="bg-amber-500/90 hover:bg-amber-500 text-white rounded-full h-7 px-3 text-xs"
+                                    >
+                                        <Ban className="mr-1 h-3 w-3" />
+                                        客人取消 ({selectedStats.failableCount})
                                     </Button>
                                 )}
                                 {selectedStats.failableCount > 0 && (
