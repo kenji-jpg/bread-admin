@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { useTenant } from '@/hooks/use-tenant'
 import { useCheckout, type CheckoutListItem, type CheckoutDetailResult, type ListCheckoutsResult, type CheckoutItemDetail, type ShippingDetailsInput } from '@/hooks/use-checkout'
+import { createClient } from '@/lib/supabase/client'
 import { SHIPPING_METHOD_OPTIONS, type ShippingMethod } from '@/types/database'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -205,6 +206,8 @@ export default function CheckoutsPage() {
     // 分頁狀態
     const [currentPage, setCurrentPage] = useState(1)
     const [pageSize, setPageSize] = useState(50)
+    // 各出貨狀態的全量彙總（張數/總金額/尚欠），來自 get_checkout_stats_v1（跨全部資料，不受分頁影響）
+    const [serverStats, setServerStats] = useState<Record<string, { count: number; total: number; outstanding: number }>>({})
 
     // Dialog 狀態
     const [storeUrlCheckout, setStoreUrlCheckout] = useState<CheckoutListItem | null>(null)
@@ -247,6 +250,7 @@ export default function CheckoutsPage() {
     const [isDownloading, setIsDownloading] = useState(false)
 
     // 使用 hook
+    const supabase = createClient()
     const checkoutApi = useCheckout(tenant?.id || '')
 
     // 用 ref 來保持最新的 API 引用，避免無限循環
@@ -294,6 +298,12 @@ export default function CheckoutsPage() {
         } finally {
             setIsLoading(false)
         }
+
+        // 全量彙總（各狀態張數/總金額），不受分頁/篩選影響
+        try {
+            const { data: statsData } = await supabase.rpc('get_checkout_stats_v1', { p_tenant_id: tenant.id })
+            if (statsData?.success && statsData.stats) setServerStats(statsData.stats)
+        } catch { /* 彙總失敗不影響列表 */ }
     }, [tenant?.id, shippingFilter, paymentFilter, methodFilter, sortBy, pageSize, currentPage, debouncedSearch, amountMin, amountMax, dateFrom, dateTo])
 
     // 載入結帳單詳情
@@ -1118,8 +1128,9 @@ export default function CheckoutsPage() {
                                 <Clock className="h-5 w-5 text-muted-foreground" />
                             </div>
                             <div>
-                                <p className="text-2xl font-bold">{stats.pending}</p>
+                                <p className="text-2xl font-bold">{serverStats.pending?.count ?? stats.pending}</p>
                                 <p className="text-sm text-muted-foreground">待處理</p>
+                                {serverStats.pending && <p className="text-xs font-medium text-muted-foreground">${serverStats.pending.total.toLocaleString()}</p>}
                             </div>
                         </div>
                     </CardContent>
@@ -1131,8 +1142,9 @@ export default function CheckoutsPage() {
                                 <LinkIcon className="h-5 w-5 text-blue-500" />
                             </div>
                             <div>
-                                <p className="text-2xl font-bold">{stats.urlSent}</p>
+                                <p className="text-2xl font-bold">{serverStats.url_sent?.count ?? stats.urlSent}</p>
                                 <p className="text-sm text-muted-foreground">待下單</p>
+                                {serverStats.url_sent && <p className="text-xs font-medium text-blue-500">${serverStats.url_sent.total.toLocaleString()}</p>}
                             </div>
                         </div>
                     </CardContent>
@@ -1144,8 +1156,9 @@ export default function CheckoutsPage() {
                                 <ShoppingCart className="h-5 w-5 text-amber-500" />
                             </div>
                             <div>
-                                <p className="text-2xl font-bold">{stats.ordered}</p>
+                                <p className="text-2xl font-bold">{serverStats.ordered?.count ?? stats.ordered}</p>
                                 <p className="text-sm text-muted-foreground">待出貨</p>
+                                {serverStats.ordered && <p className="text-xs font-medium text-amber-500">${serverStats.ordered.total.toLocaleString()}</p>}
                             </div>
                         </div>
                     </CardContent>
@@ -1157,8 +1170,9 @@ export default function CheckoutsPage() {
                                 <Package className="h-5 w-5 text-orange-500" />
                             </div>
                             <div>
-                                <p className="text-2xl font-bold">{stats.shipped}</p>
+                                <p className="text-2xl font-bold">{serverStats.shipped?.count ?? stats.shipped}</p>
                                 <p className="text-sm text-muted-foreground">待收貨</p>
+                                {serverStats.shipped && <p className="text-xs font-medium text-orange-500">${serverStats.shipped.total.toLocaleString()}</p>}
                             </div>
                         </div>
                     </CardContent>
@@ -1170,8 +1184,9 @@ export default function CheckoutsPage() {
                                 <CheckCircle2 className="h-5 w-5 text-success" />
                             </div>
                             <div>
-                                <p className="text-2xl font-bold">{stats.completed}</p>
+                                <p className="text-2xl font-bold">{serverStats.completed?.count ?? stats.completed}</p>
                                 <p className="text-sm text-muted-foreground">已完成</p>
+                                {serverStats.completed && <p className="text-xs font-medium text-success">${serverStats.completed.total.toLocaleString()}</p>}
                             </div>
                         </div>
                     </CardContent>
