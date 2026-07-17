@@ -108,6 +108,7 @@ export interface CheckoutDetailResult {
         unit_price: number
         subtotal: number
         cost?: number | null
+        is_packed?: boolean
     }>
     error?: string
     message?: string

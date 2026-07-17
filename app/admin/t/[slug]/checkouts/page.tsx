@@ -326,6 +326,28 @@ export default function CheckoutsPage() {
         }
     }, [tenant?.id])
 
+    // 切換品項「包好」勾選（內部包貨核對用，即時存回 order_items）
+    const handleTogglePacked = useCallback(async (orderItemId: string, next: boolean) => {
+        // 樂觀更新畫面
+        setCheckoutDetail((prev) => prev && prev.items ? {
+            ...prev,
+            items: prev.items.map((it) => it.id === orderItemId ? { ...it, is_packed: next } : it),
+        } : prev)
+        const { error } = await supabase
+            .from('order_items')
+            .update({ is_packed: next, packed_at: next ? new Date().toISOString() : null })
+            .eq('id', orderItemId)
+            .eq('tenant_id', tenant?.id)
+        if (error) {
+            toast.error('更新包裝狀態失敗')
+            // 還原
+            setCheckoutDetail((prev) => prev && prev.items ? {
+                ...prev,
+                items: prev.items.map((it) => it.id === orderItemId ? { ...it, is_packed: !next } : it),
+            } : prev)
+        }
+    }, [supabase, tenant?.id])
+
     useEffect(() => {
         if (tenant && !tenantLoading) {
             fetchCheckouts()
@@ -2185,9 +2207,32 @@ export default function CheckoutsPage() {
                                 </div>
 
                                 {/* 商品列表 */}
+                                {(() => {
+                                    const items = checkoutDetail.items || []
+                                    const packed = items.filter((i) => i.is_packed).length
+                                    const allPacked = items.length > 0 && packed === items.length
+                                    return (
+                                        <div className="flex items-center justify-between mb-1">
+                                            <span className="text-sm font-medium">
+                                                📦 包裝核對 <span className={allPacked ? 'text-success' : 'text-muted-foreground'}>已包 {packed}/{items.length}</span>
+                                            </span>
+                                            {items.length > 0 && (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="h-7 rounded-lg text-xs"
+                                                    onClick={() => items.forEach((it) => { if (it.is_packed === allPacked) handleTogglePacked(it.id, !allPacked) })}
+                                                >
+                                                    {allPacked ? '全部取消' : '全部打勾'}
+                                                </Button>
+                                            )}
+                                        </div>
+                                    )
+                                })()}
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
+                                            <TableHead className="w-10 text-center">包好</TableHead>
                                             <TableHead>商品名稱</TableHead>
                                             <TableHead>SKU</TableHead>
                                             <TableHead className="text-right">數量</TableHead>
@@ -2197,8 +2242,16 @@ export default function CheckoutsPage() {
                                     </TableHeader>
                                     <TableBody>
                                         {checkoutDetail.items?.map((item) => (
-                                            <TableRow key={item.id}>
-                                                <TableCell className="font-medium">
+                                            <TableRow key={item.id} className={item.is_packed ? 'bg-success/5' : ''}>
+                                                <TableCell className="text-center">
+                                                    <input
+                                                        type="checkbox"
+                                                        className="h-4 w-4 accent-emerald-600 cursor-pointer align-middle"
+                                                        checked={!!item.is_packed}
+                                                        onChange={(e) => handleTogglePacked(item.id, e.target.checked)}
+                                                    />
+                                                </TableCell>
+                                                <TableCell className={`font-medium ${item.is_packed ? 'text-muted-foreground line-through' : ''}`}>
                                                     {item.item_name || '-'}
                                                 </TableCell>
                                                 <TableCell>
@@ -2215,14 +2268,14 @@ export default function CheckoutsPage() {
                                         ))}
                                         {(checkoutDetail.checkout?.shipping_fee ?? 0) > 0 && !isMyshipMethod(checkoutDetail.checkout?.shipping_method) && (
                                             <TableRow>
-                                                <TableCell colSpan={4} className="text-right text-muted-foreground">運費</TableCell>
+                                                <TableCell colSpan={5} className="text-right text-muted-foreground">運費</TableCell>
                                                 <TableCell className="text-right">
                                                     ${checkoutDetail.checkout?.shipping_fee?.toLocaleString()}
                                                 </TableCell>
                                             </TableRow>
                                         )}
                                         <TableRow className="bg-muted/50">
-                                            <TableCell colSpan={4} className="text-right font-bold">總計</TableCell>
+                                            <TableCell colSpan={5} className="text-right font-bold">總計</TableCell>
                                             <TableCell className="text-right font-bold text-lg">
                                                 ${((checkoutDetail.checkout?.total_amount ?? 0) + (!isMyshipMethod(checkoutDetail.checkout?.shipping_method) ? (checkoutDetail.checkout?.shipping_fee ?? 0) : 0)).toLocaleString()}
                                             </TableCell>
