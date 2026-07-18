@@ -208,6 +208,8 @@ export default function CheckoutsPage() {
     const [pageSize, setPageSize] = useState(50)
     // 各出貨狀態的全量彙總（張數/總金額/尚欠），來自 get_checkout_stats_v1（跨全部資料，不受分頁影響）
     const [serverStats, setServerStats] = useState<Record<string, { count: number; total: number; outstanding: number }>>({})
+    // 品項「包好」即時狀態（key=order_item_id），checkout_items JSON 快照沒有，另外抓 order_items.is_packed
+    const [packedMap, setPackedMap] = useState<Record<string, boolean>>({})
 
     // Dialog 狀態
     const [storeUrlCheckout, setStoreUrlCheckout] = useState<CheckoutListItem | null>(null)
@@ -287,6 +289,28 @@ export default function CheckoutsPage() {
                 const checkoutList = (result as any).checkouts || (result as any).data || []
                 setCheckouts(Array.isArray(checkoutList) ? checkoutList : [])
                 setTotalCount((result as any).total || (result as any).count || checkoutList.length || 0)
+
+                // 蒐集本頁所有品項的 order_item_id，抓即時「包好」狀態
+                try {
+                    const ids: string[] = []
+                    for (const c of (Array.isArray(checkoutList) ? checkoutList : [])) {
+                        if (!c.checkout_items) continue
+                        try {
+                            for (const it of JSON.parse(c.checkout_items) as Array<{ order_item_id?: string }>) {
+                                if (it.order_item_id) ids.push(it.order_item_id)
+                            }
+                        } catch { /* ignore bad json */ }
+                    }
+                    if (ids.length > 0) {
+                        const { data: packedRows } = await supabase
+                            .from('order_items').select('id, is_packed').in('id', ids)
+                        const map: Record<string, boolean> = {}
+                        ;(packedRows || []).forEach((r: any) => { map[r.id] = !!r.is_packed })
+                        setPackedMap(map)
+                    } else {
+                        setPackedMap({})
+                    }
+                } catch { /* 包裝狀態失敗不影響列表 */ }
             } else {
                 toast.error(result.message || '載入結帳單失敗')
                 setCheckouts([])
@@ -345,6 +369,20 @@ export default function CheckoutsPage() {
                 ...prev,
                 items: prev.items.map((it) => it.id === orderItemId ? { ...it, is_packed: !next } : it),
             } : prev)
+        }
+    }, [supabase, tenant?.id])
+
+    // 列表 Popover 商品明細的「包好」勾選（用 packedMap 記狀態）
+    const handleTogglePackedItem = useCallback(async (orderItemId: string, next: boolean) => {
+        setPackedMap((prev) => ({ ...prev, [orderItemId]: next }))
+        const { error } = await supabase
+            .from('order_items')
+            .update({ is_packed: next, packed_at: next ? new Date().toISOString() : null })
+            .eq('id', orderItemId)
+            .eq('tenant_id', tenant?.id)
+        if (error) {
+            toast.error('更新包裝狀態失敗')
+            setPackedMap((prev) => ({ ...prev, [orderItemId]: !next }))
         }
     }, [supabase, tenant?.id])
 
@@ -1526,9 +1564,22 @@ export default function CheckoutsPage() {
                                                                 </PopoverTrigger>
                                                                 <PopoverContent align="start" className="w-80 p-0">
                                                                     <div className="px-4 py-3 border-b flex items-center justify-between">
-                                                                        <p className="font-medium text-sm">商品明細（共 {items.length} 項）</p>
+                                                                        {(() => {
+                                                                            const packable = items.filter((d) => d.order_item_id && d.subtotal >= 0)
+                                                                            const packedN = packable.filter((d) => packedMap[d.order_item_id!]).length
+                                                                            return (
+                                                                                <p className="font-medium text-sm">
+                                                                                    商品明細（共 {items.length} 項）
+                                                                                    {packable.length > 0 && (
+                                                                                        <span className={`ml-2 text-xs font-normal ${packedN === packable.length ? 'text-emerald-600' : 'text-muted-foreground'}`}>
+                                                                                            📦 已包 {packedN}/{packable.length}
+                                                                                        </span>
+                                                                                    )}
+                                                                                </p>
+                                                                            )
+                                                                        })()}
                                                                         {!['shipped', 'completed'].includes(item.shipping_status) && (
-                                                                            <span className="text-[10px] text-muted-foreground">點 ✕ 移除品項</span>
+                                                                            <span className="text-[10px] text-muted-foreground">✅打勾包好 · ✕移除</span>
                                                                         )}
                                                                     </div>
                                                                     <div className="max-h-64 overflow-y-auto">
@@ -1540,9 +1591,21 @@ export default function CheckoutsPage() {
                                                                                     key={idx}
                                                                                     className={`flex items-start justify-between px-4 py-2 text-sm border-b last:border-b-0 group ${isRefund ? 'bg-rose-50/40 dark:bg-rose-950/20' : ''}`}
                                                                                 >
-                                                                                    <span className={`mr-2 flex-1 break-words ${isRefund ? 'text-rose-600 dark:text-rose-400' : ''}`}>
-                                                                                        {isRefund && <span className="mr-1">↩︎</span>}
-                                                                                        {detail.name}{detail.variant_name ? `（${detail.variant_name}）` : ''}
+                                                                                    <span className={`mr-2 flex-1 break-words flex items-start gap-2 ${isRefund ? 'text-rose-600 dark:text-rose-400' : ''}`}>
+                                                                                        {detail.order_item_id && !isRefund && (
+                                                                                            <input
+                                                                                                type="checkbox"
+                                                                                                className="h-4 w-4 mt-0.5 accent-emerald-600 cursor-pointer shrink-0"
+                                                                                                checked={!!packedMap[detail.order_item_id]}
+                                                                                                onClick={(e) => e.stopPropagation()}
+                                                                                                onChange={(e) => handleTogglePackedItem(detail.order_item_id!, e.target.checked)}
+                                                                                                title="包好打勾"
+                                                                                            />
+                                                                                        )}
+                                                                                        <span className={detail.order_item_id && packedMap[detail.order_item_id] ? 'line-through text-muted-foreground' : ''}>
+                                                                                            {isRefund && <span className="mr-1">↩︎</span>}
+                                                                                            {detail.name}{detail.variant_name ? `（${detail.variant_name}）` : ''}
+                                                                                        </span>
                                                                                     </span>
                                                                                     <div className="flex items-center gap-2 shrink-0 text-muted-foreground">
                                                                                         <span>x{detail.qty}</span>
