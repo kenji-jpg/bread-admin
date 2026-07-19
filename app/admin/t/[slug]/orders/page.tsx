@@ -1258,6 +1258,7 @@ export default function OrdersPage() {
                                     {orders.filter((o) => o.isUnbound).length}
                                 </p>
                                 <p className="text-sm text-muted-foreground">待綁定</p>
+                                <p className="text-xs font-medium text-muted-foreground">${orders.filter((o) => o.isUnbound).reduce((s, o) => s + (o.unit_price || 0) * (o.quantity || 0), 0).toLocaleString()}</p>
                             </div>
                         </div>
                     </CardContent>
@@ -1273,6 +1274,7 @@ export default function OrdersPage() {
                                     {orders.filter((o) => !o.isUnbound && o.status !== 'cancelled' && !o.checkout_id).length}
                                 </p>
                                 <p className="text-sm text-muted-foreground">未結帳</p>
+                                <p className="text-xs font-medium text-primary">${orders.filter((o) => !o.isUnbound && o.status !== 'cancelled' && !o.checkout_id).reduce((s, o) => s + (o.unit_price || 0) * (o.quantity || 0), 0).toLocaleString()}</p>
                             </div>
                         </div>
                     </CardContent>
@@ -1288,6 +1290,7 @@ export default function OrdersPage() {
                                     {orders.filter((o) => o.checkout_id).length}
                                 </p>
                                 <p className="text-sm text-muted-foreground">已結帳</p>
+                                <p className="text-xs font-medium text-success">${orders.filter((o) => o.checkout_id).reduce((s, o) => s + (o.unit_price || 0) * (o.quantity || 0), 0).toLocaleString()}</p>
                             </div>
                         </div>
                     </CardContent>
