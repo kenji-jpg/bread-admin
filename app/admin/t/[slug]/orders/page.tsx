@@ -389,19 +389,8 @@ export default function OrdersPage() {
         if (order.checkout_id) {
             return <Badge className="bg-success/20 text-success border-success/30">已結帳</Badge>
         }
-        if (order.is_arrived) {
-            return <Badge className="bg-primary/20 text-primary border-primary/30">可結帳</Badge>
-        }
-        // 顯示到貨進度
-        const arrivedQty = order.arrived_qty ?? 0
-        if (arrivedQty > 0 && arrivedQty < order.quantity) {
-            return (
-                <Badge className="bg-amber-500/20 text-amber-600 border-amber-500/30">
-                    部分到貨 ({arrivedQty}/{order.quantity})
-                </Badge>
-            )
-        }
-        return <Badge className="bg-warning/20 text-warning border-warning/30">待到貨</Badge>
+        // 代購/預購：訂單成立即可結帳，未結帳一律顯示「未結帳」
+        return <Badge className="bg-primary/20 text-primary border-primary/30">未結帳</Badge>
     }
 
     // === 操作功能 ===
@@ -637,7 +626,7 @@ export default function OrdersPage() {
             order.quantity,
             order.unit_price,
             order.quantity * order.unit_price,
-            order.checkout_id ? '已結帳' : order.is_arrived ? '可結帳' : '待到貨',
+            order.status === 'cancelled' ? '取消' : order.checkout_id ? '已結帳' : '未結帳',
             order.note || '',
             new Date(order.created_at).toLocaleString('zh-TW'),
         ])
@@ -1257,7 +1246,7 @@ export default function OrdersPage() {
             </div>
 
             {/* Stats Summary */}
-            <div className="grid gap-4 md:grid-cols-5">
+            <div className="grid gap-4 md:grid-cols-3">
                 <Card className="border-border/50">
                     <CardContent className="pt-6">
                         <div className="flex items-center gap-3">
@@ -1276,44 +1265,14 @@ export default function OrdersPage() {
                 <Card className="border-border/50">
                     <CardContent className="pt-6">
                         <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-warning/20">
-                                <Clock className="h-5 w-5 text-warning" />
-                            </div>
-                            <div>
-                                <p className="text-2xl font-bold">
-                                    {orders.filter((o) => !o.isUnbound && !o.is_arrived && (o.arrived_qty ?? 0) === 0 && !o.checkout_id).length}
-                                </p>
-                                <p className="text-sm text-muted-foreground">待到貨</p>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card className="border-border/50">
-                    <CardContent className="pt-6">
-                        <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/20">
-                                <PackageCheck className="h-5 w-5 text-amber-600" />
-                            </div>
-                            <div>
-                                <p className="text-2xl font-bold">
-                                    {orders.filter((o) => !o.isUnbound && !o.is_arrived && (o.arrived_qty ?? 0) > 0 && (o.arrived_qty ?? 0) < o.quantity && !o.checkout_id).length}
-                                </p>
-                                <p className="text-sm text-muted-foreground">部分到貨</p>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card className="border-border/50">
-                    <CardContent className="pt-6">
-                        <div className="flex items-center gap-3">
                             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/20">
                                 <Package className="h-5 w-5 text-primary" />
                             </div>
                             <div>
                                 <p className="text-2xl font-bold">
-                                    {orders.filter((o) => !o.isUnbound && o.is_arrived && !o.checkout_id).length}
+                                    {orders.filter((o) => !o.isUnbound && o.status !== 'cancelled' && !o.checkout_id).length}
                                 </p>
-                                <p className="text-sm text-muted-foreground">可結帳</p>
+                                <p className="text-sm text-muted-foreground">未結帳</p>
                             </div>
                         </div>
                     </CardContent>
@@ -1356,11 +1315,9 @@ export default function OrdersPage() {
                             <SelectContent>
                                 <SelectItem value="all">全部狀態</SelectItem>
                                 <SelectItem value="unbound">待綁定</SelectItem>
-                                <SelectItem value="pending">待到貨</SelectItem>
-                                <SelectItem value="partial">部分到貨</SelectItem>
-                                <SelectItem value="ready">可結帳</SelectItem>
+                                <SelectItem value="ready">未結帳</SelectItem>
                                 <SelectItem value="completed">已結帳</SelectItem>
-                                <SelectItem value="cancelled">配貨失敗</SelectItem>
+                                <SelectItem value="cancelled">取消（配貨失敗/客人取消）</SelectItem>
                             </SelectContent>
                         </Select>
                         <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -1477,24 +1434,7 @@ export default function OrdersPage() {
                                                     {order.sku}
                                                 </code>
                                             </TableCell>
-                                            <TableCell className="text-right">
-                                                <div className="flex flex-col items-end gap-1">
-                                                    <span>{order.quantity}</span>
-                                                    {!order.is_arrived && !order.checkout_id && (order.arrived_qty ?? 0) > 0 && (
-                                                        <div className="flex items-center gap-1.5">
-                                                            <div className="w-12 h-1.5 bg-muted rounded-full overflow-hidden">
-                                                                <div
-                                                                    className="h-full bg-amber-500 rounded-full transition-all"
-                                                                    style={{ width: `${((order.arrived_qty ?? 0) / order.quantity) * 100}%` }}
-                                                                />
-                                                            </div>
-                                                            <span className="text-xs text-muted-foreground">
-                                                                {order.arrived_qty}/{order.quantity}
-                                                            </span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </TableCell>
+                                            <TableCell className="text-right">{order.quantity}</TableCell>
                                             <TableCell className="text-right">${order.unit_price}</TableCell>
                                             <TableCell className="text-right font-medium">
                                                 ${(order.quantity * order.unit_price).toLocaleString()}
@@ -2298,29 +2238,6 @@ export default function OrdersPage() {
                                     >
                                         <Receipt className="mr-1 h-3 w-3" />
                                         結帳 ({selectedStats.arrivedCount})
-                                    </Button>
-                                )}
-                                {selectedStats.arrivedCount > 0 && (
-                                    <Button
-                                        onClick={handleBatchMarkPending}
-                                        disabled={isSubmitting}
-                                        size="xs"
-                                        variant="outline"
-                                        className="rounded-full h-7 px-3 text-xs"
-                                    >
-                                        <Clock className="mr-1 h-3 w-3" />
-                                        改回待到貨 ({selectedStats.arrivedCount})
-                                    </Button>
-                                )}
-                                {selectedStats.pendingCount > 0 && (
-                                    <Button
-                                        onClick={handleBatchMarkArrived}
-                                        disabled={isSubmitting}
-                                        size="xs"
-                                        className="bg-blue-600 hover:bg-blue-700 text-white rounded-full h-7 px-3 text-xs"
-                                    >
-                                        <Package className="mr-1 h-3 w-3" />
-                                        標記可結帳 ({selectedStats.pendingCount})
                                     </Button>
                                 )}
                                 {selectedStats.unboundCount > 0 && (
