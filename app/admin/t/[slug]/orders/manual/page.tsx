@@ -48,6 +48,8 @@ import {
 } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
+import { parseThread, makeSourceKey } from '@/lib/shout-parser'
+import { buildQueries, resolveShouts, STATUS_LABEL, type ResultDTO, type Binding } from '@/lib/shout-matcher'
 import {
     Upload,
     CheckCircle2,
@@ -65,7 +67,6 @@ import {
     Loader2,
     Plus,
     CalendarDays,
-    PenLine,
     ArrowLeft,
     Package,
 } from 'lucide-react'
@@ -138,16 +139,6 @@ interface UnclaimResponse {
     error?: string
 }
 
-interface ImportResponse {
-    success: boolean
-    total: number
-    matched: number
-    pending: number
-    errors: number
-    results: AuctionOrder[]
-    error?: string
-}
-
 interface DeleteResponse {
     success: boolean
     message: string
@@ -171,22 +162,24 @@ interface CreateAuctionOrderResponse {
         amount: number
         product_name: string | null
         note: string | null
-        status: 'matched' | 'pending'
+        status: 'matched' | 'pending' | 'duplicate'
         member_id: string | null
         member_name: string | null
         order_item_id?: string
     }
 }
 
-interface ParsedEntry {
-    nickname: string
-    productName: string  // 商品名稱（選填）
-    amounts: number[]
-    totalAmount: number
-    note: string
-    hasMultiple: boolean
-    isValid: boolean
-    errorMessage?: string
+// 解析後、可手動修正的一列
+interface ShoutRow {
+    key: string
+    name: string
+    variant: string | null
+    qty: number
+    binding: Binding
+    sourceKey: string
+    alreadyEntered: boolean   // 先前已入過 → 跳過
+    expanded: boolean         // 「各1／全套」自動展開的 → 要人工確認
+    excluded: boolean
 }
 
 // 格式化日期顯示
@@ -249,10 +242,16 @@ export default function ManualOrdersPage() {
     const [orderIsArrived, setOrderIsArrived] = useState(true) // 預設可結帳
     const [rawText, setRawText] = useState('')
     const [isImporting, setIsImporting] = useState(false)
-    const [showPreview, setShowPreview] = useState(false)
     // 預設商品 / 金額：填了之後每行只寫暱稱即可
     const [defaultProductName, setDefaultProductName] = useState('')
     const [defaultAmount, setDefaultAmount] = useState('')
+    const [variantsStr, setVariantsStr] = useState('')          // 規格清單，貼文沒寫可在這補
+    const [sellerNames, setSellerNames] = useState<string[]>([])
+    const [rows, setRows] = useState<ShoutRow[]>([])
+    const [isParsing, setIsParsing] = useState(false)
+    const [parseNote, setParseNote] = useState<string | null>(null)
+    const [sellerInput, setSellerInput] = useState('')
+    const [savingSeller, setSavingSeller] = useState(false)
 
     // ============ 計算屬性 ============
 
@@ -329,6 +328,19 @@ export default function ManualOrdersPage() {
             fetchOrders()
         }
     }, [tenant?.id, tenantLoading, fetchOrders])
+
+    // 賣家自己的 LINE 名稱（存 tenants.settings.screener，與 Mac 收單工具共用）
+    useEffect(() => {
+        if (!tenant?.id) return
+        supabase.rpc('screener_get_settings_v1', { p_tenant_id: tenant.id })
+            .then(({ data }) => {
+                const names = (data as { seller_names?: string[] } | null)?.seller_names
+                if (Array.isArray(names)) {
+                    setSellerNames(names)
+                    setSellerInput(names.join(', '))
+                }
+            })
+    }, [tenant?.id, supabase])
 
     // ============ 會員搜尋 ============
 
@@ -511,162 +523,135 @@ export default function ManualOrdersPage() {
     // A) 舊格式（行含金額）：暱稱 [商品名] 金額，如 "小美 打鼓玩具 780" 或 "阿華 500"
     // B) 新格式（有預設商品/金額）：行可省略商品+金額，僅寫暱稱 / 暱稱 +1 / 暱稱 *2
     //    數量 token 支援：+N、*N、xN、×N（預設 1）
-    const parsedEntries = useMemo((): ParsedEntry[] => {
-        if (!rawText.trim()) return []
-
-        const defaultAmt = defaultAmount ? parseInt(defaultAmount, 10) : NaN
-        const hasDefaultAmt = !isNaN(defaultAmt) && defaultAmt > 0
-        const defaultProd = defaultProductName.trim()
-        const qtyRegex = /^[+*×x](\d+)$/i
-
-        const lines = rawText.trim().split('\n')
-        return lines.map(line => {
-            const trimmedLine = line.trim()
-            if (!trimmedLine) {
-                return { nickname: '', productName: '', amounts: [], totalAmount: 0, note: '', hasMultiple: false, isValid: false, errorMessage: '空行' }
-            }
-
-            const parts = trimmedLine.split(/\s+/)
-            const lastPart = parts[parts.length - 1]
-            const lastIsAmount = /^-?\d+(\+-?\d+)*$/.test(lastPart)
-
-            // ===== 情境 A：行內最後是金額（暱稱 [商品] 金額） =====
-            if (lastIsAmount) {
-                const amountPart = lastPart
-                let productName = defaultProd
-                let nicknameEndIndex = parts.length - 1
-
-                if (parts.length >= 3) {
-                    const secondLast = parts[parts.length - 2]
-                    if (!/^-?\d+(\+-?\d+)*$/.test(secondLast)) {
-                        productName = secondLast
-                        nicknameEndIndex = parts.length - 2
-                    }
-                }
-
-                const nickname = parts.slice(0, nicknameEndIndex).join(' ')
-                if (!nickname) {
-                    return { nickname: '', productName: '', amounts: [], totalAmount: 0, note: '', hasMultiple: false, isValid: false, errorMessage: '缺少暱稱' }
-                }
-
-                const amountStrings = amountPart.split('+').map(s => s.trim())
-                const amounts: number[] = []
-                for (const amtStr of amountStrings) {
-                    const amt = parseInt(amtStr, 10)
-                    if (isNaN(amt)) {
-                        return { nickname, productName: '', amounts: [], totalAmount: 0, note: '', hasMultiple: false, isValid: false, errorMessage: '金額格式錯誤' }
-                    }
-                    amounts.push(amt)
-                }
-
-                const totalAmount = amounts.reduce((sum, a) => sum + a, 0)
-                const hasMultiple = amounts.length > 1
-                const note = hasMultiple ? amountPart : ''
-                return { nickname, productName, amounts, totalAmount, note, hasMultiple, isValid: true }
-            }
-
-            // ===== 情境 B：行內無金額，必須有預設金額 =====
-            if (!hasDefaultAmt) {
-                return { nickname: trimmedLine, productName: '', amounts: [], totalAmount: 0, note: '', hasMultiple: false, isValid: false, errorMessage: '缺少金額（或填入預設金額）' }
-            }
-
-            let qty = 1
-            const nicknameParts: string[] = []
-            for (const part of parts) {
-                const m = part.match(qtyRegex)
-                if (m) {
-                    qty = parseInt(m[1], 10) || 1
-                } else {
-                    nicknameParts.push(part)
-                }
-            }
-
-            const nickname = nicknameParts.join(' ')
-            if (!nickname) {
-                return { nickname: '', productName: '', amounts: [], totalAmount: 0, note: '', hasMultiple: false, isValid: false, errorMessage: '缺少暱稱' }
-            }
-
-            const totalAmount = defaultAmt * qty
-            return {
-                nickname,
-                productName: defaultProd,
-                amounts: [totalAmount],
-                totalAmount,
-                note: qty > 1 ? `×${qty}` : '',
-                hasMultiple: false,
-                isValid: true,
-            }
-        }).filter(e => e.nickname || e.errorMessage)
-    }, [rawText, defaultAmount, defaultProductName])
-
-    const previewStats = useMemo(() => {
-        const valid = parsedEntries.filter(e => e.isValid).length
-        const invalid = parsedEntries.filter(e => !e.isValid).length
-        const totalAmount = parsedEntries.filter(e => e.isValid).reduce((sum, e) => sum + e.totalAmount, 0)
-        return { valid, invalid, totalAmount }
-    }, [parsedEntries])
-
-    const handleImport = async () => {
-        if (!tenant?.id || !rawText.trim()) {
-            toast.error('請輸入名單')
-            return
-        }
-
-        // 日期為選填，不需要驗證
-
-        const validEntries = parsedEntries.filter(e => e.isValid)
-        if (validEntries.length === 0) {
-            toast.error('沒有有效的資料')
-            return
-        }
-
-        setIsImporting(true)
-
+    // 賣家自己的 LINE 名稱（存 tenants.settings.screener）
+    const handleSaveSellers = async () => {
+        if (!tenant?.id) return
+        const names = sellerInput.split(/[,，、]/).map(x => x.trim()).filter(Boolean)
+        setSavingSeller(true)
         try {
-            // 使用 create_auction_order_v1 逐筆建立訂單（支援 product_name）
-            let matchedCount = 0
-            let pendingCount = 0
-            const failedEntries: string[] = []
+            const { data, error } = await supabase.rpc('screener_save_settings_v1', {
+                p_tenant_id: tenant.id, p_seller_names: names,
+            }) as { data: { success?: boolean } | null; error: Error | null }
+            if (error || !data?.success) { toast.error('儲存失敗'); return }
+            setSellerNames(names)
+            toast.success('已儲存')
+        } finally {
+            setSavingSeller(false)
+        }
+    }
 
-            for (const entry of validEntries) {
+    // 解析：跟 Mac 即時查詢共用同一套比對規則（lib/shout-parser + shout-matcher）
+    const handleParse = async () => {
+        if (!tenant?.id || !rawText.trim()) return
+        setIsParsing(true); setParseNote(null)
+        try {
+            const manualVariants = variantsStr
+                .split(/[/／、,，|｜ ]/).map(v => v.trim()).filter(Boolean)
+            const t = parseThread(rawText, manualVariants, sellerNames)
+
+            // 貼文有寫就自動帶出來（使用者仍可改）
+            if (!defaultProductName.trim() && t.productGuess) setDefaultProductName(t.productGuess)
+            if (!defaultAmount.trim() && t.priceGuess != null) setDefaultAmount(String(t.priceGuess))
+            if (!variantsStr.trim() && t.variants.length) setVariantsStr(t.variants.join('／'))
+
+            if (!t.shouts.length) {
+                setRows([]); setParseNote('沒有解析到喊單（格式：暱稱 +數量）')
+                return
+            }
+            const unit = parseInt(defaultAmount || String(t.priceGuess ?? ''), 10)
+            if (!unit || unit <= 0) {
+                setParseNote('⚠️ 這串沒寫價格，請手動填金額後再解析')
+                return
+            }
+
+            // 查名冊（強比對）
+            const { data: lookup } = await supabase.rpc('screener_lookup_members_v1', {
+                p_tenant_id: tenant.id,
+                p_names: buildQueries(t.shouts),
+            }) as { data: { results?: ResultDTO[] } | null }
+            const map: Record<string, ResultDTO> = {}
+            for (const r of (lookup?.results ?? [])) map[r.query] = r
+
+            const resolved = resolveShouts(t.shouts, map, t.variants)
+            const keys = resolved.map(r => makeSourceKey({
+                threadTime: t.threadTime,
+                product: defaultProductName || t.productGuess,
+                rawLead: r.lead, time: r.time, variant: r.variant,
+            }))
+
+            // 哪些已經入過（冪等：整串重複貼也不會重複入單）
+            const { data: exist } = await supabase.rpc('screener_existing_source_keys_v1', {
+                p_tenant_id: tenant.id, p_keys: keys,
+            }) as { data: { existing?: string[] } | null }
+            const already = new Set(exist?.existing ?? [])
+
+            setRows(resolved.map((r, i) => ({
+                key: keys[i] + '#' + i,
+                name: r.name, variant: r.variant, qty: r.qty,
+                binding: r.binding, sourceKey: keys[i],
+                alreadyEntered: already.has(keys[i]),
+                expanded: r.expanded, excluded: false,
+            })))
+
+            const skipped = keys.filter(k => already.has(k)).length
+            let note = `共 ${resolved.length} 筆`
+            if (skipped) note += ` · 已入過 ${skipped}（跳過）`
+            note += ` · 新增 ${resolved.length - skipped}`
+            if (t.needsVariants) note += '　⚠️ 有人喊「各1／全套」但沒有規格清單，請在上方補規格再解析'
+            // 沒複製到賣家自己的貼文 → 抓不到這串的指紋 → 去重會失效
+            if (!t.threadTime) note += '　⚠️ 沒有複製到你自己的貼文（最上面那則），防重複功能會失效，建議從討論串最上面開始複製'
+            setParseNote(note)
+        } catch (e) {
+            setParseNote(`解析失敗：${e instanceof Error ? e.message : '未知錯誤'}`)
+        } finally {
+            setIsParsing(false)
+        }
+    }
+
+    const newRows = rows.filter(r => !r.alreadyEntered && !r.excluded)
+    const boundCount = newRows.filter(r => r.binding.status === 'bound').length
+    const expandedCount = newRows.filter(r => r.expanded).length
+    const skippedCount = rows.filter(r => r.alreadyEntered).length
+    const totalAmount = newRows.reduce((s, r) => s + r.qty * (parseInt(defaultAmount, 10) || 0), 0)
+
+    const patchRow = (i: number, patch: Partial<ShoutRow>) =>
+        setRows(rs => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)))
+
+    const handleImportShouts = async () => {
+        if (!tenant?.id || !newRows.length) return
+        const unit = parseInt(defaultAmount, 10)
+        if (!unit || unit <= 0) { toast.error('請填金額'); return }
+        setIsImporting(true)
+        let claimed = 0, pending = 0, dup = 0, failed = 0
+        try {
+            for (const r of newRows) {
+                const isBound = r.binding.status === 'bound'
                 const { data, error } = await supabase.rpc('create_auction_order_v1', {
                     p_tenant_id: tenant.id,
                     p_auction_date: auctionDate.trim() || null,
-                    p_winner_nickname: entry.nickname,
-                    p_amount: entry.totalAmount,
-                    p_product_name: entry.productName || null,
-                    p_note: entry.note || null,
+                    p_winner_nickname: r.name,
+                    p_amount: unit * r.qty,
+                    p_product_name: r.variant || defaultProductName || null,
+                    p_note: r.qty > 1 ? `×${r.qty}` : null,
                     p_is_arrived: orderIsArrived,
+                    p_member_id: isBound ? r.binding.member?.id ?? null : null,
+                    p_skip_match: !isBound,
+                    p_source_key: r.sourceKey,
                 }) as { data: CreateAuctionOrderResponse | null; error: Error | null }
 
-                if (error || !data?.success) {
-                    const reason = error?.message || data?.message || '未知錯誤'
-                    failedEntries.push(`${entry.nickname} ${entry.productName || ''} ${entry.totalAmount}（${reason}）`)
-                    console.error(`建立訂單失敗: ${entry.nickname}`, error || data?.message)
-                    continue
-                }
-
-                if (data.data?.status === 'matched') {
-                    matchedCount++
-                } else {
-                    pendingCount++
-                }
+                if (error || !data?.success) { failed++; continue }
+                const st = data.data?.status
+                if (st === 'duplicate') dup++
+                else if (st === 'matched') claimed++
+                else pending++
             }
-
-            if (failedEntries.length > 0) {
-                toast.warning(`匯入完成：${matchedCount} 筆已建單，${pendingCount} 筆待認領，${failedEntries.length} 筆失敗`, { duration: 5000 })
-                toast.error(`失敗明細：\n${failedEntries.join('\n')}`, { duration: 10000 })
-            } else {
-                toast.success(`匯入完成：${matchedCount} 筆已建單，${pendingCount} 筆待認領`)
-            }
-
-            setRawText('')
-            setShowPreview(false)
-            setViewMode('list')
-            setSelectedDate(auctionDate)
+            let msg = `已入單 ${claimed} 筆（自動綁定）`
+            if (pending) msg += ` · 待認領 ${pending}`
+            if (dup) msg += ` · 重複跳過 ${dup}`
+            if (failed) msg += ` · 失敗 ${failed}`
+            if (failed) toast.warning(msg); else toast.success(msg)
+            setRows([]); setRawText(''); setParseNote(null)
             fetchOrders()
-        } catch {
-            toast.error('匯入過程發生錯誤')
         } finally {
             setIsImporting(false)
         }
@@ -825,149 +810,184 @@ ${orderList}
                                 </div>
                             </div>
 
-                            {/* 預設商品 / 金額（熱賣商品批次登記用，可選填） */}
+                            {/* 主商品 / 金額 / 規格 —— 貼文有寫會自動帶出，隨時可改 */}
                             <div className="space-y-2">
                                 <Label className="flex items-center gap-1.5">
                                     <Package className="h-4 w-4" />
-                                    預設商品 / 金額（選填，熱賣款批次用）
+                                    主商品 / 金額
                                 </Label>
                                 <div className="flex items-center gap-2">
                                     <Input
-                                        placeholder="商品名稱（例如：明信片）"
+                                        placeholder="商品名稱（例如：合金車車）"
                                         value={defaultProductName}
-                                        onChange={(e) => {
-                                            setDefaultProductName(e.target.value)
-                                            setShowPreview(false)
-                                        }}
+                                        onChange={(e) => setDefaultProductName(e.target.value)}
                                         className="rounded-xl flex-1"
                                     />
                                     <Input
                                         type="number"
                                         inputMode="numeric"
-                                        placeholder="金額（例如：180）"
+                                        placeholder="金額（例如：250）"
                                         value={defaultAmount}
-                                        onChange={(e) => {
-                                            setDefaultAmount(e.target.value)
-                                            setShowPreview(false)
-                                        }}
+                                        onChange={(e) => setDefaultAmount(e.target.value)}
                                         className="rounded-xl w-40 font-mono"
                                     />
                                 </div>
-                                <p className="text-xs text-muted-foreground">
-                                    填了預設金額後，名單每行只要寫「暱稱」，或加「+1 / *2」表示數量即可。
-                                </p>
-                            </div>
-
-                            {/* 名單輸入 */}
-                            <div className="space-y-2">
-                                <Label>
-                                    {defaultAmount && parseInt(defaultAmount, 10) > 0
-                                        ? '名單（每行：暱稱，可加 +1 / *2 表示數量）'
-                                        : '名單（每行：暱稱 商品名稱 金額）'}
-                                </Label>
-                                <Textarea
-                                    placeholder={
-                                        defaultAmount && parseInt(defaultAmount, 10) > 0
-                                            ? `小美\n阿華 +1\n小華 *2\n凡凡 +3`
-                                            : `小美 打鼓玩具 780\n阿華 500\n小華 可愛熊娃娃 480+570+660`
-                                    }
-                                    value={rawText}
-                                    onChange={(e) => {
-                                        setRawText(e.target.value)
-                                        setShowPreview(false)
-                                    }}
-                                    className="min-h-[200px] font-mono text-sm rounded-xl"
+                                <Input
+                                    placeholder="規格：吐司／麵包／巴士（貼文沒寫可在這裡補，補了「各1／全套」才能展開）"
+                                    value={variantsStr}
+                                    onChange={(e) => setVariantsStr(e.target.value)}
+                                    className="rounded-xl"
                                 />
                             </div>
 
-                            {/* 操作按鈕 */}
+                            {/* 賣家自己的名稱：用來排除自己的公告訊息 */}
+                            <div className="space-y-2">
+                                <Label className="flex items-center gap-1.5">
+                                    <Users className="h-4 w-4" />
+                                    你自己的 LINE 名稱
+                                </Label>
+                                <div className="flex items-center gap-2">
+                                    <Input
+                                        placeholder="例：麵包小姐@530rmasi, 麵包小姐（多個用逗號分隔）"
+                                        value={sellerInput}
+                                        onChange={(e) => setSellerInput(e.target.value)}
+                                        className="rounded-xl flex-1"
+                                    />
+                                    <Button
+                                        variant="outline"
+                                        onClick={handleSaveSellers}
+                                        disabled={savingSeller}
+                                        className="rounded-xl"
+                                    >
+                                        {savingSeller ? '儲存中...' : '儲存'}
+                                    </Button>
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                    設定後，你自己發的公告（例如「要的在這邊+1」）就不會被當成客人喊單。
+                                </p>
+                            </div>
+
+                            {/* 貼上區 */}
+                            <div className="space-y-2">
+                                <Label>把整段討論串貼下面（也支援舊的純名單：一行一個暱稱）</Label>
+                                <Textarea
+                                    placeholder={`09:33 麵包小姐 全新合金車 $250\n規格：吐司／麵包\n要的在這邊+1\n09:35 Momo☺️ 吐司+1\n09:42 Dean 麵包、細菌人各1`}
+                                    value={rawText}
+                                    onChange={(e) => setRawText(e.target.value)}
+                                    className="min-h-[180px] font-mono text-sm rounded-xl"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    會自動略過你自己的公告訊息、自動展開「各1／全套」、自動比對會員；
+                                    <span className="font-medium">同一串重複貼也不會重複入單</span>。
+                                </p>
+                            </div>
+
                             <div className="flex items-center gap-2">
                                 <Button
-                                    onClick={() => setShowPreview(true)}
-                                    disabled={!rawText.trim()}
+                                    onClick={handleParse}
+                                    disabled={isParsing || !rawText.trim()}
                                     variant="outline"
                                     className="rounded-xl"
                                 >
-                                    <Eye className="mr-2 h-4 w-4" />
-                                    預覽
+                                    {isParsing
+                                        ? <><Loader2 className="animate-spin mr-2 h-4 w-4" />解析中...</>
+                                        : <><Eye className="mr-2 h-4 w-4" />解析</>}
                                 </Button>
-                                <Button
-                                    onClick={handleImport}
-                                    disabled={isImporting || !rawText.trim() || !auctionDate.trim()}
-                                    className="gradient-primary rounded-xl"
-                                >
-                                    {isImporting ? (
-                                        <>
-                                            <Loader2 className="animate-spin mr-2 h-4 w-4" />
-                                            匯入中...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Upload className="mr-2 h-4 w-4" />
-                                            解析並匯入
-                                        </>
-                                    )}
-                                </Button>
+                                {parseNote && (
+                                    <span className="text-sm text-muted-foreground">{parseNote}</span>
+                                )}
                             </div>
 
-                            {/* 解析預覽 */}
-                            {showPreview && parsedEntries.length > 0 && (
-                                <div className="border rounded-xl border-amber-500/30 bg-amber-500/5 p-4">
-                                    <div className="flex items-center justify-between mb-3">
-                                        <span className="font-medium flex items-center gap-2 text-amber-600">
-                                            <Eye className="h-4 w-4" />
-                                            解析預覽
+                            {/* 解析結果：可逐列修正 */}
+                            {rows.length > 0 && (
+                                <div className="border rounded-xl overflow-hidden">
+                                    <div className="flex items-center gap-2 px-4 py-3 bg-muted/40 flex-wrap">
+                                        <Badge className="bg-success/20 text-success border-success/30">
+                                            可綁定 {boundCount}
+                                        </Badge>
+                                        {newRows.length - boundCount > 0 && (
+                                            <Badge className="bg-warning/20 text-warning border-warning/30">
+                                                待認領 {newRows.length - boundCount}
+                                            </Badge>
+                                        )}
+                                        {skippedCount > 0 && (
+                                            <Badge variant="secondary">已入過 {skippedCount}</Badge>
+                                        )}
+                                        {expandedCount > 0 && (
+                                            <Badge className="bg-orange-500/20 text-orange-600 border-orange-500/30">
+                                                ⚠️ 展開 {expandedCount} 請確認
+                                            </Badge>
+                                        )}
+                                        <span className="ml-auto font-medium">
+                                            共 ${totalAmount.toLocaleString()}
                                         </span>
-                                        <div className="flex items-center gap-4 text-sm">
-                                            <span>有效 {previewStats.valid} 筆</span>
-                                            {previewStats.invalid > 0 && (
-                                                <span className="text-destructive">錯誤 {previewStats.invalid} 筆</span>
-                                            )}
-                                            <span className="font-medium">
-                                                總金額 ${previewStats.totalAmount.toLocaleString()}
-                                            </span>
-                                        </div>
                                     </div>
-                                    <div className="max-h-64 overflow-y-auto">
-                                        <Table>
-                                            <TableHeader>
-                                                <TableRow className="hover:bg-transparent">
-                                                    <TableHead>暱稱</TableHead>
-                                                    <TableHead>商品名稱</TableHead>
-                                                    <TableHead className="text-right">金額</TableHead>
-                                                    <TableHead>狀態</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {parsedEntries.map((entry, index) => (
-                                                    <TableRow
-                                                        key={index}
-                                                        className={entry.isValid ? '' : 'bg-destructive/5'}
-                                                    >
-                                                        <TableCell className="font-medium">
-                                                            {entry.nickname || '-'}
-                                                        </TableCell>
-                                                        <TableCell className="text-muted-foreground">
-                                                            {entry.productName || '-'}
-                                                        </TableCell>
-                                                        <TableCell className="text-right font-medium">
-                                                            {entry.isValid ? `$${entry.totalAmount.toLocaleString()}` : '-'}
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            {entry.isValid ? (
-                                                                <Badge className="bg-success/20 text-success border-success/30">
-                                                                    有效
-                                                                </Badge>
-                                                            ) : (
-                                                                <Badge className="bg-destructive/20 text-destructive border-destructive/30">
-                                                                    {entry.errorMessage}
-                                                                </Badge>
-                                                            )}
-                                                        </TableCell>
-                                                    </TableRow>
-                                                ))}
-                                            </TableBody>
-                                        </Table>
+                                    <div className="max-h-[420px] overflow-y-auto divide-y">
+                                        {rows.map((r, i) => {
+                                            const bound = r.binding.status === 'bound'
+                                            const skip = r.alreadyEntered || r.excluded
+                                            return (
+                                                <div
+                                                    key={r.key}
+                                                    className={`flex items-center gap-2 px-3 py-2 ${skip ? 'opacity-45' : ''}`}
+                                                >
+                                                    <Checkbox
+                                                        checked={!r.excluded && !r.alreadyEntered}
+                                                        disabled={r.alreadyEntered}
+                                                        onCheckedChange={(c) => patchRow(i, { excluded: c !== true })}
+                                                    />
+                                                    <Input
+                                                        value={r.name}
+                                                        onChange={(e) => patchRow(i, { name: e.target.value })}
+                                                        className="h-8 w-40 rounded-lg"
+                                                    />
+                                                    <Input
+                                                        value={r.variant ?? ''}
+                                                        placeholder="規格"
+                                                        onChange={(e) => patchRow(i, { variant: e.target.value || null })}
+                                                        className="h-8 w-28 rounded-lg text-xs"
+                                                    />
+                                                    <Input
+                                                        type="number"
+                                                        value={r.qty}
+                                                        min={1}
+                                                        onChange={(e) => patchRow(i, { qty: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                                                        className="h-8 w-16 rounded-lg font-mono text-xs"
+                                                    />
+                                                    <span className="text-sm font-medium w-20 text-right">
+                                                        ${((parseInt(defaultAmount, 10) || 0) * r.qty).toLocaleString()}
+                                                    </span>
+                                                    {r.expanded && !skip && (
+                                                        <Badge className="bg-orange-500/15 text-orange-600 border-orange-500/30 text-[10px]">展開</Badge>
+                                                    )}
+                                                    {r.alreadyEntered ? (
+                                                        <Badge variant="secondary" className="text-[10px]">已入過</Badge>
+                                                    ) : bound ? (
+                                                        <Badge className="bg-success/20 text-success border-success/30 text-[10px]">
+                                                            {r.binding.member?.display_name || '入單'}
+                                                        </Badge>
+                                                    ) : (
+                                                        <Badge className="bg-warning/20 text-warning border-warning/30 text-[10px]">
+                                                            {STATUS_LABEL[r.binding.status]}
+                                                        </Badge>
+                                                    )}
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                    <div className="flex items-center justify-between px-4 py-3 bg-muted/30">
+                                        <span className="text-xs text-muted-foreground">
+                                            綠色會自動綁定會員；其餘寫成「待認領」，可在下方列表用「關聯」補綁
+                                        </span>
+                                        <Button
+                                            onClick={handleImportShouts}
+                                            disabled={isImporting || newRows.length === 0}
+                                            className="gradient-primary rounded-xl"
+                                        >
+                                            {isImporting
+                                                ? <><Loader2 className="animate-spin mr-2 h-4 w-4" />入單中...</>
+                                                : <><Upload className="mr-2 h-4 w-4" />確認入單 {newRows.length} 筆</>}
+                                        </Button>
                                     </div>
                                 </div>
                             )}

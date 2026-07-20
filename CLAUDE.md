@@ -112,7 +112,20 @@ workers/
     └── package.json
 ```
 
+### 喊單解析（網頁與 Mac 工具共用同一套規則）
+
+- `lib/shout-parser.ts` — 討論串文字 → 訂單列表（數量詞、多規格展開、續行繼承、身分證去重）
+- `lib/shout-matcher.ts` — 暱稱 → 會員（原文精準優先 → 核心字；社群暱稱優先於 LINE 名稱）
+- 用在 `/admin/t/[slug]/orders/manual`「新增登記」。
+- ⚠️ **這兩支是從 Mac 工具的 Swift 版一比一移植**，兩邊規則必須一致；改動請同步
+  `~/Desktop/plushub-screener/`（該專案 CLAUDE.md 有完整的踩坑紀錄）。
+- 相容性：整段文字**完全沒有時間戳**時 → 視為舊版純名單（一行一筆），既有貼法照常可用。
+
 ### 外部資產（不在 repo）
+
+- **Mac 喊單收單工具**：source of truth 在 **`~/Desktop/plushub-screener/`**（獨立 Swift 專案，有自己的 `CLAUDE.md`）。
+  LINE 社群(OpenChat)沒有 API、bot 進不去，所以靠**複製討論串→解析→入單**。訂單落在 `auction_orders`，
+  與網頁「訂單管理→手動登記」完全通用。要動 `create_auction_order_v1` 或 `auction_orders` 前先看該專案的 CLAUDE.md。
 
 - **Chrome 賣貨便自動開賣場插件**：source of truth 在 **`~/桌面/myship-auto-extension/`**，Chrome 以「載入未封裝項目」指向此路徑。
   - **不再 push 到 GitHub**（`extensions/` 已加進 `.gitignore`）。所有插件改動直接編輯此路徑的檔案。
@@ -135,7 +148,7 @@ Supabase 專案 ID: `kashgsxlrdyuirijocld`
 | order_items | 訂單品項 | |
 | checkouts | 結帳單 | `shipping_details` JSONB 含三種出貨方式詳情 |
 | shop_categories | 商城分類 | tenant_id + name 唯一 |
-| auction_orders | 競標訂單 | |
+| auction_orders | 競標訂單／喊單登記 | `source_key` 喊單身分證（租戶內唯一，防重複入單） |
 | support_tickets | 客服工單 | |
 | subscription_plans | 訂閱方案 | |
 | super_admins | 超級管理員 | 寫入權限已全面封鎖 |
@@ -201,10 +214,20 @@ Supabase 專案 ID: `kashgsxlrdyuirijocld`
 - `add_checkout_payment_v1` — 記一筆收款（累加 `paid_amount`，取代「負項商品當收據」；賣貨便 url_sent 記款會清賣場退回 pending）
 - `list_checkouts_v1` 回傳含 `outstanding_amount`（= 總額 − 已付，賣貨便插件開賣場用尚欠額）+ `p_sort`（排序：created_desc / amount_desc / amount_asc / owed_desc）
 
-**競標**
+**競標 / 喊單登記**（`/orders/manual` 手動登記 + Mac 收單工具共用）
 - `get_auction_orders_v1` / `create_auction_order_v1`
 - `admin_claim_auction_order_v1` / `admin_unclaim_auction_order_v1`
 - `delete_auction_order_v1` / `delete_auction_orders_by_date_v1`
+- `screener_lookup_members_v1(p_tenant_id, p_names[])` — 暱稱→會員強比對（anon 可用，唯讀）
+- `screener_existing_source_keys_v1(p_tenant_id, p_keys[])` — 查哪些喊單已入過（去重用）
+
+> ⚠️ `create_auction_order_v1` 於 2026-07 加了三個**選填**參數（網頁端不傳＝行為完全不變）：
+> - `p_member_id` — 帶了就直接綁指定會員，跳過內建的陽春暱稱比對
+> - `p_skip_match` — 強制標待認領，不讓它 `LIMIT 1` 亂猜同名者
+> - `p_source_key` — 喊單身分證；已存在就回 `status='duplicate'` 不重複建單
+>
+> 對應新增 `auction_orders.source_key` 欄位 + `(tenant_id, source_key)` 唯一索引。
+> 它內建比對只有 `LOWER(TRIM(nickname)) =` 陽春相等，**會漏顏文字/含空格的暱稱**。
 
 **會員**
 - `search_members_v1` / `get_tenant_members`
