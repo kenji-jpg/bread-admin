@@ -554,6 +554,71 @@ export default function ShopPage() {
     }
   }, [tenantSlug, profile?.userId, supabase])
 
+  // ===== 客人自主結帳 =====
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false)
+  const [checkoutInit, setCheckoutInit] = useState<any>(null)
+  const [checkoutLoading, setCheckoutLoading] = useState(false)
+  const [coMethod, setCoMethod] = useState<'' | 'seven_store' | 'delivery' | 'myship'>('')
+  const [coName, setCoName] = useState('')
+  const [coPhone, setCoPhone] = useState('')
+  const [coStore, setCoStore] = useState('')
+  const [coAddress, setCoAddress] = useState('')
+  const [coSubmitting, setCoSubmitting] = useState(false)
+  const [coDone, setCoDone] = useState<{ method: string; checkoutNo: string } | null>(null)
+  const [coError, setCoError] = useState('')
+
+  const openCheckout = useCallback(async () => {
+    if (!tenant?.id || !profile?.userId) return
+    setIsCheckoutOpen(true); setCoDone(null); setCoError(''); setCoMethod(''); setCheckoutInit(null)
+    setCheckoutLoading(true)
+    try {
+      const { data } = await supabase.rpc('get_shop_checkout_init_v1', {
+        p_tenant_id: tenant.id, p_line_user_id: profile.userId,
+      })
+      if (data?.success) setCheckoutInit(data)
+      else setCoError('載入結帳資料失敗')
+    } catch { setCoError('載入結帳資料失敗') } finally { setCheckoutLoading(false) }
+  }, [tenant?.id, profile?.userId, supabase])
+
+  // 選出貨方式 → 自動帶入上次同方式的寄送資料
+  const pickCheckoutMethod = (m: 'seven_store' | 'delivery' | 'myship') => {
+    setCoMethod(m); setCoError('')
+    const pre = m === 'seven_store' ? checkoutInit?.prefill_seven_store
+      : m === 'delivery' ? checkoutInit?.prefill_delivery : null
+    if (pre) {
+      setCoName(pre.receiver_name || ''); setCoPhone(pre.receiver_phone || '')
+      setCoStore(pre.store_name || ''); setCoAddress(pre.address || '')
+    }
+  }
+
+  const submitCheckout = useCallback(async () => {
+    if (!tenant?.id || !profile?.userId || !coMethod) return
+    setCoSubmitting(true); setCoError('')
+    try {
+      const { data, error } = await supabase.rpc('create_shop_checkout_v1', {
+        p_tenant_id: tenant.id, p_line_user_id: profile.userId,
+        p_shipping_method: coMethod,
+        p_receiver_name: coName || null, p_receiver_phone: coPhone || null,
+        p_store_name: coStore || null, p_address: coAddress || null,
+      })
+      if (error) throw error
+      if (!data?.success) {
+        const map: Record<string, string> = {
+          new_customer_must_prepay: '首次購買需先匯款，請選擇店到店或宅配',
+          missing_receiver: '請填寫姓名與電話',
+          missing_store_name: '請填寫 7-11 店名',
+          missing_address: '請填寫收件地址',
+          no_ready_orders: '目前沒有可結帳的訂單',
+          member_not_found: '找不到會員資料',
+        }
+        setCoError(map[data?.error as string] || '結帳失敗，請稍後再試')
+        return
+      }
+      setCoDone({ method: coMethod, checkoutNo: data.checkout_no })
+      loadMyOrders()
+    } catch { setCoError('結帳失敗，請稍後再試') } finally { setCoSubmitting(false) }
+  }, [tenant?.id, profile?.userId, coMethod, coName, coPhone, coStore, coAddress, supabase, loadMyOrders])
+
   // 載入收藏
   const loadFavorites = useCallback(async () => {
     if (!profile?.userId) return
@@ -3462,10 +3527,138 @@ export default function ShopPage() {
                 )}
               </div>
 
+              {/* 底部：我要結帳 */}
+              {uncheckedOrders.length > 0 && (
+                <div className="px-5 py-3" style={{ borderTop: '1px solid #E8D5BE', backgroundColor: '#FFFDF9' }}>
+                  <button
+                    onClick={() => { setIsOrderDrawerOpen(false); openCheckout() }}
+                    className="w-full py-3 rounded-xl font-bold text-white active:scale-[0.98] transition-transform"
+                    style={{ backgroundColor: '#E8912D' }}
+                  >
+                    🛒 我要結帳（{uncheckedOrders.length} 筆 · ${uncheckedOrders.reduce((s, o) => s + (o.unit_price || 0) * (o.quantity || 0), 0).toLocaleString()}）
+                  </button>
+                </div>
+              )}
+
             </motion.div>
           </motion.div>
           )
         })()}
+      </AnimatePresence>
+
+      {/* 客人自主結帳 */}
+      <AnimatePresence>
+        {isCheckoutOpen && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] bg-black/50 flex items-end sm:items-center justify-center"
+            onClick={() => !coSubmitting && setIsCheckoutOpen(false)}>
+            <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 28 }}
+              className="w-full sm:max-w-md max-h-[88vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl"
+              style={{ backgroundColor: '#fff', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+              onClick={(e) => e.stopPropagation()}>
+              <div className="px-5 py-4 sticky top-0 z-10 flex items-center justify-between" style={{ backgroundColor: '#fff', borderBottom: '1px solid #E8D5BE' }}>
+                <h3 className="text-lg font-bold" style={{ color: '#4A2C17' }}>結帳</h3>
+                <button onClick={() => !coSubmitting && setIsCheckoutOpen(false)} style={{ color: '#8B6B4A' }}>✕</button>
+              </div>
+
+              <div className="px-5 py-4">
+                {checkoutLoading ? (
+                  <p className="text-center py-8" style={{ color: '#8B6B4A' }}>載入中…</p>
+                ) : coDone ? (
+                  <div className="text-center py-6">
+                    <div className="text-4xl mb-3">✅</div>
+                    <p className="font-bold text-lg mb-1" style={{ color: '#4A2C17' }}>訂單已成立</p>
+                    <p className="text-sm mb-4" style={{ color: '#8B6B4A' }}>單號 {coDone.checkoutNo}</p>
+                    {coDone.method === 'myship' ? (
+                      <div className="rounded-xl p-4 text-sm text-left" style={{ backgroundColor: '#FFF6E9', color: '#8B6B4A' }}>
+                        🏪 已為你建立賣貨便訂單。<br />
+                        <b>請等待我們開立賣場</b>，開好後會用 LINE 通知你前往下單付款 🙏
+                      </div>
+                    ) : (
+                      <div className="rounded-xl p-4 text-sm text-left" style={{ backgroundColor: '#FFF6E9', color: '#8B6B4A' }}>
+                        💬 <b>結帳資訊已傳到你的 LINE</b>（含匯款帳號）。<br />
+                        請於 <b>3 天內完成匯款</b>，並回覆帳號<b>後五碼</b>，我們會盡快安排出貨 🙏
+                      </div>
+                    )}
+                    <button onClick={() => setIsCheckoutOpen(false)} className="mt-5 w-full py-3 rounded-xl font-bold text-white" style={{ backgroundColor: '#E8912D' }}>完成</button>
+                  </div>
+                ) : checkoutInit ? (
+                  <>
+                    <p className="text-sm font-semibold mb-2" style={{ color: '#4A2C17' }}>結帳明細（{checkoutInit.item_count} 筆）</p>
+                    <div className="rounded-xl p-3 mb-3 space-y-1" style={{ backgroundColor: '#FFF9F0' }}>
+                      {(checkoutInit.items || []).map((it: any) => (
+                        <div key={it.id} className="flex justify-between text-sm gap-2" style={{ color: '#6B4A2F' }}>
+                          <span>{it.name}{it.variant_name ? `（${it.variant_name}）` : ''} ×{it.qty}</span>
+                          <span className="shrink-0">${Number(it.subtotal).toLocaleString()}</span>
+                        </div>
+                      ))}
+                      <div className="flex justify-between pt-2 mt-1 font-bold" style={{ borderTop: '1px solid #E8D5BE', color: '#4A2C17' }}>
+                        <span>合計</span><span>${Number(checkoutInit.total_amount || 0).toLocaleString()}</span>
+                      </div>
+                    </div>
+
+                    {checkoutInit.is_new_customer && (
+                      <p className="text-xs mb-3 rounded-lg px-3 py-2" style={{ backgroundColor: '#FFF1E0', color: '#B5651D' }}>
+                        🆕 首次購買需<b>先完成匯款</b>，請選擇「7-11 店到店」或「宅配」
+                      </p>
+                    )}
+
+                    <p className="text-sm font-semibold mb-2" style={{ color: '#4A2C17' }}>選擇取貨方式</p>
+                    <div className="space-y-2 mb-4">
+                      {[
+                        { k: 'seven_store', label: '🏪 7-11 店到店（先匯款）' },
+                        { k: 'delivery', label: '🚚 宅配（先匯款）' },
+                        ...(!checkoutInit.is_new_customer ? [{ k: 'myship', label: '🛍 賣貨便（取貨付款）' }] : []),
+                      ].map((o: any) => (
+                        <button key={o.k} onClick={() => pickCheckoutMethod(o.k)}
+                          className="w-full py-3 px-4 rounded-xl text-left text-sm font-medium"
+                          style={{
+                            backgroundColor: coMethod === o.k ? '#FFF1E0' : '#FFFDF9',
+                            border: `2px solid ${coMethod === o.k ? '#E8912D' : '#E8D5BE'}`,
+                            color: '#4A2C17',
+                          }}>
+                          {o.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {(coMethod === 'seven_store' || coMethod === 'delivery') && (
+                      <div className="space-y-2 mb-4">
+                        <input value={coName} onChange={(e) => setCoName(e.target.value)} placeholder="收件人姓名（真實姓名）"
+                          className="w-full px-3 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #E8D5BE' }} />
+                        <input value={coPhone} onChange={(e) => setCoPhone(e.target.value)} placeholder="聯絡電話" inputMode="tel"
+                          className="w-full px-3 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #E8D5BE' }} />
+                        {coMethod === 'seven_store' ? (
+                          <input value={coStore} onChange={(e) => setCoStore(e.target.value)} placeholder="7-11 店名（例：文五門市）"
+                            className="w-full px-3 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #E8D5BE' }} />
+                        ) : (
+                          <textarea value={coAddress} onChange={(e) => setCoAddress(e.target.value)} placeholder="收件地址" rows={2}
+                            className="w-full px-3 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #E8D5BE' }} />
+                        )}
+                      </div>
+                    )}
+                    {coMethod === 'myship' && (
+                      <p className="text-xs mb-4 rounded-lg px-3 py-2" style={{ backgroundColor: '#F0F7FF', color: '#3D6B99' }}>
+                        賣貨便由你自行在 7-11 選取貨門市，不需填寫寄送資料。
+                      </p>
+                    )}
+
+                    {coError && <p className="text-sm mb-3" style={{ color: '#C4735E' }}>{coError}</p>}
+
+                    <button onClick={submitCheckout} disabled={!coMethod || coSubmitting}
+                      className="w-full py-3 rounded-xl font-bold text-white disabled:opacity-40"
+                      style={{ backgroundColor: '#E8912D' }}>
+                      {coSubmitting ? '處理中…' : '確認結帳'}
+                    </button>
+                  </>
+                ) : (
+                  <p className="text-center py-8" style={{ color: '#C4735E' }}>{coError || '載入失敗'}</p>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
       </AnimatePresence>
 
       {/* ========== 管理員面板 Drawer ========== */}
