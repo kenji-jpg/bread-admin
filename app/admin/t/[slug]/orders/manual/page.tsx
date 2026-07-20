@@ -598,6 +598,8 @@ export default function ManualOrdersPage() {
             if (skipped) note += ` · 已入過 ${skipped}（跳過）`
             note += ` · 新增 ${resolved.length - skipped}`
             if (t.needsVariants) note += '　⚠️ 有人喊「各1／全套」但沒有規格清單，請在上方補規格再解析'
+            // 沒複製到賣家自己的貼文 → 抓不到這串的指紋 → 去重會失效
+            if (!t.threadTime) note += '　⚠️ 沒有複製到你自己的貼文（最上面那則），防重複功能會失效，建議從討論串最上面開始複製'
             setParseNote(note)
         } catch (e) {
             setParseNote(`解析失敗：${e instanceof Error ? e.message : '未知錯誤'}`)
