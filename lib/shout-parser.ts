@@ -358,21 +358,23 @@ export function parseThread(
 
 /**
  * 喊單身分證（冪等去重的鑰匙）
- * ⚠️ 只能由「討論串原文」決定：
- *   - 日期取自討論串的分隔線，**絕不可用今天**（否則隔天補掃同一串會重複入單）
- *   - 指紋用賣家貼文時間，不用商品名（商品名是猜的、會變）
- *   - 用原文 lead，不用切分後的名字（切分邏輯會隨解析器改進而變）
+ *
+ * ★鑰匙的每個元素都必須「不受複製範圍影響」，否則同一則喊單會算出不同身分證 → 重複入單。
+ *
+ * - **不可放日期**：日期來自「複製範圍裡的第一條分隔線」，多框一行日期就變了。
+ *   （踩過：Mac 貼的沒帶到 07.16 分隔線算成 0717、網頁貼的帶到了算成 0716 → 整串重複入單）
+ * - **不可用今天**：隔天補掃同一串就變了。
+ * - 指紋用**賣家貼文時間**，不用商品名（商品名是猜的、複製範圍不同會變）。
+ * - 用**原文 lead**，不用切分後的名字（切分邏輯會隨解析器改進而變，也不受手動編輯影響）。
  */
 export function makeSourceKey(args: {
-    threadDate: string | null
     threadTime: string | null
     product: string
     rawLead: string
     time: string
     variant: string | null
 }): string {
-    const d = args.threadDate ?? ''
     const anchor = args.threadTime ? `T${args.threadTime}` : `P${normalizeLead(args.product)}`
     const item = args.variant ? `|${normalizeLead(args.variant)}` : ''
-    return `${d}|${anchor}|${args.time}|${normalizeLead(args.rawLead)}${item}`
+    return `${anchor}|${args.time}|${normalizeLead(args.rawLead)}${item}`
 }

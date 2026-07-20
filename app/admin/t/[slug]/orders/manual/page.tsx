@@ -574,7 +574,7 @@ export default function ManualOrdersPage() {
 
             const resolved = resolveShouts(t.shouts, map, t.variants)
             const keys = resolved.map(r => makeSourceKey({
-                threadDate: r.date, threadTime: t.threadTime,
+                threadTime: t.threadTime,
                 product: defaultProductName || t.productGuess,
                 rawLead: r.lead, time: r.time, variant: r.variant,
             }))
