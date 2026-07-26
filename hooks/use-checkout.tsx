@@ -27,6 +27,7 @@ export interface CheckoutListItem {
     customer_name: string | null
     total_amount: number
     paid_amount: number  // 累計已匯款金額（用來推 partial 狀態 + 算需補款 $X）
+    outstanding_amount?: number  // 尚欠額 = GREATEST(0, total - paid)；賣貨便開賣場用此金額（無預付時 = total）
     shipping_fee: number
     item_count: number
     checkout_items: string | null  // ✅ 新增：商品明細 JSON 字串
