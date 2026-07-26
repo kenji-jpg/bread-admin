@@ -97,6 +97,7 @@ export interface ResolvedRow {
     time: string
     date: string | null
     expanded: boolean
+    lineAmount: number | null
 }
 
 /**
@@ -140,6 +141,7 @@ export function resolveShouts(
         return {
             name: chosen, variant: prod, qty: s.qty, binding,
             lead: s.lead, time: s.time, date: s.date, expanded: s.expanded,
+            lineAmount: s.lineAmount,
         }
     })
 }

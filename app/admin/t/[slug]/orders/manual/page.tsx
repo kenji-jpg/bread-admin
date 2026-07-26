@@ -48,7 +48,7 @@ import {
 } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
-import { parseThread, makeSourceKey } from '@/lib/shout-parser'
+import { parseThread, parseManualList, makeSourceKey } from '@/lib/shout-parser'
 import { buildQueries, resolveShouts, STATUS_LABEL, type ResultDTO, type Binding } from '@/lib/shout-matcher'
 import {
     Upload,
@@ -180,6 +180,7 @@ interface ShoutRow {
     alreadyEntered: boolean   // 先前已入過 → 跳過
     expanded: boolean         // 「各1／全套」自動展開的 → 要人工確認
     excluded: boolean
+    lineAmount: number | null // 手動錄單「一行自帶金額」；null = 吃統一金額
 }
 
 // 格式化日期顯示
@@ -250,6 +251,8 @@ export default function ManualOrdersPage() {
     const [rows, setRows] = useState<ShoutRow[]>([])
     const [isParsing, setIsParsing] = useState(false)
     const [parseNote, setParseNote] = useState<string | null>(null)
+    const [entryMode, setEntryMode] = useState<'parse' | 'manual'>('parse')
+    const variantList = variantsStr.split(/[/／、,，|｜ ]/).map(v => v.trim()).filter(Boolean)
     const [sellerInput, setSellerInput] = useState('')
     const [savingSeller, setSavingSeller] = useState(false)
 
@@ -590,7 +593,7 @@ export default function ManualOrdersPage() {
                 name: r.name, variant: r.variant, qty: r.qty,
                 binding: r.binding, sourceKey: keys[i],
                 alreadyEntered: already.has(keys[i]),
-                expanded: r.expanded, excluded: false,
+                expanded: r.expanded, excluded: false, lineAmount: r.lineAmount,
             })))
 
             const skipped = keys.filter(k => already.has(k)).length
@@ -612,15 +615,52 @@ export default function ManualOrdersPage() {
     const boundCount = newRows.filter(r => r.binding.status === 'bound').length
     const expandedCount = newRows.filter(r => r.expanded).length
     const skippedCount = rows.filter(r => r.alreadyEntered).length
-    const totalAmount = newRows.reduce((s, r) => s + r.qty * (parseInt(defaultAmount, 10) || 0), 0)
+    const totalAmount = newRows.reduce((s, r) => s + rowAmount(r), 0)
 
     const patchRow = (i: number, patch: Partial<ShoutRow>) =>
         setRows(rs => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)))
 
+    // 手動錄單：一行一筆、所見即所得、不去重
+    const handleManualParse = async () => {
+        if (!tenant?.id || !rawText.trim()) return
+        setIsParsing(true); setParseNote(null)
+        try {
+            const unit = parseInt(defaultAmount, 10) || 0
+            const shouts = parseManualList(rawText, {
+                defaultProduct: defaultProductName.trim() || null, variants: variantList,
+            })
+            if (!shouts.length) { setRows([]); setParseNote('沒有解析到資料'); return }
+            if (shouts.some(sh => sh.lineAmount == null) && unit <= 0) {
+                setParseNote('⚠️ 有行沒有金額：請在上面填統一金額，或每行寫「暱稱 商品 金額」')
+                return
+            }
+            const { data: lookup } = await supabase.rpc('screener_lookup_members_v1', {
+                p_tenant_id: tenant.id, p_names: buildQueries(shouts),
+            }) as { data: { results?: ResultDTO[] } | null }
+            const map: Record<string, ResultDTO> = {}
+            for (const r of (lookup?.results ?? [])) map[r.query] = r
+
+            const resolved = resolveShouts(shouts, map, variantList)
+            setRows(resolved.map((r, i) => ({
+                key: `m${i}-${r.lead}`,
+                name: r.name, variant: r.variant, qty: r.qty,
+                binding: r.binding, sourceKey: '',        // 手動不去重
+                alreadyEntered: false, expanded: false,
+                lineAmount: r.lineAmount, excluded: false,
+            })))
+            setParseNote(`共 ${resolved.length} 筆`)
+        } catch (e) {
+            setParseNote(`解析失敗：${e instanceof Error ? e.message : '未知錯誤'}`)
+        } finally {
+            setIsParsing(false)
+        }
+    }
+
+    const rowAmount = (r: ShoutRow) => r.lineAmount ?? ((parseInt(defaultAmount, 10) || 0) * r.qty)
+
     const handleImportShouts = async () => {
         if (!tenant?.id || !newRows.length) return
-        const unit = parseInt(defaultAmount, 10)
-        if (!unit || unit <= 0) { toast.error('請填金額'); return }
+        if (newRows.some(r => rowAmount(r) <= 0)) { toast.error('有筆金額是 0，請填金額'); return }
         setIsImporting(true)
         let claimed = 0, pending = 0, dup = 0, failed = 0
         try {
@@ -630,13 +670,13 @@ export default function ManualOrdersPage() {
                     p_tenant_id: tenant.id,
                     p_auction_date: auctionDate.trim() || null,
                     p_winner_nickname: r.name,
-                    p_amount: unit * r.qty,
+                    p_amount: rowAmount(r),
                     p_product_name: r.variant || defaultProductName || null,
                     p_note: r.qty > 1 ? `×${r.qty}` : null,
                     p_is_arrived: orderIsArrived,
                     p_member_id: isBound ? r.binding.member?.id ?? null : null,
                     p_skip_match: !isBound,
-                    p_source_key: r.sourceKey,
+                    p_source_key: r.sourceKey || null,
                 }) as { data: CreateAuctionOrderResponse | null; error: Error | null }
 
                 if (error || !data?.success) { failed++; continue }
@@ -810,6 +850,24 @@ ${orderList}
                                 </div>
                             </div>
 
+                            {/* 兩種模式：貼討論串自動解析 vs 自己打名單 */}
+                            <div className="flex gap-2">
+                                <Button
+                                    variant={entryMode === 'parse' ? 'default' : 'outline'}
+                                    onClick={() => { setEntryMode('parse'); setRows([]); setParseNote(null) }}
+                                    className="rounded-xl flex-1"
+                                >
+                                    解析入單（貼討論串）
+                                </Button>
+                                <Button
+                                    variant={entryMode === 'manual' ? 'default' : 'outline'}
+                                    onClick={() => { setEntryMode('manual'); setRows([]); setParseNote(null) }}
+                                    className="rounded-xl flex-1"
+                                >
+                                    手動錄單（自己打名單）
+                                </Button>
+                            </div>
+
                             {/* 主商品 / 金額 / 規格 —— 貼文有寫會自動帶出，隨時可改 */}
                             <div className="space-y-2">
                                 <Label className="flex items-center gap-1.5">
@@ -832,15 +890,23 @@ ${orderList}
                                         className="rounded-xl w-40 font-mono"
                                     />
                                 </div>
-                                <Input
-                                    placeholder="規格：吐司／麵包／巴士（貼文沒寫可在這裡補，補了「各1／全套」才能展開）"
-                                    value={variantsStr}
-                                    onChange={(e) => setVariantsStr(e.target.value)}
-                                    className="rounded-xl"
-                                />
+                                {entryMode === 'parse' && (
+                                    <Input
+                                        placeholder="規格：吐司／麵包／巴士（貼文沒寫可在這裡補，補了「各1／全套」才能展開）"
+                                        value={variantsStr}
+                                        onChange={(e) => setVariantsStr(e.target.value)}
+                                        className="rounded-xl"
+                                    />
+                                )}
+                                <p className="text-xs text-muted-foreground">
+                                    {entryMode === 'manual'
+                                        ? '手動錄單：每行可寫「暱稱 商品 金額」自帶金額；或填上面統一金額後每行只寫「暱稱」「暱稱 +2」。'
+                                        : '金額留空時，會從貼文的「$250 / 一組250」自動帶出。'}
+                                </p>
                             </div>
 
-                            {/* 賣家自己的名稱：用來排除自己的公告訊息 */}
+                            {/* 賣家自己的名稱：用來排除自己的公告訊息（僅解析模式需要） */}
+                            {entryMode === 'parse' && (
                             <div className="space-y-2">
                                 <Label className="flex items-center gap-1.5">
                                     <Users className="h-4 w-4" />
@@ -866,32 +932,36 @@ ${orderList}
                                     設定後，你自己發的公告（例如「要的在這邊+1」）就不會被當成客人喊單。
                                 </p>
                             </div>
+                            )}
 
                             {/* 貼上區 */}
                             <div className="space-y-2">
-                                <Label>把整段討論串貼下面（也支援舊的純名單：一行一個暱稱）</Label>
+                                <Label>{entryMode === 'manual' ? '名單（一行一筆）' : '把整段討論串貼下面'}</Label>
                                 <Textarea
-                                    placeholder={`09:33 麵包小姐 全新合金車 $250\n規格：吐司／麵包\n要的在這邊+1\n09:35 Momo☺️ 吐司+1\n09:42 Dean 麵包、細菌人各1`}
+                                    placeholder={entryMode === 'manual'
+                                        ? `JA 重寄運費 38\n小美 打鼓玩具 780\n阿華 500\n凡凡 +2`
+                                        : `09:33 麵包小姐 全新合金車 $250\n規格：吐司／麵包\n要的在這邊+1\n09:35 Momo☺️ 吐司+1\n09:42 Dean 麵包、細菌人各1`}
                                     value={rawText}
                                     onChange={(e) => setRawText(e.target.value)}
                                     className="min-h-[180px] font-mono text-sm rounded-xl"
                                 />
                                 <p className="text-xs text-muted-foreground">
-                                    會自動略過你自己的公告訊息、自動展開「各1／全套」、自動比對會員；
-                                    <span className="font-medium">同一串重複貼也不會重複入單</span>。
+                                    {entryMode === 'manual'
+                                        ? '一行一筆、所見即所得；會比對會員。手動錄單不做重複偵測。'
+                                        : <>會自動略過你自己的公告訊息、自動展開「各1／全套」、自動比對會員；<span className="font-medium">同一串重複貼也不會重複入單</span>。</>}
                                 </p>
                             </div>
 
                             <div className="flex items-center gap-2">
                                 <Button
-                                    onClick={handleParse}
+                                    onClick={entryMode === 'manual' ? handleManualParse : handleParse}
                                     disabled={isParsing || !rawText.trim()}
                                     variant="outline"
                                     className="rounded-xl"
                                 >
                                     {isParsing
-                                        ? <><Loader2 className="animate-spin mr-2 h-4 w-4" />解析中...</>
-                                        : <><Eye className="mr-2 h-4 w-4" />解析</>}
+                                        ? <><Loader2 className="animate-spin mr-2 h-4 w-4" />處理中...</>
+                                        : <><Eye className="mr-2 h-4 w-4" />{entryMode === 'manual' ? '錄單' : '解析'}</>}
                                 </Button>
                                 {parseNote && (
                                     <span className="text-sm text-muted-foreground">{parseNote}</span>
@@ -954,9 +1024,16 @@ ${orderList}
                                                         onChange={(e) => patchRow(i, { qty: Math.max(1, parseInt(e.target.value, 10) || 1) })}
                                                         className="h-8 w-16 rounded-lg font-mono text-xs"
                                                     />
-                                                    <span className="text-sm font-medium w-20 text-right">
-                                                        ${((parseInt(defaultAmount, 10) || 0) * r.qty).toLocaleString()}
-                                                    </span>
+                                                    <div className="flex items-center gap-0.5">
+                                                        <span className="text-xs text-muted-foreground">$</span>
+                                                        <Input
+                                                            type="number"
+                                                            value={rowAmount(r)}
+                                                            min={0}
+                                                            onChange={(e) => patchRow(i, { lineAmount: Math.max(0, parseInt(e.target.value, 10) || 0) })}
+                                                            className="h-8 w-20 rounded-lg font-mono text-xs text-right"
+                                                        />
+                                                    </div>
                                                     {r.expanded && !skip && (
                                                         <Badge className="bg-orange-500/15 text-orange-600 border-orange-500/30 text-[10px]">展開</Badge>
                                                     )}

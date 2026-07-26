@@ -246,6 +246,7 @@ export interface ParsedShout {
     time: string
     date: string | null
     expanded: boolean
+    lineAmount: number | null   // 手動錄單「一行自帶金額」用；null = 吃上面的統一金額
 }
 
 export interface ParsedThread {
@@ -335,6 +336,7 @@ export function parseThread(
                 shouts.push({
                     lead, name: null, nameSource: lead, variant: null, qty: 1,
                     time: m.time, date: m.date ?? threadDate, expanded: false,
+                    lineAmount: null,
                 })
             }
             continue
@@ -345,6 +347,7 @@ export function parseThread(
                 lead, name: r.name, nameSource: r.nameSource,
                 variant: it.variant, qty: it.qty,
                 time: m.time, date: m.date ?? threadDate, expanded: r.expanded,
+                lineAmount: null,
             })
         }
     }
@@ -379,4 +382,70 @@ export function makeSourceKey(args: {
     const anchor = args.threadTime ? `T${args.threadTime}` : `P${normalizeLead(args.product)}`
     const item = args.variant ? `|${normalizeLead(args.variant)}` : ''
     return `${anchor}|${args.time}|${normalizeLead(args.rawLead)}${item}`
+}
+
+
+// ── 手動錄單（獨立於討論串解析，一行一筆、所見即所得）────────────
+
+/** 一行自帶金額：「暱稱 [商品] 金額」，金額(總額)寫行尾、沒有 +數量。 */
+export function parseInlineAmount(text: string, variants: string[]):
+    { name: string; variant: string | null; amount: number } | null {
+    const t = (text ?? '').trim()
+    if (/[+＋*×xX]\s*\d/.test(t)) return null          // 有 +數量 → 不是這型
+    const parts = t.split(/[ 　\t]+/).filter(Boolean)
+    if (parts.length < 2) return null
+    const last = parts[parts.length - 1]
+    if (!/^\d{1,7}$/.test(last)) return null            // 行尾必須是純數字
+    const amount = parseInt(last, 10)
+    let name: string, variant: string | null = null
+    if (parts.length >= 3) {                             // 暱稱 商品 金額
+        variant = parts[parts.length - 2]
+        name = parts.slice(0, -2).join(' ')
+        const hit = variants.find(v => v.toLowerCase() === variant!.toLowerCase())
+        if (hit) variant = hit
+    } else {                                             // 暱稱 金額
+        name = parts.slice(0, -1).join(' ')
+    }
+    if (!name) return null
+    return { name, variant, amount }
+}
+
+/**
+ * 手動錄單：你自己打的名單，一行一筆、所見即所得。不做討論串解析、不排除賣家、不展開各1。
+ * 支援每行：
+ *   暱稱 商品 金額   （一行自帶金額）
+ *   暱稱 金額
+ *   暱稱 +N          （數量，吃統一金額）
+ *   暱稱             （吃統一商品/金額）
+ */
+export function parseManualList(
+    text: string,
+    opts: { defaultProduct: string | null; variants: string[] },
+): ParsedShout[] {
+    const out: ParsedShout[] = []
+    const norm = (text ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+    for (const raw of norm.split('\n')) {
+        const line = raw.trim()
+        if (!line) continue
+
+        const inl = parseInlineAmount(line, opts.variants)
+        if (inl) {
+            out.push({ lead: line, name: inl.name, nameSource: null,
+                       variant: inl.variant ?? opts.defaultProduct, qty: 1,
+                       time: '', date: null, expanded: false, lineAmount: inl.amount })
+            continue
+        }
+        const qm = line.match(/[+＋*×xX]\s*(\d+)\s*$/)
+        if (qm && qm.index !== undefined) {
+            const qty = Math.max(1, parseInt(qm[1], 10) || 1)
+            const name = line.slice(0, qm.index).trim()
+            if (!name) continue
+            out.push({ lead: line, name, nameSource: null, variant: opts.defaultProduct,
+                       qty, time: '', date: null, expanded: false, lineAmount: null })
+            continue
+        }
+        out.push({ lead: line, name: line, nameSource: null, variant: opts.defaultProduct,
+                   qty: 1, time: '', date: null, expanded: false, lineAmount: null })
+    }
+    return out
 }
