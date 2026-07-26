@@ -615,6 +615,7 @@ export default function ManualOrdersPage() {
     const boundCount = newRows.filter(r => r.binding.status === 'bound').length
     const expandedCount = newRows.filter(r => r.expanded).length
     const skippedCount = rows.filter(r => r.alreadyEntered).length
+    const rowAmount = (r: ShoutRow) => r.lineAmount ?? ((parseInt(defaultAmount, 10) || 0) * r.qty)
     const totalAmount = newRows.reduce((s, r) => s + rowAmount(r), 0)
 
     const patchRow = (i: number, patch: Partial<ShoutRow>) =>
@@ -655,8 +656,6 @@ export default function ManualOrdersPage() {
             setIsParsing(false)
         }
     }
-
-    const rowAmount = (r: ShoutRow) => r.lineAmount ?? ((parseInt(defaultAmount, 10) || 0) * r.qty)
 
     const handleImportShouts = async () => {
         if (!tenant?.id || !newRows.length) return
