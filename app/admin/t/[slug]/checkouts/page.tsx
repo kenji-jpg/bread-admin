@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
+import { MyshipOpenStoresButton } from '@/components/myship-open-stores-button'
 import { motion } from 'framer-motion'
 import { useTenant } from '@/hooks/use-tenant'
 import { useCheckout, type CheckoutListItem, type CheckoutDetailResult, type ListCheckoutsResult, type CheckoutItemDetail, type ShippingDetailsInput } from '@/hooks/use-checkout'
@@ -1172,11 +1173,14 @@ export default function CheckoutsPage() {
             className="space-y-6"
         >
             {/* Header */}
-            <div>
-                <h1 className="text-3xl font-bold tracking-tight">
-                    <span className="gradient-text">結帳單管理</span>
-                </h1>
-                <p className="text-muted-foreground mt-1">管理付款與出貨狀態</p>
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight">
+                        <span className="gradient-text">結帳單管理</span>
+                    </h1>
+                    <p className="text-muted-foreground mt-1">管理付款與出貨狀態</p>
+                </div>
+                <MyshipOpenStoresButton />
             </div>
 
             {/* Stats Summary */}
