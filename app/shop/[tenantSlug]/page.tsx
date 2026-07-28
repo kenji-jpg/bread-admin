@@ -2388,7 +2388,7 @@ export default function ShopPage() {
               <div className="mb-3">
                 {modalImages.length > 0 ? (
                   <div className="relative">
-                    <div className="overflow-hidden rounded-2xl relative touch-pan-y" style={{ maxHeight: '45vh' }}>
+                    <div className="overflow-hidden rounded-2xl relative touch-pan-y" style={{ aspectRatio: '1', maxHeight: '65vh' }}>
                       <div
                         className="flex"
                         style={{
@@ -2397,7 +2397,7 @@ export default function ShopPage() {
                         }}
                       >
                         {modalImages.map((url, i) => (
-                          <div key={i} className="min-w-full relative" style={{ aspectRatio: '4/5', maxHeight: '55vh', WebkitTouchCallout: 'none', userSelect: 'none' }}>
+                          <div key={i} className="min-w-full relative" style={{ aspectRatio: '1', WebkitTouchCallout: 'none', userSelect: 'none' }}>
                             <img
                               src={url}
                               alt={`${selectedProduct.name} ${i + 1}`}
@@ -2446,7 +2446,7 @@ export default function ShopPage() {
                     )}
                   </div>
                 ) : (
-                  <div className="w-full rounded-2xl flex items-center justify-center" style={{ backgroundColor: '#F5E0C4', aspectRatio: '1', maxHeight: '45vh' }}>
+                  <div className="w-full rounded-2xl flex items-center justify-center" style={{ backgroundColor: '#F5E0C4', aspectRatio: '1', maxHeight: '65vh' }}>
                     <Package className="w-16 h-16" style={{ color: '#C4A882' }} />
                   </div>
                 )}
