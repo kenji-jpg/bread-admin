@@ -1,5 +1,7 @@
 // ============================================
-// 🔔 Edge Function: notify-checkout-v1 (v14)
+// 🔔 Edge Function: notify-checkout-v1 (v15)
+// v15: 宅配/店到店通知回讀已填的寄件資訊(shipping_details)，改「完成匯款後回覆後五碼」；
+//      未填寄件資訊的舊單仍沿用「請回覆姓名/電話/店名」
 // v14: 賣貨便免運(myship_free)的開賣場通知顯示「✨ 賣貨便免運 -$38（已折抵）」
 // v13: 補款通知在「達免運(運費=0)」時顯示「運費 $X 免收（已折抵本次補款）」說明
 //      門檻金額讀租戶 free_shipping_threshold（預設 3500）
@@ -60,6 +62,25 @@ function bankBlock(p: PaymentInfo | null): string {
   return `💳 匯款資訊：\n銀行：${x.bank || '-'}\n戶名：${x.name || '-'}\n帳號：${x.account || '-'}\n\n`
 }
 
+// 清掉人工貼上殘留的標籤前綴（7-11 / 店名： / 地址： 等）
+function cleanVal(s: unknown): string {
+  return String(s ?? '').replace(/^(7-?11)?\s*(店名|門市|姓名|電話|地址|收件地址)?\s*[:：]?\s*/i, '').trim()
+}
+// 已填的寄件資訊 → 回讀區塊（資料不齊回空字串）
+function shipInfoBlock(method: string, d: Record<string, unknown> | null): string {
+  if (!d) return ''
+  const name = cleanVal(d.receiver_name)
+  const phone = cleanVal(d.receiver_phone)
+  if (method === 'seven_store') {
+    const store = cleanVal(d.seven_store_name)
+    if (name && phone && store) return `📍 寄送資訊：${name} / ${phone} / 7-11 ${store}\n\n`
+  } else if (method === 'delivery') {
+    const addr = cleanVal(d.shipping_address)
+    if (name && phone && addr) return `📍 寄送資訊：${name} / ${phone}\n　地址：${addr}\n\n`
+  }
+  return ''
+}
+
 // ─── 補款通知（partial 用）──────────────────────────────
 function buildTopupMessage(
   checkoutNo: string,
@@ -104,6 +125,7 @@ function buildMessage(
   checkoutNo: string, totalAmount: number, shippingMethod: string, shippingFee: number,
   storeUrl: string | null, itemsText: string,
   paymentInfo: PaymentInfo | null, sevenStorePayment: PaymentInfo | null,
+  shippingDetails: Record<string, unknown> | null,
 ): { ok: true; message: string } | { ok: false; error: string } {
   const itemsBlock = itemsText ? `\n📦 商品明細：\n${itemsText}` : ''
 
@@ -123,10 +145,13 @@ function buildMessage(
     const isFree = shippingFee === 0
     const goodsSuffix = isFree ? `（免運）` : ''
     const grandLine = isFree ? '' : `💵 合計應付：＄${totalAmount.toLocaleString()}（商品 ＄${goodsAmount.toLocaleString()} + 運費 ＄${shippingFee.toLocaleString()}）\n\n`
+    const shipBlock = shipInfoBlock('delivery', shippingDetails)
+    const tail = shipBlock
+      ? shipBlock + bankBlock(paymentInfo) + `⚠️ 請於 3 天內完成匯款，完成匯款後請回覆帳號後五碼，我們會盡快為您安排出貨。`
+      : bankBlock(paymentInfo) + `📮 收到匯款後請回覆以下資訊安排出貨：\n姓名：\n電話：\n地址：\n\n⚠️ 請於 3 天內完成匯款，匯款後請告知後五碼。\n逾期將視為棄單處理。`
     return { ok: true, message:
       `📦 您的宅配訂單已開立！\n\n📋 單號：${checkoutNo}\n` + itemsBlock +
-      `\n💰 商品金額：＄${goodsAmount.toLocaleString()}${goodsSuffix}\n` + grandLine + bankBlock(paymentInfo) +
-      `📮 收到匯款後請回覆以下資訊安排出貨：\n姓名：\n電話：\n地址：\n\n⚠️ 請於 3 天內完成匯款，匯款後請告知後五碼。\n逾期將視為棄單處理。`,
+      `\n💰 商品金額：＄${goodsAmount.toLocaleString()}${goodsSuffix}\n` + grandLine + tail,
     }
   }
 
@@ -135,10 +160,13 @@ function buildMessage(
     const isFree = shippingFee === 0
     const goodsSuffix = isFree ? `（免運）` : ''
     const grandLine = isFree ? '' : `💵 合計應付：＄${totalAmount.toLocaleString()}（商品 ＄${goodsAmount.toLocaleString()} + 運費 ＄${shippingFee.toLocaleString()}）\n\n`
+    const shipBlock = shipInfoBlock('seven_store', shippingDetails)
+    const tail = shipBlock
+      ? shipBlock + bankBlock(sevenStorePayment || paymentInfo) + `⚠️ 請於 3 天內完成匯款，完成匯款後請回覆帳號後五碼，我們會盡快為您安排寄件。`
+      : bankBlock(sevenStorePayment || paymentInfo) + `📮 收到匯款後請回覆以下資訊安排寄件：\n姓名：\n電話：\n7-11 店名：\n\n⚠️ 請於 3 天內完成匯款，匯款後請告知後五碼。\n逾期將視為棄單處理。`
     return { ok: true, message:
       `📦 您的訂單已成立（🏪 7-11 店到店寄出）！\n\n📋 單號：${checkoutNo}\n` + itemsBlock +
-      `\n💰 商品金額：＄${goodsAmount.toLocaleString()}${goodsSuffix}\n` + grandLine + bankBlock(sevenStorePayment || paymentInfo) +
-      `📮 收到匯款後請回覆以下資訊安排寄件：\n姓名：\n電話：\n7-11 店名：\n\n⚠️ 請於 3 天內完成匯款，匯款後請告知後五碼。\n逾期將視為棄單處理。`,
+      `\n💰 商品金額：＄${goodsAmount.toLocaleString()}${goodsSuffix}\n` + grandLine + tail,
     }
   }
 
@@ -175,7 +203,7 @@ serve(async (req) => {
 
     const { data: checkout, error: coErr } = await supabase
       .from('checkouts')
-      .select('id, checkout_no, customer_name, total_amount, paid_amount, payment_status, shipping_fee, shipping_method, store_url, checkout_items, member_id')
+      .select('id, checkout_no, customer_name, total_amount, paid_amount, payment_status, shipping_fee, shipping_method, store_url, checkout_items, shipping_details, member_id')
       .eq('id', checkout_id).eq('tenant_id', tenant_id).maybeSingle()
     if (coErr || !checkout) return json({ success: false, error: 'checkout_not_found', message: '找不到結帳單' }, 404)
     if (!checkout.member_id) return json({ success: false, error: 'no_member', message: '結帳單無關聯會員' }, 422)
@@ -204,6 +232,7 @@ serve(async (req) => {
           checkout.checkout_no, checkout.total_amount, checkout.shipping_method || 'myship',
           checkout.shipping_fee ?? 0, checkout.store_url, itemsText,
           (tenant?.payment_info || null) as PaymentInfo | null, sevenStorePayment,
+          (checkout.shipping_details || null) as Record<string, unknown> | null,
         )
     if (!built.ok) return json({ success: false, error: 'message_build_failed', message: built.error }, 400)
 
