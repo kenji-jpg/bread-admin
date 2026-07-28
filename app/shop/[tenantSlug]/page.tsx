@@ -1212,7 +1212,7 @@ export default function ShopPage() {
           }
           // 上傳原圖
           if (newProductOriginals[i]) {
-            const orig = await compressImage(newProductOriginals[i], 800, 0.85)
+            const orig = await compressImage(newProductOriginals[i], 1440, 0.9)
             const origFile = new File([orig.blob], `${sku}-orig.${orig.ext}`, { type: orig.mime })
             const origPath = `${tenant.id}/products/${sku}-orig.${orig.ext}`
             const { error: origErr } = await supabase.storage.from('product-images').upload(origPath, origFile, { cacheControl: '3600', upsert: true, contentType: orig.mime })
@@ -1376,33 +1376,40 @@ export default function ShopPage() {
     if (!selectedProduct || !profile || !tenant) return
     setIsUploadingPhoto(true)
     try {
-      const imageUrls: string[] = []
+      const bigUrls: string[] = []   // 大圖（詳情頁，1440 高清）
+      const thumbUrls: string[] = [] // 縮圖（列表，400 省流量）
       for (let i = 0; i < files.length; i++) {
         const sku = `${selectedProduct.id.slice(0, 8)}-${Date.now()}-${i}`
-        const compressed = await compressImage(files[i])
-        const compressedFile = new File([compressed.blob], `${sku}.${compressed.ext}`, { type: compressed.mime })
-        const path = `${tenant.id}/products/${sku}.${compressed.ext}`
-        const { error: uploadErr } = await supabase.storage.from('product-images').upload(path, compressedFile, { contentType: compressed.mime })
-        if (uploadErr) throw uploadErr
-        const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(path)
-        imageUrls.push(urlData.publicUrl)
+        // 大圖 1440/0.9 → image_urls（點開看的大圖）
+        const big = await compressImage(files[i], 1440, 0.9)
+        const bigPath = `${tenant.id}/products/${sku}-orig.${big.ext}`
+        const { error: bigErr } = await supabase.storage.from('product-images').upload(bigPath, new File([big.blob], `${sku}-orig.${big.ext}`, { type: big.mime }), { contentType: big.mime, upsert: true })
+        if (bigErr) throw bigErr
+        bigUrls.push(supabase.storage.from('product-images').getPublicUrl(bigPath).data.publicUrl)
+        // 縮圖 400/0.7 → 列表用
+        const thumb = await compressImage(files[i], 400, 0.7)
+        const thumbPath = `${tenant.id}/products/${sku}.${thumb.ext}`
+        const { error: thumbErr } = await supabase.storage.from('product-images').upload(thumbPath, new File([thumb.blob], `${sku}.${thumb.ext}`, { type: thumb.mime }), { contentType: thumb.mime, upsert: true })
+        if (!thumbErr) thumbUrls.push(supabase.storage.from('product-images').getPublicUrl(thumbPath).data.publicUrl)
       }
-      // 合併現有圖片 + 新圖片
+      // 合併現有大圖 + 新大圖
       const existingUrls = (selectedProduct.image_urls && selectedProduct.image_urls.length > 0)
         ? selectedProduct.image_urls
         : selectedProduct.image_url ? [selectedProduct.image_url] : []
-      const allUrls = [...existingUrls, ...imageUrls]
+      const allUrls = [...existingUrls, ...bigUrls]
+      // 列表縮圖：保留現有的；沒有才用新縮圖第一張
+      const listThumb = selectedProduct.image_url || thumbUrls[0] || allUrls[0]
       // 更新 DB（透過 RPC 繞過 RLS）
       const { data, error } = await supabase.rpc('update_product_images_v1', {
         p_product_id: selectedProduct.id,
         p_line_user_id: profile.userId,
-        p_image_url: allUrls[0],
+        p_image_url: listThumb,
         p_image_urls: allUrls,
       })
       if (error) throw error
       if (!data?.success) throw new Error(data?.error)
       toast.success(`已新增 ${files.length} 張圖片`)
-      setSelectedProduct({ ...selectedProduct, image_url: allUrls[0], image_urls: allUrls })
+      setSelectedProduct({ ...selectedProduct, image_url: listThumb, image_urls: allUrls })
       loadShop()
     } catch (err: any) {
       console.error('Upload photo error:', err)
