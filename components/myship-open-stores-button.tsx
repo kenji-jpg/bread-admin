@@ -14,7 +14,7 @@ import { Store, Loader2, Download, Calculator } from 'lucide-react'
 import { toast } from 'sonner'
 
 // Chrome Web Store 未公開上架連結（上架後回填；空字串時退回純文字引導）
-const CHROME_STORE_URL = '' // TODO: 上架未公開後填入
+const CHROME_STORE_URL = 'https://chromewebstore.google.com/detail/penmofopldbgfnlinapelcnonmfmijkj'
 
 // 手機／平板無法裝桌面 Chrome 外掛，開賣場一律用電腦操作
 const isMobileUA = () =>
