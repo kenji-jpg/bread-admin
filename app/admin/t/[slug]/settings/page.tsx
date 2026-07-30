@@ -13,6 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
     Select,
@@ -74,6 +75,8 @@ import {
     QrCode,
     Lock,
     Wallet,
+    ExternalLink,
+    ChevronDown,
 } from 'lucide-react'
 
 type AssignableRole = 'admin' | 'staff' | 'viewer'
@@ -94,7 +97,7 @@ const roleIcons: Record<string, React.ReactNode> = {
 
 export default function SettingsPage() {
     const { tenant, isLoading: tenantLoading, refetch, isCrossTenantAccess } = useTenant()
-    const { canUseMyshipEmail, canAccessShop } = usePermission()
+    const { canUseMyshipEmail } = usePermission()
     const [formData, setFormData] = useState<Partial<Tenant>>({})
     const [isSaving, setIsSaving] = useState(false)
     const [freeShippingThreshold, setFreeShippingThreshold] = useState<string>('3500')
@@ -102,6 +105,10 @@ export default function SettingsPage() {
     const [showToken, setShowToken] = useState(false)
     const [showSecret, setShowSecret] = useState(false)
     const [activeTab, setActiveTab] = useState('basic') // 控制當前 Tab
+    // 付款：店到店匯款帳戶（存 settings.payment_info_seven_store）。sevenSame=true 表示與宅配相同
+    const [sevenSame, setSevenSame] = useState(true)
+    const [sevenPayment, setSevenPayment] = useState<{ bank: string; account: string; name: string }>({ bank: '', account: '', name: '' })
+    const [showTokenGuide, setShowTokenGuide] = useState(false)
     const supabase = createClient()
 
     // 團隊成員狀態
@@ -152,6 +159,16 @@ export default function SettingsPage() {
                 myship_notify_email: tenant.myship_notify_email || '',
             })
             setFreeShippingThreshold(String(tenant.free_shipping_threshold ?? 3500))
+
+            // 店到店匯款帳戶：有設定 → 顯示獨立帳戶；沒設定 → 視為與宅配相同
+            const seven = (tenant as { settings?: { payment_info_seven_store?: { bank?: string; account?: string; name?: string } } })?.settings?.payment_info_seven_store
+            if (seven && (seven.bank || seven.account || seven.name)) {
+                setSevenSame(false)
+                setSevenPayment({ bank: seven.bank || '', account: seven.account || '', name: seven.name || '' })
+            } else {
+                setSevenSame(true)
+                setSevenPayment({ bank: '', account: '', name: '' })
+            }
         }
     }, [tenant])
 
@@ -326,10 +343,10 @@ export default function SettingsPage() {
             const updateData: Parameters<typeof updateTenantSettings>[2] = {
                 name: formData.name,
                 shop_description: formData.shop_description,
-                business_hours: formData.business_hours as { start: string; end: string } | null,
                 payment_info: isMasked(formData.payment_info) ? undefined : formData.payment_info,
+                // 店到店匯款：勾「與宅配相同」→ 傳 null（RPC 移除 key、fallback 宅配帳戶）；否則傳獨立帳戶
+                payment_info_seven_store: sevenSame ? null : sevenPayment,
                 line_oa_id: formData.line_oa_id,
-                liff_id: formData.liff_id || null,
                 admin_line_ids: isMasked(formData.admin_line_ids) ? undefined : formData.admin_line_ids,
                 myship_notify_email: formData.myship_notify_email || null,
             }
@@ -626,26 +643,10 @@ export default function SettingsPage() {
 
             {/* Tabs */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-                <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:grid-cols-none lg:inline-flex">
+                <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:grid-cols-none lg:inline-flex">
                     <TabsTrigger value="basic" className="gap-2">
                         <Store className="h-4 w-4" />
                         <span className="hidden sm:inline">基本資訊</span>
-                    </TabsTrigger>
-                    <TabsTrigger
-                        value="billing"
-                        className="gap-2"
-                        onClick={(e) => {
-                            e.preventDefault()
-                            window.location.href = `/admin/t/${tenant?.slug}/settings/billing`
-                        }}
-                    >
-                        <Wallet className="h-4 w-4" />
-                        <span className="hidden sm:inline">帳單訂閱</span>
-                        {tenant?.plan === 'basic' && (
-                            <Badge variant="secondary" className="ml-1 text-xs">
-                                升級
-                            </Badge>
-                        )}
                     </TabsTrigger>
                     <TabsTrigger value="payment" className="gap-2">
                         <CreditCard className="h-4 w-4" />
@@ -697,36 +698,6 @@ export default function SettingsPage() {
                                             placeholder="簡短描述您的店家"
                                             className="rounded-xl"
                                         />
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <Label>營業開始時間</Label>
-                                            <Input
-                                                type="time"
-                                                value={formData.business_hours?.start || ''}
-                                                onChange={(e) =>
-                                                    setFormData({
-                                                        ...formData,
-                                                        business_hours: { ...formData.business_hours, start: e.target.value, end: formData.business_hours?.end || '' },
-                                                    })
-                                                }
-                                                className="rounded-xl"
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label>營業結束時間</Label>
-                                            <Input
-                                                type="time"
-                                                value={formData.business_hours?.end || ''}
-                                                onChange={(e) =>
-                                                    setFormData({
-                                                        ...formData,
-                                                        business_hours: { ...formData.business_hours, start: formData.business_hours?.start || '', end: e.target.value },
-                                                    })
-                                                }
-                                                className="rounded-xl"
-                                            />
-                                        </div>
                                     </div>
                                     <div className="pt-4">
                                         <Button
@@ -832,6 +803,18 @@ export default function SettingsPage() {
                                         <span className="text-sm text-muted-foreground">本月訊息</span>
                                         <span className="font-medium">{tenant.monthly_messages || 0}</span>
                                     </div>
+                                    <Separator />
+                                    <Button
+                                        variant="outline"
+                                        className="w-full rounded-xl gap-2"
+                                        onClick={() => { window.location.href = `/admin/t/${tenant?.slug}/settings/billing` }}
+                                    >
+                                        <Wallet className="h-4 w-4" />
+                                        帳務 / 續費
+                                        {tenant?.plan === 'basic' && (
+                                            <Badge variant="secondary" className="ml-1 text-xs">升級</Badge>
+                                        )}
+                                    </Button>
                                 </CardContent>
                             </Card>
 
@@ -885,7 +868,7 @@ export default function SettingsPage() {
                                 <CreditCard className="h-5 w-5 text-primary" />
                                 付款資訊
                             </CardTitle>
-                            <CardDescription>收款帳戶資訊</CardDescription>
+                            <CardDescription>客人結帳後會收到這裡的匯款帳號（宅配 / 店到店可分開設定）</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             {/* 跨租戶存取時顯示遮罩提示 */}
@@ -903,37 +886,96 @@ export default function SettingsPage() {
                                 </div>
                             ) : (
                                 <>
-                                    <div className="grid gap-4 md:grid-cols-3">
-                                        <div className="space-y-2">
-                                            <Label>銀行名稱</Label>
-                                            <Input
-                                                value={getPaymentInfo().bank}
-                                                onChange={(e) => updatePaymentInfo('bank', e.target.value)}
-                                                placeholder="例：國泰世華"
-                                                className="rounded-xl"
+                                    {/* 宅配匯款帳戶（宅配 / 自取 / 賣貨便補款都用這組） */}
+                                    <div className="space-y-3">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-sm font-semibold">🚚 宅配匯款帳戶</span>
+                                            <span className="text-xs text-muted-foreground">宅配 / 自取 / 賣貨便補款用</span>
+                                        </div>
+                                        <div className="grid gap-4 md:grid-cols-3">
+                                            <div className="space-y-2">
+                                                <Label>銀行名稱</Label>
+                                                <Input
+                                                    value={getPaymentInfo().bank}
+                                                    onChange={(e) => updatePaymentInfo('bank', e.target.value)}
+                                                    placeholder="例：國泰世華 / 013"
+                                                    className="rounded-xl"
+                                                    disabled={isCrossTenantAccess}
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label>帳號</Label>
+                                                <Input
+                                                    value={getPaymentInfo().account}
+                                                    onChange={(e) => updatePaymentInfo('account', e.target.value)}
+                                                    placeholder="銀行帳號"
+                                                    className="rounded-xl"
+                                                    disabled={isCrossTenantAccess}
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label>戶名</Label>
+                                                <Input
+                                                    value={getPaymentInfo().name}
+                                                    onChange={(e) => updatePaymentInfo('name', e.target.value)}
+                                                    placeholder="帳戶戶名"
+                                                    className="rounded-xl"
+                                                    disabled={isCrossTenantAccess}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <Separator />
+
+                                    {/* 店到店匯款帳戶 */}
+                                    <div className="space-y-3">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-sm font-semibold">🏪 店到店匯款帳戶</span>
+                                            <span className="text-xs text-muted-foreground">7-11 店到店取貨匯款用</span>
+                                        </div>
+                                        <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                                            <Checkbox
+                                                checked={sevenSame}
+                                                onCheckedChange={(v) => setSevenSame(v === true)}
                                                 disabled={isCrossTenantAccess}
                                             />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label>帳號</Label>
-                                            <Input
-                                                value={getPaymentInfo().account}
-                                                onChange={(e) => updatePaymentInfo('account', e.target.value)}
-                                                placeholder="銀行帳號"
-                                                className="rounded-xl"
-                                                disabled={isCrossTenantAccess}
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label>戶名</Label>
-                                            <Input
-                                                value={getPaymentInfo().name}
-                                                onChange={(e) => updatePaymentInfo('name', e.target.value)}
-                                                placeholder="帳戶戶名"
-                                                className="rounded-xl"
-                                                disabled={isCrossTenantAccess}
-                                            />
-                                        </div>
+                                            與宅配匯款帳戶相同
+                                        </label>
+                                        {!sevenSame && (
+                                            <div className="grid gap-4 md:grid-cols-3">
+                                                <div className="space-y-2">
+                                                    <Label>銀行名稱</Label>
+                                                    <Input
+                                                        value={sevenPayment.bank}
+                                                        onChange={(e) => setSevenPayment({ ...sevenPayment, bank: e.target.value })}
+                                                        placeholder="例：郵局 / 700"
+                                                        className="rounded-xl"
+                                                        disabled={isCrossTenantAccess}
+                                                    />
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label>帳號</Label>
+                                                    <Input
+                                                        value={sevenPayment.account}
+                                                        onChange={(e) => setSevenPayment({ ...sevenPayment, account: e.target.value })}
+                                                        placeholder="銀行帳號"
+                                                        className="rounded-xl"
+                                                        disabled={isCrossTenantAccess}
+                                                    />
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label>戶名</Label>
+                                                    <Input
+                                                        value={sevenPayment.name}
+                                                        onChange={(e) => setSevenPayment({ ...sevenPayment, name: e.target.value })}
+                                                        placeholder="帳戶戶名"
+                                                        className="rounded-xl"
+                                                        disabled={isCrossTenantAccess}
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="pt-4">
                                         <Button
@@ -992,42 +1034,54 @@ export default function SettingsPage() {
                                 </p>
                             </div>
                             <Separator />
-                            <div className="grid gap-4 md:grid-cols-2">
-                                <div className="space-y-2">
-                                    <Label>LINE OA ID</Label>
-                                    <Input
-                                        value={formData.line_oa_id || ''}
-                                        onChange={(e) => setFormData({ ...formData, line_oa_id: e.target.value })}
-                                        placeholder="@xxx"
-                                        className="rounded-xl"
-                                        disabled={isCrossTenantAccess}
-                                        autoComplete="one-time-code"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <div className="flex items-center gap-1.5">
-                                        <Label>LIFF ID</Label>
-                                        {!canAccessShop && (
-                                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-primary/30 text-primary">
-                                                <Lock className="h-2.5 w-2.5 mr-0.5" />
-                                                Pro
-                                            </Badge>
-                                        )}
+                            <div className="space-y-2">
+                                <Label>LINE OA ID</Label>
+                                <Input
+                                    value={formData.line_oa_id || ''}
+                                    onChange={(e) => setFormData({ ...formData, line_oa_id: e.target.value })}
+                                    placeholder="@xxx"
+                                    className="rounded-xl"
+                                    disabled={isCrossTenantAccess}
+                                    autoComplete="one-time-code"
+                                />
+                            </div>
+
+                            {/* 取得 Token / Secret 教學（可摺疊） */}
+                            <div className="rounded-xl border border-border/60 bg-muted/30">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowTokenGuide((v) => !v)}
+                                    className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium"
+                                >
+                                    <span className="flex items-center gap-2">
+                                        <MessageCircle className="h-4 w-4 text-primary" />
+                                        如何取得 Channel Access Token 與 Secret？
+                                    </span>
+                                    <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${showTokenGuide ? 'rotate-180' : ''}`} />
+                                </button>
+                                {showTokenGuide && (
+                                    <div className="space-y-3 border-t border-border/60 px-4 py-4 text-sm text-muted-foreground">
+                                        <a
+                                            href="https://developers.line.biz/console/"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-1.5 font-medium text-primary hover:underline"
+                                        >
+                                            前往 LINE Developers Console
+                                            <ExternalLink className="h-3.5 w-3.5" />
+                                        </a>
+                                        <ol className="list-decimal space-y-1.5 pl-5">
+                                            <li>用你的 LINE 帳號登入 <span className="font-medium">LINE Developers Console</span>。</li>
+                                            <li>選擇（或建立）一個 <span className="font-medium">Provider</span>，再建立一個 <span className="font-medium">Messaging API</span> channel（就是你的 LINE 官方帳號）。</li>
+                                            <li>進入該 channel →「<span className="font-medium">Messaging API</span>」分頁 → 最下方「Channel access token」按 <span className="font-medium">Issue</span> 發行，複製整串貼到上面的 <span className="font-medium">Channel Access Token</span>。</li>
+                                            <li>切到「<span className="font-medium">Basic settings</span>」分頁 → 複製 <span className="font-medium">Channel secret</span> 貼到上面的 <span className="font-medium">Channel Secret</span>。</li>
+                                            <li>「LINE OA ID」填你官方帳號的 <span className="font-medium">@ 開頭 ID</span>（在 LINE Official Account Manager 可查）。</li>
+                                            <li>把本頁最上方的 <span className="font-medium">Webhook URL</span> 貼回 Console 的「Messaging API → Webhook settings」，並開啟「<span className="font-medium">Use webhook</span>」。</li>
+                                            <li>回本頁按「儲存變更」即完成。</li>
+                                        </ol>
+                                        <p className="text-xs">⚠️ Token / Secret 屬機密，請勿外流。已儲存後基於安全不會再顯示，要更新才需重新輸入。</p>
                                     </div>
-                                    <Input
-                                        value={formData.liff_id || ''}
-                                        onChange={(e) => setFormData({ ...formData, liff_id: e.target.value })}
-                                        placeholder={canAccessShop ? '請輸入 LIFF ID（如 1234567890-xxxxxxxx）' : '升級 Pro 方案後可設定'}
-                                        className="rounded-xl"
-                                        disabled={isCrossTenantAccess || !canAccessShop}
-                                        autoComplete="one-time-code"
-                                    />
-                                    <p className="text-xs text-muted-foreground">
-                                        {canAccessShop
-                                            ? '設定後商城分享連結將使用此 LIFF ID，實現 LINE userId 隔離'
-                                            : '升級 Pro 方案後可設定專屬 LIFF ID'}
-                                    </p>
-                                </div>
+                                )}
                             </div>
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between">

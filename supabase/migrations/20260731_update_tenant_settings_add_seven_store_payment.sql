@@ -1,0 +1,15 @@
+-- 2026-07-31 update_tenant_settings_v1 擴充：可寫 settings.payment_info_seven_store（店到店匯款帳戶）
+-- 為「付款設定拆宅配/店到店兩組帳戶 + 勾選相同」需求的後端支援。
+-- p_data.payment_info_seven_store：物件 → jsonb_set 寫入；null → 移除 key（前端勾「與宅配相同」），
+--   notify-checkout-v1 讀不到就 fallback 回 tenants.payment_info（宅配主帳戶）。其餘欄位邏輯不變。
+-- 多租戶：以 p_tenant_id 為界、auth.uid() 驗 owner/admin。已套正式 DB，模擬 owner session 測試：
+--   寫物件→settings.payment_info_seven_store 有值；寫 null→key 移除。
+-- 完整定義見 DB；此檔僅記錄新增的 settings CASE 分支（其餘同原函式）：
+--   settings = CASE
+--     WHEN p_data ? 'payment_info_seven_store' THEN
+--       CASE WHEN p_data->'payment_info_seven_store' IS NULL
+--                 OR jsonb_typeof(p_data->'payment_info_seven_store') = 'null'
+--            THEN COALESCE(settings,'{}'::jsonb) - 'payment_info_seven_store'
+--            ELSE jsonb_set(COALESCE(settings,'{}'::jsonb), '{payment_info_seven_store}', p_data->'payment_info_seven_store')
+--       END
+--     ELSE settings END
