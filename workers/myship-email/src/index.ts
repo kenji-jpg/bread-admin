@@ -33,7 +33,9 @@ function detectTypeFromSubject(subject: string): MyshipEmailType {
   if (subject.includes('完成取貨') || subject.includes('完成取件')) {
     return 'pickup_completed'
   }
-  if (subject.includes('取消') || subject.includes('退貨') || subject.includes('退款')) {
+  // 「退件到店通知」＝買家未取貨、包裹退回賣家（未取退回）
+  if (subject.includes('取消') || subject.includes('退貨') || subject.includes('退款') ||
+      subject.includes('退件')) {
     return 'order_cancelled'
   }
   return 'unknown'
@@ -55,8 +57,10 @@ function detectTypeFromBody(content: string): MyshipEmailType {
       content.includes('買家完成取貨') || content.includes('完成取貨')) {
     return 'pickup_completed'
   }
+  // 退件到店 / 已退回 ＝ 未取貨退回（內文「訂單 CMxxx 已退回7-ELEVEN…」）
   if (content.includes('訂單取消') || content.includes('已取消') ||
-      content.includes('退貨') || content.includes('退款')) {
+      content.includes('退貨') || content.includes('退款') ||
+      content.includes('退件') || content.includes('已退回')) {
     return 'order_cancelled'
   }
   return 'unknown'
