@@ -1,0 +1,15 @@
+-- 2026-07-31 客人端「我的訂單」等待配貨/確定購入加 60 天時效
+-- 背景：get_shop_member_orders_v1 對「未結帳（checkout_id IS NULL）且 status pending/partial/allocated」
+--       原本永久顯示 → 很久沒動的舊單（含測試單）一直卡在客人購物車「確定購入」，且可再結帳。
+-- 作法：該分支加 created_at > NOW() - 60 days。其他窗口不變（取消 30 天、結帳流程 45 天且未完成）。
+--       用 60 天而非更短：這些是「還沒結帳、在等開團」的活訂單，太短會藏掉正常等待中的真客人訂單。
+-- 已套正式 DB，DO+RAISE 自動 rollback 測試：100 天前 allocated 被濾掉、10 天內正常顯示。
+--
+-- 完整函式定義見 DB；此檔僅記錄 WHERE 分支改動：
+--   (oi.checkout_id IS NULL AND (
+--      (oi.status IN ('pending','partial','allocated') AND oi.created_at > NOW() - INTERVAL '60 days')
+--      OR (oi.status = 'cancelled' AND oi.cancelled_at > NOW() - INTERVAL '30 days')
+--   ))
+--   OR (oi.checkout_id IS NOT NULL AND oi.created_at > NOW() - INTERVAL '45 days'
+--       AND COALESCE(c.shipping_status,'') <> 'completed')
+-- 另補上 SET search_path = public（原函式缺，advisor 加固）。
