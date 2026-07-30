@@ -158,6 +158,8 @@ export interface OrderItem {
 interface ShippingDetailsBase {
   receiver_name?: string
   receiver_phone?: string
+  not_picked_up?: boolean       // 賣貨便未取貨退回（客人未取，退回賣家）
+  not_picked_up_at?: string     // 未取退回時間
 }
 
 interface MyshipShippingDetails extends ShippingDetailsBase {

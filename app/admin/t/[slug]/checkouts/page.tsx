@@ -1519,11 +1519,18 @@ export default function CheckoutsPage() {
                                                         <span className="text-muted-foreground ml-1">({item.member_nickname})</span>
                                                     )}
                                                 </div>
-                                                {item.member_line_user_id && (
-                                                    <Badge variant="outline" className="mt-0.5 text-[10px] px-1 py-0">
-                                                        LINE
-                                                    </Badge>
-                                                )}
+                                                <div className="mt-0.5 flex flex-wrap items-center gap-1">
+                                                    {item.member_line_user_id && (
+                                                        <Badge variant="outline" className="text-[10px] px-1 py-0">
+                                                            LINE
+                                                        </Badge>
+                                                    )}
+                                                    {!!item.member_not_picked_up_count && item.member_not_picked_up_count > 0 && (
+                                                        <Badge className="bg-rose-500/15 text-rose-600 border-rose-500/30 text-[10px] px-1 py-0 whitespace-nowrap" title="此客戶累計未取貨退回次數">
+                                                            未取 {item.member_not_picked_up_count} 次
+                                                        </Badge>
+                                                    )}
+                                                </div>
                                             </TableCell>
                                             <TableCell className="text-right font-semibold whitespace-nowrap">
                                                 ${item.total_amount.toLocaleString()}
@@ -1667,7 +1674,16 @@ export default function CheckoutsPage() {
                                                     )}
                                                 </div>
                                             </TableCell>
-                                            <TableCell>{getShippingBadge(item.shipping_status)}</TableCell>
+                                            <TableCell>
+                                                <div className="flex flex-col items-start gap-1">
+                                                    {getShippingBadge(item.shipping_status)}
+                                                    {item.shipping_details?.not_picked_up && item.shipping_status !== 'completed' && (
+                                                        <Badge className="bg-rose-500/20 text-rose-600 border-rose-500/30 text-[10px] whitespace-nowrap" title="賣貨便未取貨退回，需重新處理">
+                                                            ⚠️ 客人未取
+                                                        </Badge>
+                                                    )}
+                                                </div>
+                                            </TableCell>
                                             {/* 結帳模式 */}
                                             <TableCell>
                                                 <ShippingMethodCell item={item} onChangeMethod={handleChangeShippingMethod} />

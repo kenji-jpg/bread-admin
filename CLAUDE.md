@@ -494,6 +494,7 @@ pending → url_sent → ordered → shipped → completed
 | 7 | 登入/註冊 Rate Limiting | 防暴力破解（Supabase 內建 + 前端） | 1 天 |
 | 8 | 新手導覽 | 首次進後台的操作引導 | 2 天 |
 | 9 | ~~多租戶 LIFF 隔離~~ | ✅ 已完成 — `LiffProvider` 動態取租戶 `liff_id`，layout 從 URL 解析 | — |
+| 10 | **新客手機簡訊驗證 (SMS OTP)** | 初次加入綁手機驗證壓棄單。設計已對齊（見 memory `project_sms_phone_verification`），待定成本模式（平台吸收+每租戶額度 vs 租戶自帶帳號）才動手；多租戶會勾到金流/計費、需 per-tenant 額度熔斷 | 2-3 天 |
 
 ### Phase 3：優化（🟢 Nice-to-have）
 

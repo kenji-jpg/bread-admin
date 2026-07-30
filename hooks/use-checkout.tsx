@@ -42,6 +42,7 @@ export interface CheckoutListItem {
     member_display_name: string | null
     member_nickname: string | null
     member_line_user_id: string | null
+    member_not_picked_up_count?: number  // 此客戶累計「未取貨退回」次數（跨此租戶所有結帳單）
 
     // ⚠️ 以下欄位即將廢棄，暫時保留向後相容
     /** @deprecated 請使用 shipping_details.store_url */
