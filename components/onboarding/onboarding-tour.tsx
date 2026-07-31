@@ -132,9 +132,10 @@ export function OnboardingTour() {
         ? { top: Math.max(12, hole.top - 8), left: hole.left + hole.width + 16, arrow: 'left' as const }
         : { top: hole.top + hole.height + 16, left: Math.max(12, hole.left - 8), arrow: 'up' as const }
 
-    const dim = 'absolute bg-black/60'
+    // 容器 pointer-events-none → 中間「洞」可穿透點到目標；暗色遮罩各自 auto → 只擋暗處
+    const dim = 'absolute bg-black/60 pointer-events-auto'
     return (
-        <div className="fixed inset-0 z-[60]">
+        <div className="pointer-events-none fixed inset-0 z-[60]">
             {/* 四塊遮罩，中間留洞（洞內可點目標） */}
             <div className={dim} style={{ top: 0, left: 0, width: vw, height: Math.max(0, hole.top) }} />
             <div className={dim} style={{ top: hole.top + hole.height, left: 0, width: vw, height: Math.max(0, vh - hole.top - hole.height) }} />
