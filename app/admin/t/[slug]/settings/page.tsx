@@ -1071,7 +1071,7 @@ export default function SettingsPage() {
                                             <ExternalLink className="h-3.5 w-3.5" />
                                         </a>
                                         <ol className="list-decimal space-y-1.5 pl-5">
-                                            <li>用你的 LINE 帳號登入 <span className="font-medium">LINE Developers Console</span>。</li>
+                                            <li>用你的 LINE 帳號登入 <a href="https://developers.line.biz/console/" target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline">LINE Developers Console</a>。</li>
                                             <li>選擇（或建立）一個 <span className="font-medium">Provider</span>，再建立一個 <span className="font-medium">Messaging API</span> channel（就是你的 LINE 官方帳號）。</li>
                                             <li>進入該 channel →「<span className="font-medium">Messaging API</span>」分頁 → 最下方「Channel access token」按 <span className="font-medium">Issue</span> 發行，複製整串貼到上面的 <span className="font-medium">Channel Access Token</span>。</li>
                                             <li>切到「<span className="font-medium">Basic settings</span>」分頁 → 複製 <span className="font-medium">Channel secret</span> 貼到上面的 <span className="font-medium">Channel Secret</span>。</li>
