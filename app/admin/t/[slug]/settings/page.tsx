@@ -1047,31 +1047,23 @@ export default function SettingsPage() {
                             </div>
 
                             {/* 取得 Token / Secret 教學（可摺疊） */}
-                            <div className="rounded-xl border border-border/60 bg-muted/30">
+                            <div className="rounded-xl border border-primary/40 bg-primary/5 overflow-hidden">
                                 <button
                                     type="button"
                                     onClick={() => setShowTokenGuide((v) => !v)}
-                                    className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium"
+                                    className="flex w-full items-center justify-between gap-2 px-4 py-3.5 text-sm font-semibold text-primary transition-colors hover:bg-primary/10"
                                 >
                                     <span className="flex items-center gap-2">
-                                        <MessageCircle className="h-4 w-4 text-primary" />
+                                        <MessageCircle className="h-4 w-4" />
                                         如何取得 Channel Access Token 與 Secret？
+                                        <Badge className="bg-primary/15 text-primary border-primary/30 text-[10px]">教學</Badge>
                                     </span>
                                     <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${showTokenGuide ? 'rotate-180' : ''}`} />
                                 </button>
                                 {showTokenGuide && (
-                                    <div className="space-y-3 border-t border-border/60 px-4 py-4 text-sm text-muted-foreground">
-                                        <a
-                                            href="https://developers.line.biz/console/"
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="inline-flex items-center gap-1.5 font-medium text-primary hover:underline"
-                                        >
-                                            前往 LINE Developers Console
-                                            <ExternalLink className="h-3.5 w-3.5" />
-                                        </a>
+                                    <div className="space-y-3 border-t border-primary/20 px-4 py-4 text-sm text-muted-foreground">
                                         <ol className="list-decimal space-y-1.5 pl-5">
-                                            <li>用你的 LINE 帳號登入 <a href="https://developers.line.biz/console/" target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline">LINE Developers Console</a>。</li>
+                                            <li>用你的 LINE 帳號登入 <a href="https://developers.line.biz/console/" target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline">LINE Developers Console<ExternalLink className="inline h-3 w-3 ml-0.5 align-text-top" /></a>。</li>
                                             <li>選擇（或建立）一個 <span className="font-medium">Provider</span>，再建立一個 <span className="font-medium">Messaging API</span> channel（就是你的 LINE 官方帳號）。</li>
                                             <li>進入該 channel →「<span className="font-medium">Messaging API</span>」分頁 → 最下方「Channel access token」按 <span className="font-medium">Issue</span> 發行，複製整串貼到上面的 <span className="font-medium">Channel Access Token</span>。</li>
                                             <li>切到「<span className="font-medium">Basic settings</span>」分頁 → 複製 <span className="font-medium">Channel secret</span> 貼到上面的 <span className="font-medium">Channel Secret</span>。</li>
