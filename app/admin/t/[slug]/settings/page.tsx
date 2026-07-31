@@ -652,7 +652,7 @@ export default function SettingsPage() {
                         <CreditCard className="h-4 w-4" />
                         <span className="hidden sm:inline">付款設定</span>
                     </TabsTrigger>
-                    <TabsTrigger value="line" className="gap-2">
+                    <TabsTrigger value="line" className="gap-2" data-tour="tab-line">
                         <MessageCircle className="h-4 w-4" />
                         <span className="hidden sm:inline">LINE 設定</span>
                     </TabsTrigger>

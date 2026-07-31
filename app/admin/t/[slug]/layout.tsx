@@ -5,6 +5,7 @@ import { usePathname, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { AlertTriangle, CreditCard } from 'lucide-react'
+import { OnboardingTour } from '@/components/onboarding/onboarding-tour'
 
 /**
  * 租戶層攔截閘門：訂閱到期 / 店家被停用時，把一般使用者導向唯讀「請續費」畫面。
@@ -38,7 +39,12 @@ export default function TenantLayout({ children }: { children: React.ReactNode }
         return <BillingGate slug={slug} disabled={disabled} expiresAt={tenant.plan_expires_at ?? null} />
     }
 
-    return <>{children}</>
+    return (
+        <>
+            {children}
+            <OnboardingTour />
+        </>
+    )
 }
 
 function BillingGate({ slug, disabled, expiresAt }: { slug: string; disabled: boolean; expiresAt: string | null }) {

@@ -1,0 +1,2 @@
+-- 2026-07-31 新手導覽略過/完成旗標 RPC：寫 settings.onboarding.{key}=true（per-tenant，租戶成員可呼叫）
+-- 見 dismiss_onboarding_v1 DB 定義；grant execute to authenticated。
