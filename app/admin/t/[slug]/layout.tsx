@@ -21,27 +21,22 @@ export default function TenantLayout({ children }: { children: React.ReactNode }
     const params = useParams()
     const slug = (params?.slug as string) || ''
 
-    // 載入中 / 找不到租戶 → 不攔（交給頁面本身處理，避免載入時閃現）
-    if (isLoading || !tenant) return <>{children}</>
-
-    // 超管一律放行（含跨租戶唯讀查看）
-    if (isSuperAdminUser || isCrossTenantAccess) return <>{children}</>
-
-    // 到期：plan_expires_at 有值且已過（NULL = 永久免費，不算到期）；或被超管停用
-    const expired = !!tenant.plan_expires_at && new Date(tenant.plan_expires_at).getTime() <= Date.now()
-    const disabled = actualIsActive === false
-    const blocked = expired || disabled
-
-    // 允許到帳務頁繳費（否則被鎖的人無路可走）
-    const onBillingPage = !!pathname?.includes('/settings/billing')
-
-    if (blocked && !onBillingPage) {
-        return <BillingGate slug={slug} disabled={disabled} expiresAt={tenant.plan_expires_at ?? null} />
+    // 主內容：預設為頁面；只有「非超管、非跨租戶、到期/停用」時才換成請續費閘門。
+    // 導覽元件一律掛載（它自己判斷是否顯示），避免被上面的提早 return 跳過。
+    let content: React.ReactNode = children
+    const isPrivileged = isSuperAdminUser || isCrossTenantAccess
+    if (!isLoading && tenant && !isPrivileged) {
+        const expired = !!tenant.plan_expires_at && new Date(tenant.plan_expires_at).getTime() <= Date.now()
+        const disabled = actualIsActive === false
+        const onBillingPage = !!pathname?.includes('/settings/billing')
+        if ((expired || disabled) && !onBillingPage) {
+            content = <BillingGate slug={slug} disabled={disabled} expiresAt={tenant.plan_expires_at ?? null} />
+        }
     }
 
     return (
         <>
-            {children}
+            {content}
             <OnboardingTour />
         </>
     )
