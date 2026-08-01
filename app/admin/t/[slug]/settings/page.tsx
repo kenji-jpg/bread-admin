@@ -1029,13 +1029,20 @@ export default function SettingsPage() {
                                         <Copy className="h-4 w-4" />
                                     </Button>
                                 </div>
-                                <p className="text-xs text-muted-foreground">
-                                    請將此網址貼到 LINE Developers Console 的 Messaging API Webhook settings。
-                                </p>
+                                <div className="space-y-1 text-xs text-muted-foreground">
+                                    <p>把上面這串網址貼回 LINE Developers Console，LINE 才會把客人的訊息傳給系統：</p>
+                                    <ol className="list-decimal space-y-0.5 pl-4">
+                                        <li>進入你的 channel →「<span className="font-medium">Messaging API</span>」分頁。</li>
+                                        <li>找到「<span className="font-medium">Webhook settings</span>」→「Webhook URL」按 <span className="font-medium">Edit</span>，貼上這串網址 → <span className="font-medium">Update</span>。</li>
+                                        <li>把「<span className="font-medium">Use webhook</span>」開關打開（開啟）。</li>
+                                        <li>可按「<span className="font-medium">Verify</span>」測試，顯示 <span className="font-medium">Success</span> 就代表連線正常。</li>
+                                    </ol>
+                                    <p>⚠️ 這串網址每個店家都不同（含專屬 tenant_id），請用你自己頁面上顯示的這串。</p>
+                                </div>
                             </div>
                             <Separator />
                             <div className="space-y-2">
-                                <Label>LINE OA ID</Label>
+                                <Label>LINE OA ID（官方帳號 ID）</Label>
                                 <Input
                                     value={formData.line_oa_id || ''}
                                     onChange={(e) => setFormData({ ...formData, line_oa_id: e.target.value })}
@@ -1044,6 +1051,10 @@ export default function SettingsPage() {
                                     disabled={isCrossTenantAccess}
                                     autoComplete="one-time-code"
                                 />
+                                <p className="text-xs text-muted-foreground">
+                                    你的 LINE 官方帳號「@ 開頭」的基本 ID（例：@530rmasi）。用來組成給客人的加好友／商城連結。
+                                    可在 <span className="font-medium">LINE Official Account Manager</span> →「設定 → 帳號設定」查看，或就是別人加你好友時看到的 <span className="font-medium">@ID</span>。記得連「@」一起填。
+                                </p>
                             </div>
 
                             {/* 取得 Token / Secret 教學（可摺疊） */}
