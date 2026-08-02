@@ -1007,6 +1007,26 @@ export default function SettingsPage() {
                             <CardDescription>LINE Official Account 設定</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
+                            {/* 連接 LINE 4 步驟總覽 */}
+                            <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
+                                <p className="mb-2.5 text-sm font-semibold text-foreground">🔗 連接 LINE 官方帳號 · 4 步驟</p>
+                                <ol className="space-y-2 text-xs text-muted-foreground">
+                                    {[
+                                        '到 LINE Developers Console 建立 Messaging API channel（就是你的官方帳號）— 詳細看下方「如何取得 Token」。',
+                                        '複製 Channel Access Token 與 Channel Secret，貼到本頁下方對應欄位。',
+                                        '填入 LINE OA ID（你官方帳號 @ 開頭的 ID）。',
+                                        '把本頁最上方的 Webhook URL 貼回 Console、開啟「Use webhook」，最後按「儲存變更」。',
+                                    ].map((txt, i) => (
+                                        <li key={i} className="flex items-start gap-2">
+                                            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[11px] font-semibold text-primary">
+                                                {i + 1}
+                                            </span>
+                                            <span>{txt}</span>
+                                        </li>
+                                    ))}
+                                </ol>
+                            </div>
+
                             <div className="space-y-2">
                                 <Label>Webhook URL</Label>
                                 <div className="flex gap-2">
