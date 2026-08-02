@@ -425,27 +425,39 @@ export function parseManualList(
     const out: ParsedShout[] = []
     const norm = (text ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n')
     for (const raw of norm.split('\n')) {
-        const line = raw.trim()
-        if (!line) continue
+        const lead = raw.trim()
+        if (!lead) continue
 
-        const inl = parseInlineAmount(line, opts.variants)
-        if (inl) {
-            out.push({ lead: line, name: inl.name, nameSource: null,
-                       variant: inl.variant ?? opts.defaultProduct, qty: 1,
-                       time: '', date: null, expanded: false, lineAmount: inl.amount })
-            continue
+        // 依序剝：① 行尾金額 → ② 數量(xN/+N) → ③ 剩下切 暱稱/商品
+        // 這樣「暱稱 商品x2 240」能同時吃到數量與金額（不再誤判成沒金額）。
+        let rest = lead
+        let lineAmount: number | null = null
+        let qty = 1
+
+        // ① 行尾金額：空白 + 純數字結尾，且前面仍有內容（不是 +數量 的那個數字）
+        const amtM = rest.match(/^(.*\S)\s+(\d{1,7})$/)
+        if (amtM) { rest = amtM[1].trim(); lineAmount = parseInt(amtM[2], 10) }
+
+        // ② 數量標記（剝完金額後）在結尾：xN / ×N / *N / +N，可緊貼商品或有空格
+        const qtyM = rest.match(/^(.*?)\s*[+＋*×xX]\s*(\d+)\s*$/)
+        if (qtyM) { rest = qtyM[1].trim(); qty = Math.max(1, parseInt(qtyM[2], 10) || 1) }
+
+        // ③ 切暱稱 / 商品（≥2 段：最後一段當商品/規格，其餘當暱稱）
+        const parts = rest.split(/[ 　\t]+/).filter(Boolean)
+        let name: string
+        let variant: string | null = opts.defaultProduct
+        if (parts.length >= 2) {
+            const v = parts[parts.length - 1]
+            const hit = opts.variants.find(x => x.toLowerCase() === v.toLowerCase())
+            variant = hit || v
+            name = parts.slice(0, -1).join(' ')
+        } else {
+            name = parts.join(' ')
         }
-        const qm = line.match(/[+＋*×xX]\s*(\d+)\s*$/)
-        if (qm && qm.index !== undefined) {
-            const qty = Math.max(1, parseInt(qm[1], 10) || 1)
-            const name = line.slice(0, qm.index).trim()
-            if (!name) continue
-            out.push({ lead: line, name, nameSource: null, variant: opts.defaultProduct,
-                       qty, time: '', date: null, expanded: false, lineAmount: null })
-            continue
-        }
-        out.push({ lead: line, name: line, nameSource: null, variant: opts.defaultProduct,
-                   qty: 1, time: '', date: null, expanded: false, lineAmount: null })
+        if (!name) continue
+
+        out.push({ lead, name, nameSource: null, variant, qty,
+                   time: '', date: null, expanded: false, lineAmount })
     }
     return out
 }
