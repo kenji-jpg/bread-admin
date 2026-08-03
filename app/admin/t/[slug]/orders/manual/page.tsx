@@ -1047,6 +1047,33 @@ ${orderList}
                                                             {STATUS_LABEL[r.binding.status]}
                                                         </Badge>
                                                     )}
+                                                    {/* 比對到會員 → 顯示風險/VIP 警示（只在有觸發時） */}
+                                                    {r.binding.member && (() => {
+                                                        const m = r.binding.member
+                                                        const owed = m.owed_amount ?? 0
+                                                        const cc = m.cancel_count ?? 0
+                                                        const np = m.not_picked_count ?? 0
+                                                        if (!m.is_watchlist && !m.is_vip && owed <= 0 && cc <= 0 && np <= 0) return null
+                                                        return (
+                                                            <div className="flex items-center gap-1">
+                                                                {m.is_watchlist && (
+                                                                    <Badge title={m.watchlist_note || '注意名單'} className="bg-rose-500/20 text-rose-600 border-rose-500/30 text-[10px] whitespace-nowrap">🚩注意</Badge>
+                                                                )}
+                                                                {owed > 0 && (
+                                                                    <Badge className="bg-rose-500/15 text-rose-600 border-rose-500/30 text-[10px] whitespace-nowrap">⚠️欠${owed.toLocaleString()}</Badge>
+                                                                )}
+                                                                {cc > 0 && (
+                                                                    <Badge title={(m.cancel_amount ?? 0) > 0 ? `取消金額 $${(m.cancel_amount ?? 0).toLocaleString()}` : undefined} className="bg-amber-500/15 text-amber-600 border-amber-500/30 text-[10px] whitespace-nowrap">棄單{cc}</Badge>
+                                                                )}
+                                                                {np > 0 && (
+                                                                    <Badge className="bg-amber-500/15 text-amber-600 border-amber-500/30 text-[10px] whitespace-nowrap">未取{np}</Badge>
+                                                                )}
+                                                                {m.is_vip && (
+                                                                    <Badge className="bg-primary/15 text-primary border-primary/30 text-[10px] whitespace-nowrap">⭐VIP</Badge>
+                                                                )}
+                                                            </div>
+                                                        )
+                                                    })()}
                                                 </div>
                                             )
                                         })}

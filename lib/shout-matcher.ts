@@ -19,6 +19,19 @@ export interface MatchDTO {
     orders: number | null
     spent: number | null
     exact: boolean | null
+    // 擴充：更完整客人資訊（screener_lookup_members_v1 rich fields，選填以相容舊資料）
+    is_watchlist?: boolean | null
+    watchlist_note?: string | null
+    is_vip?: boolean | null
+    note?: string | null
+    phone?: string | null
+    cancel_count?: number | null
+    cancel_amount?: number | null
+    not_picked_count?: number | null
+    not_picked_amount?: number | null
+    owed_amount?: number | null
+    completed_count?: number | null
+    last_order_at?: string | null
 }
 
 export interface ResultDTO {

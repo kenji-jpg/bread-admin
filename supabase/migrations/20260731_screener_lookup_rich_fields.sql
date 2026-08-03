@@ -1,0 +1,5 @@
+-- 2026-07-31 screener_lookup_members_v1 回傳更完整客人資訊：
+-- 注意名單(is_watchlist/watchlist_note)、VIP、備註、手機、客人取消(棄單)次數&金額、
+-- 賣貨便未取退回次數&金額、尚欠未付、已完成單數、上次下單。即時算(correlated subquery)。
+-- 給 Mac 喊單查詢 hover HUD（可選最多 4 欄顯示）+ 網頁手動登記審核表（風險警示 badge）共用。
+-- 完整定義見 DB。
