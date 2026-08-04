@@ -659,7 +659,7 @@ export default function ManualOrdersPage() {
 
     const handleImportShouts = async () => {
         if (!tenant?.id || !newRows.length) return
-        if (newRows.some(r => rowAmount(r) <= 0)) { toast.error('有筆金額是 0，請填金額'); return }
+        if (newRows.some(r => rowAmount(r) === 0)) { toast.error('有筆金額是 0，請填金額'); return }
         setIsImporting(true)
         let claimed = 0, pending = 0, dup = 0, failed = 0
         try {
@@ -1029,7 +1029,7 @@ ${orderList}
                                                             type="number"
                                                             value={rowAmount(r)}
                                                             min={0}
-                                                            onChange={(e) => patchRow(i, { lineAmount: Math.max(0, parseInt(e.target.value, 10) || 0) })}
+                                                            onChange={(e) => patchRow(i, { lineAmount: parseInt(e.target.value, 10) || 0 })}
                                                             className="h-8 w-20 rounded-lg font-mono text-xs text-right"
                                                         />
                                                     </div>

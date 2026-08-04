@@ -435,7 +435,8 @@ export function parseManualList(
         let qty = 1
 
         // ① 行尾金額：空白 + 純數字結尾，且前面仍有內容（不是 +數量 的那個數字）
-        const amtM = rest.match(/^(.*\S)\s+(\d{1,7})$/)
+        // 允許負數（多收款/退款用，如「Yang 多收款 -60」）
+        const amtM = rest.match(/^(.*\S)\s+(-?\d{1,7})$/)
         if (amtM) { rest = amtM[1].trim(); lineAmount = parseInt(amtM[2], 10) }
 
         // ② 數量標記（剝完金額後）在結尾：xN / ×N / *N / +N，可緊貼商品或有空格
