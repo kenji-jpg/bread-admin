@@ -605,6 +605,12 @@ export default function CheckoutsPage() {
                 toast.error(result.message || '標記失敗')
                 return
             }
+            // 賣貨便由 7-11 自行發取貨通知給客人，不用再推「已寄出」
+            if (isMyshipMethod(item.shipping_method || 'myship')) {
+                toast.success('已標記寄出')
+                fetchCheckouts()
+                return
+            }
             // 已標記寄出，接著主動推 LINE 通知客人
             if (!item.member_line_user_id) {
                 toast.success('已標記寄出', { description: '客人未綁定 LINE，未發送通知' })

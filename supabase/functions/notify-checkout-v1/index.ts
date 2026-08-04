@@ -1,7 +1,8 @@
 // ============================================
-// 🔔 Edge Function: notify-checkout-v1 (v18)
+// 🔔 Edge Function: notify-checkout-v1 (v19)
+// v19: 已寄出通知略過賣貨便（myship/myship_free）——賣貨便由 7-11 自行發取貨通知，避免重複
 // v18: 已寄出通知移除物流單號/寄件編號（實際不會有），純「已出貨」通知
-// v17: 新增 kind='shipped' 已寄出通知（宅配/店到店/賣貨便/自取各自訊息）
+// v17: 新增 kind='shipped' 已寄出通知（宅配/店到店/自取各自訊息）
 //      —— 只 append 署名(footer)，不跑 applyMsgCfg 的「3 天」replace（避免污染送達天數字樣）
 //      —— 成功後蓋 checkouts.shipped_notified_at 戳記
 // v16: 訊息套用 tenants.settings.message_config（逾期天數 deadline_days、後五碼提醒 remit_note、結尾署名 footer）
@@ -111,6 +112,7 @@ function shipInfoBlock(method: string, d: Record<string, unknown> | null): strin
 
 // ─── 已寄出通知（kind='shipped' 用）────────────
 // 純「已出貨」通知，不含物流單號/寄件編號（實務上不會有）
+// 賣貨便（myship/myship_free）不走這裡——由 7-11 自行通知，於呼叫端先擋掉
 function buildShippedMessage(
   checkoutNo: string, shippingMethod: string,
 ): { ok: true; message: string } | { ok: false; error: string } {
@@ -121,10 +123,6 @@ function buildShippedMessage(
   if (shippingMethod === 'seven_store') {
     return { ok: true, message:
       `📦 出貨通知\n\n您的訂單已寄出囉！\n\n📋 單號：${checkoutNo}\n🏪 配送方式：7-11 店到店\n\n商品送達您指定的門市後，7-11 會發取貨通知，屆時再麻煩您前往取貨 📲\n感謝您的訂購 🙏` }
-  }
-  if (shippingMethod === 'myship' || shippingMethod === 'myship_free') {
-    return { ok: true, message:
-      `📦 出貨通知\n\n您的商品已寄出至 7-11 賣貨便囉！\n\n📋 單號：${checkoutNo}\n\n商品送達門市後，7-11 會發取貨通知，屆時再麻煩您依通知前往取貨 🛍️\n感謝您的訂購 🙏` }
   }
   if (shippingMethod === 'pickup') {
     return { ok: true, message:
@@ -272,8 +270,17 @@ serve(async (req) => {
 
     // ─── kind='shipped'：已寄出通知（獨立路徑，只 append 署名）───
     if (kind === 'shipped') {
+      const shipMethod = checkout.shipping_method || 'myship'
+      // 賣貨便由 7-11 自行發取貨通知，不重複推「已寄出」→ 略過（回報 skipped，不算失敗）
+      if (shipMethod === 'myship' || shipMethod === 'myship_free') {
+        return json({
+          success: true, checkout_id, checkout_no: checkout.checkout_no,
+          shipping_method: shipMethod, notify_status: 'skipped',
+          skipped_reason: 'myship_self_notify', message_kind: 'shipped',
+        })
+      }
       const builtShip = buildShippedMessage(
-        checkout.checkout_no, checkout.shipping_method || 'myship',
+        checkout.checkout_no, shipMethod,
       )
       if (!builtShip.ok) return json({ success: false, error: 'message_build_failed', message: builtShip.error }, 400)
       const shippedMessage = appendFooter(builtShip.message, msgCfg)
