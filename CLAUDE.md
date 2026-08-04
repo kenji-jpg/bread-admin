@@ -558,7 +558,8 @@ pending → url_sent → ordered → shipped → completed
 - **【完成】結帳單列表排序**：`list_checkouts_v1` 加 `p_sort`（金額高→低 / 低→高 / 尚欠高→低 / 最新），前端篩選列加排序下拉。
 - **【完成】免運通知透明化**：`notify-checkout-v1` v13/v14（補款通知「達免運·運費已折抵」+ 賣貨便免運 -$38）、`notify-myship-url` v12（開賣場通知補免運說明 + 用尚欠額）。兩支通知函式原始碼已納入 `supabase/functions/`。
 - **【完成】客人端訂單顯示時效**（`get_shop_member_orders_v1`）：等待配貨/確定購入 = 永久；配貨失敗(cancelled) = 30 天；已進入結帳流程 = **45 天**（已完成則即時消失）；負項不顯示。
-- **【備註】一次性出貨通知**：後台目前**無「已寄出通知」功能**（notify 只有開賣場/補款）。批次通知已寄出客人是用 pg_net 從 DB 直接推 LINE（`net.http_post`，token 留 DB 內）。判斷未通知的可靠訊號：宅配/店到店 `shipping_status='shipped'`（發完會標 completed）。待辦：做「批次已寄出通知」按鈕 + `shipped_notified_at` 戳記。
+- **【完成】已寄出通知（單筆）**：結帳單按「已寄出」→ `markShipped`(狀態轉移) 成功後自動呼叫 `notify-checkout-v1` 的 `kind='shipped'` 推 LINE 通知客人（宅配/店到店/賣貨便/自取各自文案，**不含物流/寄件編號**，純告知已出貨）。成功寫 `checkouts.shipped_notified_at` 戳記；套用 `message_config` 結尾署名（只 append footer，不跑「3 天」replace）。客人未綁 LINE / 發送失敗會靜默降級（toast 提示）。前端 `handleMarkShipped`（`app/admin/t/[slug]/checkouts/page.tsx`）+ `useCheckout.notifyShipped`。
+- **【待辦】批次已寄出通知**：目前只有單筆（按鈕逐筆）。批次多人一次推仍未做，之前是用 pg_net 從 DB 直接推 LINE（`net.http_post`，token 留 DB 內）。判斷未通知的可靠訊號：宅配/店到店 `shipping_status='shipped'` 且 `shipped_notified_at IS NULL`。
 
 ## 參考文件
 

@@ -208,6 +208,8 @@ interface UseCheckoutReturn {
     removeItem: (checkoutId: string, orderItemId: string) => Promise<RemoveItemResult>
     changeShippingMethod: (checkoutId: string, method: string, fee?: number) => Promise<ChangeShippingMethodResult>
     notifyCheckout: (checkoutId: string) => Promise<{ success: boolean; notify_status?: string; notify_error?: string | null; error?: string; message?: string }>
+    /** 主動通知客人「已寄出」（notify-checkout-v1 kind=shipped，依出貨方式組不同訊息） */
+    notifyShipped: (checkoutId: string) => Promise<{ success: boolean; notify_status?: string; notify_error?: string | null; error?: string; message?: string }>
     updateShippingDetails: (checkoutId: string, fields: ShippingDetailsInput) => Promise<UpdateShippingDetailsResult>
 }
 
@@ -456,8 +458,10 @@ export const useCheckout = (tenantId: string): UseCheckoutReturn => {
     }, [tenantId, callRpc])
 
     // 通用結帳單通知（myship / delivery / pickup）
+    // kind='shipped' → 已寄出通知；未帶 kind → 初次/補款通知（依 payment_status）
     const notifyCheckout = useCallback(async (
-        checkoutId: string
+        checkoutId: string,
+        kind?: 'shipped'
     ): Promise<{ success: boolean; notify_status?: string; notify_error?: string | null; error?: string; message?: string }> => {
         try {
             const { data: { session } } = await supabase.auth.getSession()
@@ -479,7 +483,7 @@ export const useCheckout = (tenantId: string): UseCheckoutReturn => {
                         'Authorization': `Bearer ${accessToken}`,
                         'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
                     },
-                    body: JSON.stringify({ tenant_id: tenantId, checkout_id: checkoutId }),
+                    body: JSON.stringify({ tenant_id: tenantId, checkout_id: checkoutId, ...(kind ? { kind } : {}) }),
                 }
             )
             return await res.json()
@@ -510,6 +514,7 @@ export const useCheckout = (tenantId: string): UseCheckoutReturn => {
         removeItem,
         changeShippingMethod,
         notifyCheckout,
+        notifyShipped: (id) => notifyCheckout(id, 'shipped'),
         updateShippingDetails: (id, fields) => callRpc<UpdateShippingDetailsResult>('update_checkout_shipping_details_v1', {
             p_tenant_id: tenantId,
             p_checkout_id: id,

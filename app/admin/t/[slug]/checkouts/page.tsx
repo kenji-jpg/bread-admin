@@ -597,16 +597,31 @@ export default function CheckoutsPage() {
         }
     }
 
-    // 標記已寄出 (ordered → shipped)
+    // 標記已寄出 (ordered → shipped) + 主動通知客人「已寄出」
     const handleMarkShipped = async (item: CheckoutListItem) => {
         try {
             const result = await checkoutApiRef.current.markShipped(item.id)
-            if (result.success) {
-                toast.success(result.message || '已標記寄出')
-                fetchCheckouts()
-            } else {
+            if (!result.success) {
                 toast.error(result.message || '標記失敗')
+                return
             }
+            // 已標記寄出，接著主動推 LINE 通知客人
+            if (!item.member_line_user_id) {
+                toast.success('已標記寄出', { description: '客人未綁定 LINE，未發送通知' })
+                fetchCheckouts()
+                return
+            }
+            const notify = await checkoutApiRef.current.notifyShipped(item.id)
+            if (notify.success) {
+                toast.success('已標記寄出並通知客人 📦')
+            } else if (notify.error === 'member_no_line' || notify.error === 'no_member') {
+                toast.success('已標記寄出', { description: '客人未綁定 LINE，未發送通知' })
+            } else {
+                toast.success('已標記寄出', {
+                    description: `通知未送出：${notify.message || notify.notify_error || '請稍後重試'}`,
+                })
+            }
+            fetchCheckouts()
         } catch (error: any) {
             toast.error(error.message || '標記失敗')
         }

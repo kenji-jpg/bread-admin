@@ -1,5 +1,9 @@
 // ============================================
-// 🔔 Edge Function: notify-checkout-v1 (v16)
+// 🔔 Edge Function: notify-checkout-v1 (v18)
+// v18: 已寄出通知移除物流單號/寄件編號（實際不會有），純「已出貨」通知
+// v17: 新增 kind='shipped' 已寄出通知（宅配/店到店/賣貨便/自取各自訊息）
+//      —— 只 append 署名(footer)，不跑 applyMsgCfg 的「3 天」replace（避免污染送達天數字樣）
+//      —— 成功後蓋 checkouts.shipped_notified_at 戳記
 // v16: 訊息套用 tenants.settings.message_config（逾期天數 deadline_days、後五碼提醒 remit_note、結尾署名 footer）
 //      —— 用 post-process 套用，預設值(3天/匯款後請回覆帳號後五碼/無署名)＝不改變原行為
 // v15: 宅配/店到店通知回讀已填的寄件資訊(shipping_details)，改「完成匯款後回覆後五碼」；
@@ -40,6 +44,10 @@ function applyMsgCfg(msg: string, cfg: MsgCfg): string {
   }
   if (cfg.footer) m = m + '\n\n' + cfg.footer
   return m
+}
+// 已寄出訊息只 append 署名，不做「3 天」replace（避免污染送達天數字樣）
+function appendFooter(msg: string, cfg: MsgCfg): string {
+  return cfg.footer ? msg + '\n\n' + cfg.footer : msg
 }
 
 async function pushToLine(userId: string, message: string, lineToken: string) {
@@ -84,7 +92,7 @@ function bankBlock(p: PaymentInfo | null): string {
 
 // 清掉人工貼上殘留的標籤前綴
 function cleanVal(s: unknown): string {
-  return String(s ?? '').replace(/^(7-?11)?\s*(店名|門市|姓名|電話|地址|收件地址)?\s*[:：]?\s*/i, '').trim()
+  return String(s ?? '').replace(/^(7-?11)?\s*(店名|門市|姓名|電話|地址|收件地址|物流單號|寄件編號|追蹤號碼)?\s*[:：]?\s*/i, '').trim()
 }
 // 已填的寄件資訊 → 回讀區塊（資料不齊回空字串）
 function shipInfoBlock(method: string, d: Record<string, unknown> | null): string {
@@ -99,6 +107,30 @@ function shipInfoBlock(method: string, d: Record<string, unknown> | null): strin
     if (name && phone && addr) return `📍 寄送資訊：${name} / ${phone}\n　地址：${addr}\n\n`
   }
   return ''
+}
+
+// ─── 已寄出通知（kind='shipped' 用）────────────
+// 純「已出貨」通知，不含物流單號/寄件編號（實務上不會有）
+function buildShippedMessage(
+  checkoutNo: string, shippingMethod: string,
+): { ok: true; message: string } | { ok: false; error: string } {
+  if (shippingMethod === 'delivery') {
+    return { ok: true, message:
+      `📦 出貨通知\n\n您的訂單已寄出囉！\n\n📋 單號：${checkoutNo}\n🚚 配送方式：宅配\n\n包裹將於近日送達，再麻煩您留意收件 📮\n感謝您的訂購 🙏` }
+  }
+  if (shippingMethod === 'seven_store') {
+    return { ok: true, message:
+      `📦 出貨通知\n\n您的訂單已寄出囉！\n\n📋 單號：${checkoutNo}\n🏪 配送方式：7-11 店到店\n\n商品送達您指定的門市後，7-11 會發取貨通知，屆時再麻煩您前往取貨 📲\n感謝您的訂購 🙏` }
+  }
+  if (shippingMethod === 'myship' || shippingMethod === 'myship_free') {
+    return { ok: true, message:
+      `📦 出貨通知\n\n您的商品已寄出至 7-11 賣貨便囉！\n\n📋 單號：${checkoutNo}\n\n商品送達門市後，7-11 會發取貨通知，屆時再麻煩您依通知前往取貨 🛍️\n感謝您的訂購 🙏` }
+  }
+  if (shippingMethod === 'pickup') {
+    return { ok: true, message:
+      `🏠 取貨通知\n\n您的訂單已為您備妥，可以來取貨囉！\n\n📋 單號：${checkoutNo}\n\n再麻煩與我們約定取貨時間 🙏` }
+  }
+  return { ok: false, error: `不支援的出貨方式：${shippingMethod}` }
 }
 
 // ─── 補款通知（partial 用）──────────────────
@@ -214,7 +246,7 @@ serve(async (req) => {
     if (authError || !user) return json({ success: false, error: 'invalid_token' }, 401)
 
     const body = await req.json()
-    const { tenant_id, checkout_id } = body
+    const { tenant_id, checkout_id, kind } = body
     if (!tenant_id || !checkout_id) return json({ success: false, error: 'missing_params' }, 400)
 
     const supabase = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '')
@@ -237,6 +269,29 @@ serve(async (req) => {
     const sevenStorePayment = (tenant?.settings?.payment_info_seven_store || null) as PaymentInfo | null
     const freeShippingThreshold = (tenant?.free_shipping_threshold ?? 3500) as number
     const msgCfg = readMsgCfg(tenant?.settings?.message_config as Record<string, unknown> | null | undefined)
+
+    // ─── kind='shipped'：已寄出通知（獨立路徑，只 append 署名）───
+    if (kind === 'shipped') {
+      const builtShip = buildShippedMessage(
+        checkout.checkout_no, checkout.shipping_method || 'myship',
+      )
+      if (!builtShip.ok) return json({ success: false, error: 'message_build_failed', message: builtShip.error }, 400)
+      const shippedMessage = appendFooter(builtShip.message, msgCfg)
+
+      const shipPush = await pushToLine(member.line_user_id, shippedMessage, lineToken)
+      if (shipPush.ok) {
+        await supabase.from('checkouts')
+          .update({ shipped_notified_at: new Date().toISOString() })
+          .eq('id', checkout_id).eq('tenant_id', tenant_id)
+      }
+      return json({
+        success: shipPush.ok, checkout_id, checkout_no: checkout.checkout_no,
+        shipping_method: checkout.shipping_method,
+        notify_status: shipPush.ok ? 'sent' : 'failed',
+        notify_error: shipPush.ok ? null : shipPush.error,
+        message_kind: 'shipped',
+      }, shipPush.ok ? 200 : 502)
+    }
 
     const itemsText = parseItems(checkout.checkout_items)
 
