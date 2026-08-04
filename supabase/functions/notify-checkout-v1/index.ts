@@ -1,5 +1,7 @@
 // ============================================
-// 🔔 Edge Function: notify-checkout-v1 (v15)
+// 🔔 Edge Function: notify-checkout-v1 (v16)
+// v16: 訊息套用 tenants.settings.message_config（逾期天數 deadline_days、後五碼提醒 remit_note、結尾署名 footer）
+//      —— 用 post-process 套用，預設值(3天/匯款後請回覆帳號後五碼/無署名)＝不改變原行為
 // v15: 宅配/店到店通知回讀已填的寄件資訊(shipping_details)，改「完成匯款後回覆後五碼」；
 //      未填寄件資訊的舊單仍沿用「請回覆姓名/電話/店名」
 // v14: 賣貨便免運(myship_free)的開賣場通知顯示「✨ 賣貨便免運 -$38（已折抵）」
@@ -20,6 +22,26 @@ const corsHeaders = {
 interface CheckoutItem { name?: string; variant_name?: string | null; qty?: number; unit_price?: number; subtotal?: number }
 interface PaymentInfo { bank?: string; name?: string; account?: string }
 
+// 客人訊息設定（tenants.settings.message_config）：套到最終訊息。預設值＝不改變原行為。
+interface MsgCfg { days: number; remit: string; footer: string }
+const DEFAULT_REMIT = '匯款後請回覆帳號後五碼'
+function readMsgCfg(mc: Record<string, unknown> | null | undefined): MsgCfg {
+  const m = mc || {}
+  const days = parseInt(String(m.deadline_days ?? '')) || 3
+  const remit = (String(m.remit_note ?? '').trim()) || DEFAULT_REMIT
+  const footer = String(m.footer ?? '').trim()
+  return { days, remit, footer }
+}
+function applyMsgCfg(msg: string, cfg: MsgCfg): string {
+  let m = msg
+  if (cfg.days !== 3) m = m.replaceAll('3 天', `${cfg.days} 天`)
+  if (cfg.remit && cfg.remit !== DEFAULT_REMIT) {
+    m = m.replaceAll('完成匯款後請回覆帳號後五碼', cfg.remit).replaceAll('匯款後請回覆帳號後五碼', cfg.remit)
+  }
+  if (cfg.footer) m = m + '\n\n' + cfg.footer
+  return m
+}
+
 async function pushToLine(userId: string, message: string, lineToken: string) {
   try {
     const res = await fetch('https://api.line.me/v2/bot/message/push', {
@@ -36,8 +58,6 @@ async function pushToLine(userId: string, message: string, lineToken: string) {
 }
 
 // 把 checkout_items JSON 轉成 LINE 訊息用的明細區塊
-// - 一般品：• 商品名（規格） x1 $1,150
-// - 退款品項（負金額）：• 宅配運費退款 -$80（達免運門檻自動回扣）
 function parseItems(raw: string | null | undefined): string {
   if (!raw) return ''
   try {
@@ -62,7 +82,7 @@ function bankBlock(p: PaymentInfo | null): string {
   return `💳 匯款資訊：\n銀行：${x.bank || '-'}\n戶名：${x.name || '-'}\n帳號：${x.account || '-'}\n\n`
 }
 
-// 清掉人工貼上殘留的標籤前綴（7-11 / 店名： / 地址： 等）
+// 清掉人工貼上殘留的標籤前綴
 function cleanVal(s: unknown): string {
   return String(s ?? '').replace(/^(7-?11)?\s*(店名|門市|姓名|電話|地址|收件地址)?\s*[:：]?\s*/i, '').trim()
 }
@@ -81,7 +101,7 @@ function shipInfoBlock(method: string, d: Record<string, unknown> | null): strin
   return ''
 }
 
-// ─── 補款通知（partial 用）──────────────────────────────
+// ─── 補款通知（partial 用）──────────────────
 function buildTopupMessage(
   checkoutNo: string,
   totalAmount: number,
@@ -97,7 +117,6 @@ function buildTopupMessage(
   const shippingLabel = shippingMethod === 'seven_store' ? '7-11店到店'
                       : shippingMethod === 'delivery' ? '宅配'
                       : shippingMethod === 'pickup' ? '自取' : '出貨'
-  // 達免運（運費=0）時，說明原本的運費已免收並折抵本次補款，讓客人知道少補的錢是運費
   const origFee = shippingMethod === 'delivery' ? 80 : shippingMethod === 'seven_store' ? 60 : 0
   const feeLine = shippingFee > 0
     ? `🚚 運費（${shippingLabel}）：$${shippingFee.toLocaleString()}\n`
@@ -111,16 +130,16 @@ function buildTopupMessage(
     `📋 單號：${checkoutNo}\n` +
     `您原本的訂單已加入新商品，請補匯差額。\n\n` +
     `📦 商品明細：\n${itemsText}${feeLine}` +
-    `─────────────\n` +
+    `─────────\n` +
     `💰 訂單總額：$${totalAmount.toLocaleString()}\n` +
     `✅ 已付：$${paidAmount.toLocaleString()}\n` +
     `🟡 補匯金額：$${owed.toLocaleString()}\n\n` +
     bankBlock(bank) +
-    `匯款後請回覆帳號後 5 碼確認。`,
+    `匯款後請回覆帳號後五碼確認。`,
   }
 }
 
-// ─── 初次通知（pending / paid 用，沿用原 v10 邏輯 + 千分位）────────
+// ─── 初次通知（pending / paid 用）────────
 function buildMessage(
   checkoutNo: string, totalAmount: number, shippingMethod: string, shippingFee: number,
   storeUrl: string | null, itemsText: string,
@@ -132,7 +151,6 @@ function buildMessage(
   if (shippingMethod === 'myship' || shippingMethod === 'myship_free') {
     if (!storeUrl) return { ok: false, error: '賣貨便結帳單尚未設定賣場連結' }
     const paySuffix = shippingFee === 0 ? '（免運取貨付款）' : '（取貨付款）'
-    // 賣貨便免運：明列折抵的 -$38，讓客人知道金額已扣免運
     const freeLine = shippingMethod === 'myship_free' ? `✨ 賣貨便免運 -$38（已折抵）\n` : ''
     return { ok: true, message:
       `🛒 您的商品已開立賣場囉！\n\n📋 單號：${checkoutNo}\n` + itemsBlock +
@@ -218,6 +236,7 @@ serve(async (req) => {
 
     const sevenStorePayment = (tenant?.settings?.payment_info_seven_store || null) as PaymentInfo | null
     const freeShippingThreshold = (tenant?.free_shipping_threshold ?? 3500) as number
+    const msgCfg = readMsgCfg(tenant?.settings?.message_config as Record<string, unknown> | null | undefined)
 
     const itemsText = parseItems(checkout.checkout_items)
 
@@ -236,7 +255,9 @@ serve(async (req) => {
         )
     if (!built.ok) return json({ success: false, error: 'message_build_failed', message: built.error }, 400)
 
-    const pushResult = await pushToLine(member.line_user_id, built.message, lineToken)
+    const finalMessage = applyMsgCfg(built.message, msgCfg)
+
+    const pushResult = await pushToLine(member.line_user_id, finalMessage, lineToken)
     const notifyStatus = pushResult.ok ? 'sent' : 'failed'
 
     await supabase.rpc('update_checkout_notify_status_v1', {

@@ -1,0 +1,5 @@
+-- 2026-08-03 客人訊息設定 message_config（存 tenants.settings.message_config）
+-- update_tenant_settings_v1 可寫 message_config；下列發訊點改讀它（預設值＝不改原行為）：
+--   process_myship_not_picked_up_email(未取提醒,修掉寫死「麵包小姐」)、create_shop_checkout_v1(訂單成立)、
+--   edge: notify-checkout-v1 v16、notify-myship-url v13。line-webhook 客服(service_hours)待接。
+-- 欄位：header(店名抬頭,預設店名)/service_hours(客服時間)/deadline_days(逾期天數,預設3)/footer(結尾署名)/remit_note(後五碼提醒)。

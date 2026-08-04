@@ -61,6 +61,8 @@ export interface TenantSettingsData {
   payment_info?: Record<string, unknown> | null
   /** 店到店匯款帳戶，存 settings.payment_info_seven_store；傳 null = 與宅配相同(移除 key，fallback) */
   payment_info_seven_store?: Record<string, unknown> | null
+  /** 客人訊息設定，存 settings.message_config（店名抬頭/客服時間/逾期天數/署名/後五碼提醒） */
+  message_config?: Record<string, unknown> | null
   line_channel_token?: string | null
   line_channel_secret?: string | null
   line_oa_id?: string | null

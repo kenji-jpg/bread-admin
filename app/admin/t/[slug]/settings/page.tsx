@@ -109,6 +109,9 @@ export default function SettingsPage() {
     const [sevenSame, setSevenSame] = useState(true)
     const [sevenPayment, setSevenPayment] = useState<{ bank: string; account: string; name: string }>({ bank: '', account: '', name: '' })
     const [showTokenGuide, setShowTokenGuide] = useState(false)
+    // 客人訊息設定（settings.message_config）
+    const [msgCfg, setMsgCfg] = useState({ header: '', service_hours: '', deadline_days: '3', footer: '', remit_note: '' })
+    const [savingMsg, setSavingMsg] = useState(false)
     const supabase = createClient()
 
     // 團隊成員狀態
@@ -169,8 +172,44 @@ export default function SettingsPage() {
                 setSevenSame(true)
                 setSevenPayment({ bank: '', account: '', name: '' })
             }
+
+            // 客人訊息設定：載入，未設用預設（店名抬頭預設店名）
+            const mc = (tenant as { settings?: { message_config?: Record<string, string> } })?.settings?.message_config || {}
+            setMsgCfg({
+                header: mc.header ?? tenant.name ?? '',
+                service_hours: mc.service_hours ?? '',
+                deadline_days: String(mc.deadline_days ?? '3'),
+                footer: mc.footer ?? '',
+                remit_note: mc.remit_note ?? '匯款後請回覆帳號後五碼',
+            })
         }
     }, [tenant])
+
+    const saveMsgCfg = async () => {
+        if (!tenant) return
+        setSavingMsg(true)
+        try {
+            const payload = {
+                header: msgCfg.header.trim(),
+                service_hours: msgCfg.service_hours.trim(),
+                deadline_days: Math.max(1, parseInt(msgCfg.deadline_days, 10) || 3),
+                footer: msgCfg.footer.trim(),
+                remit_note: msgCfg.remit_note.trim(),
+            }
+            const result = await updateTenantSettings(supabase, tenant.id, { message_config: payload })
+            if (!result.success) { toast.error(result.error || '儲存失敗'); setSavingMsg(false); return }
+            toast.success('客人訊息設定已儲存')
+            refetch()
+        } catch (e) {
+            toast.error(e instanceof Error ? e.message : '儲存失敗')
+        } finally {
+            setSavingMsg(false)
+        }
+    }
+
+    const resetMsgCfg = () => {
+        setMsgCfg({ header: tenant?.name ?? '', service_hours: '', deadline_days: '3', footer: '', remit_note: '匯款後請回覆帳號後五碼' })
+    }
 
     // 安全取得 payment_info（處理遮罩格式）
     const getPaymentInfo = useCallback(() => {
@@ -1195,6 +1234,78 @@ export default function SettingsPage() {
                                     <p className="text-xs text-amber-500 mt-2">跨租戶存取時無法編輯</p>
                                 )}
                             </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* 客人訊息設定 */}
+                    <Card className="mt-6 border-border/50">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <MessageCircle className="h-5 w-5 text-primary" />
+                                客人訊息設定
+                            </CardTitle>
+                            <CardDescription>套用到系統主動發給客人的 LINE 訊息（開賣場、訂單成立、補款、未取提醒、客服）</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="grid gap-4 md:grid-cols-2">
+                                <div className="space-y-1.5">
+                                    <Label>店名抬頭</Label>
+                                    <Input value={msgCfg.header} onChange={(e) => setMsgCfg({ ...msgCfg, header: e.target.value })}
+                                        placeholder={tenant.name || '店名'} className="rounded-xl" disabled={isCrossTenantAccess} />
+                                    <p className="text-xs text-muted-foreground">用在「未取提醒」等訊息的抬頭。預設帶店名。</p>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label>客服時間</Label>
+                                    <Input value={msgCfg.service_hours} onChange={(e) => setMsgCfg({ ...msgCfg, service_hours: e.target.value })}
+                                        placeholder="例：週一~五 10:00–16:00" className="rounded-xl" disabled={isCrossTenantAccess} />
+                                    <p className="text-xs text-muted-foreground">客人私訊「客服」時回覆的營業時段。</p>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label>匯款/取貨期限（天）</Label>
+                                    <Input type="number" min={1} value={msgCfg.deadline_days}
+                                        onChange={(e) => setMsgCfg({ ...msgCfg, deadline_days: e.target.value })}
+                                        className="rounded-xl w-28" disabled={isCrossTenantAccess} />
+                                    <p className="text-xs text-muted-foreground">通知裡「請於 N 天內完成…」的天數。預設 3。</p>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label>「回覆後五碼」提醒語</Label>
+                                    <Input value={msgCfg.remit_note} onChange={(e) => setMsgCfg({ ...msgCfg, remit_note: e.target.value })}
+                                        placeholder="匯款後請回覆帳號後五碼" className="rounded-xl" disabled={isCrossTenantAccess} />
+                                    <p className="text-xs text-muted-foreground">匯款通知裡提醒客人回報的那句。</p>
+                                </div>
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label>訊息結尾署名（選填）</Label>
+                                <Input value={msgCfg.footer} onChange={(e) => setMsgCfg({ ...msgCfg, footer: e.target.value })}
+                                    placeholder="例：有問題請私訊我們 ❤️" className="rounded-xl" disabled={isCrossTenantAccess} />
+                                <p className="text-xs text-muted-foreground">附在每則通知最後。留空則不加。</p>
+                            </div>
+
+                            {/* 預覽 */}
+                            <div className="rounded-xl border border-border/60 bg-muted/30 p-3">
+                                <p className="mb-1.5 text-xs font-medium text-muted-foreground">🔎 預覽（賣貨便開賣場通知）</p>
+                                <pre className="whitespace-pre-wrap break-words font-sans text-xs leading-relaxed text-foreground/90">{
+`🛒 您的商品已開立賣場囉！
+
+📋 單號：260801-1234
+💰 金額：$680（取貨付款）
+👉 請點擊下方連結前往 7-11 下單：
+https://myship.7-11.com.tw/...
+
+⚠️ 請於 ${Math.max(1, parseInt(msgCfg.deadline_days, 10) || 3)} 天內完成下單，逾期將會自動視為棄單處理。${msgCfg.footer.trim() ? `\n\n${msgCfg.footer.trim()}` : ''}`
+                                }</pre>
+                            </div>
+
+                            <div className="flex items-center gap-2 pt-1">
+                                <Button onClick={saveMsgCfg} disabled={savingMsg || isCrossTenantAccess} className="gradient-primary rounded-xl">
+                                    <Save className="mr-2 h-4 w-4" />
+                                    {savingMsg ? '儲存中...' : '儲存訊息設定'}
+                                </Button>
+                                <Button variant="outline" onClick={resetMsgCfg} disabled={savingMsg || isCrossTenantAccess} className="rounded-xl">
+                                    還原預設
+                                </Button>
+                            </div>
+                            {isCrossTenantAccess && <p className="text-xs text-amber-500">跨租戶存取時無法編輯</p>}
                         </CardContent>
                     </Card>
                 </TabsContent>
