@@ -597,39 +597,46 @@ export default function CheckoutsPage() {
         }
     }
 
-    // 標記已寄出 (ordered → shipped) + 主動通知客人「已寄出」
+    // 按「已寄出」：
+    //  · 賣貨便 → 由 7-11 發取貨通知、取貨付款後才完成（走 email），這裡只標記寄出、不通知不完成
+    //  · 宅配/店到店 → 此時已收款，通知客人「已寄出」並「直接標記完成」（一步到位）
     const handleMarkShipped = async (item: CheckoutListItem) => {
         try {
-            const result = await checkoutApiRef.current.markShipped(item.id)
-            if (!result.success) {
-                toast.error(result.message || '標記失敗')
+            const method = item.shipping_method || 'myship'
+            if (isMyshipMethod(method)) {
+                const result = await checkoutApiRef.current.markShipped(item.id)
+                if (result.success) {
+                    toast.success('已標記寄出')
+                    fetchCheckouts()
+                } else {
+                    toast.error(result.message || '標記失敗')
+                }
                 return
             }
-            // 賣貨便由 7-11 自行發取貨通知給客人，不用再推「已寄出」
-            if (isMyshipMethod(item.shipping_method || 'myship')) {
-                toast.success('已標記寄出')
-                fetchCheckouts()
+            // 宅配/店到店：先標記完成（ordered → completed），再主動推 LINE 通知客人已寄出
+            const done = await checkoutApiRef.current.markCompleted(item.id)
+            if (!done.success) {
+                toast.error(done.message || '標記完成失敗')
                 return
             }
-            // 已標記寄出，接著主動推 LINE 通知客人
             if (!item.member_line_user_id) {
-                toast.success('已標記寄出', { description: '客人未綁定 LINE，未發送通知' })
+                toast.success('訂單已完成', { description: '客人未綁定 LINE，未發送通知' })
                 fetchCheckouts()
                 return
             }
             const notify = await checkoutApiRef.current.notifyShipped(item.id)
             if (notify.success) {
-                toast.success('已標記寄出並通知客人 📦')
+                toast.success('已通知客人並完成訂單 ✅')
             } else if (notify.error === 'member_no_line' || notify.error === 'no_member') {
-                toast.success('已標記寄出', { description: '客人未綁定 LINE，未發送通知' })
+                toast.success('訂單已完成', { description: '客人未綁定 LINE，未發送通知' })
             } else {
-                toast.success('已標記寄出', {
+                toast.success('訂單已完成', {
                     description: `通知未送出：${notify.message || notify.notify_error || '請稍後重試'}`,
                 })
             }
             fetchCheckouts()
         } catch (error: any) {
-            toast.error(error.message || '標記失敗')
+            toast.error(error.message || '操作失敗')
         }
     }
 
