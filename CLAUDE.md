@@ -4,7 +4,9 @@
 
 ## 專案概述
 
-多租戶（Multi-tenant）LINE 團購管理 SaaS 系統（品牌名：**PlusHub**）。店家透過 LINE 官方帳號經營團購，後台管理商品、訂單、結帳、出貨、會員。支援 7-11 賣貨便物流整合。顧客透過 LIFF 商城頁面瀏覽商品並下單。
+多租戶（Multi-tenant）LINE 團購管理 SaaS 系統（品牌名：**PlusHub**）。店家透過 LINE 官方帳號經營團購，後台管理商品、訂單、結帳、出貨、會員。支援 7-11 賣貨便物流整合。顧客透過**商城網站**（`/shop/[tenantSlug]`，純網頁 + LINE Login OAuth，**不是 LIFF**）瀏覽商品並下單。
+
+> ⚠️ **客人端商城已是純網頁，不是 LIFF。** LIFF SDK 早已移除。本文件若殘留「LIFF 商城」字樣＝歷史用語，一律指「商城網站」。詳見〈商城網站架構〉。
 
 ## 技術棧
 
@@ -34,7 +36,7 @@ npm run lint     # ESLint 檢查
 NEXT_PUBLIC_SUPABASE_URL        # Supabase 專案 URL
 NEXT_PUBLIC_SUPABASE_ANON_KEY   # Supabase 匿名金鑰
 SUPABASE_SERVICE_ROLE_KEY       # Supabase 服務金鑰（僅伺服端）
-NEXT_PUBLIC_LIFF_ID             # LINE LIFF App ID（平台預設，租戶可覆蓋）
+NEXT_PUBLIC_LIFF_ID             # （舊 LIFF App ID）商城改純網頁後已不使用，保留相容
 ```
 
 ## 專案結構
@@ -68,15 +70,17 @@ app/
 │       ├── orders/                       # 訂單管理（列表/手動下單）
 │       ├── checkouts/                    # 結帳管理
 │       ├── members/                      # 會員管理
-│       ├── shop/                         # 商城管理（LIFF 外觀設定）
+│       ├── shop/                         # 商城管理（商城網站外觀設定）
 │       └── settings/                     # 店家設定（基本/付款/LINE/團隊）
 │           └── billing/                  # 帳務（方案升級/轉帳資訊）
 ├── not-found.tsx                            # 自訂 404 頁面
 ├── error.tsx                                # 自訂錯誤邊界
-├── s/                                    # LIFF 顧客端
-│   ├── page.tsx                          # LIFF 回調中繼（重定向）
-│   ├── layout.tsx                        # LiffProvider 包裝（動態取租戶 liff_id）
-│   └── shop/[tenantSlug]/page.tsx        # 商城頁面（顧客瀏覽/下單/結帳）
+├── shop/[tenantSlug]/                    # 🛒 商城網站（顧客端，純網頁 + LINE Login OAuth，非 LIFF）
+│   ├── page.tsx                          # 商城主頁（瀏覽/下單/結帳）
+│   ├── layout.tsx
+│   └── shop-providers.tsx                # LineAuthProvider 包裝（use-line-auth）
+├── share/[tenantSlug]/[productId]/page.tsx  # 商品分享頁（OG 預覽卡）
+├── s/                                    # ⚠️ 舊 LIFF 路徑，已棄用：全部 301/redirect 到 /shop（只為接舊連結）
 components/
 ├── ui/                  # Radix UI 基礎元件（button, dialog, table 等）
 ├── layout/              # sidebar, header, tenant-switcher, theme-toggle
@@ -91,10 +95,7 @@ hooks/
 ├── use-permission.tsx           # 權限判斷（canManageProducts 等）
 ├── use-secure-mutations.ts      # RPC 寫入操作工具函數
 ├── use-sidebar.tsx              # 側邊欄狀態
-└── use-liff.tsx                 # LIFF SDK 初始化 + 分享連結工具
-                                 # 接收 liffId prop（由 layout 從租戶動態取得）
-                                 # getLiffShareUrl(path, customLiffId?)
-                                 # getShopShareUrl(tenantSlug, customLiffId?)
+└── use-line-auth.tsx            # 商城顧客端 LINE Login OAuth（取代已移除的 use-liff.tsx / LIFF SDK）
 lib/supabase/
 ├── client.ts            # 瀏覽器端 Supabase client
 ├── server.ts            # 伺服器端 Supabase client
@@ -140,7 +141,7 @@ Supabase 專案 ID: `kashgsxlrdyuirijocld`
 
 | 資料表 | 用途 | 備註 |
 |--------|------|------|
-| tenants | 店家（多租戶） | `settings` JSONB 含 shop 設定，`plan` 欄位控制方案（basic/pro/max），`liff_id` 租戶專屬 LIFF ID（可選），`myship_notify_email` 賣貨便通知信箱，`forward_email` 轉寄目標信箱 |
+| tenants | 店家（多租戶） | `settings` JSONB 含 shop 設定，`plan` 欄位控制方案（basic/pro/max），`liff_id`（舊 LIFF 欄位，商城已改純網頁，多為 legacy），`myship_notify_email` 賣貨便通知信箱，`forward_email` 轉寄目標信箱 |
 | tenant_users | 店家管理員（角色綁定） | |
 | members | LINE 會員（顧客） | |
 | products | 商品 | `show_in_shop` 控制商城顯示，`is_limited` 判斷預購/現貨模式 |
@@ -184,7 +185,7 @@ Supabase 專案 ID: `kashgsxlrdyuirijocld`
 }
 ```
 
-**products.show_in_shop**：布林值，控制商品是否在 LIFF 商城中顯示。
+**products.show_in_shop**：布林值，控制商品是否在商城網站中顯示。
 
 **shop_categories 表**：管理商城分類標籤（name, sort_order, is_visible）。
 
@@ -244,15 +245,15 @@ Supabase 專案 ID: `kashgsxlrdyuirijocld`
 - `get_shop_settings_v1` — 取得商城設定（含 shop_categories）
 - `update_shop_settings_v1` — 更新商城外觀設定（auth.uid() 驗證）
 - `upsert_shop_categories_v1` — 新增/更新/刪除商城分類（auth.uid() 驗證）
-- `get_session_products_v1` — LIFF 商城取得商品（anon 角色可用）
-- `create_preorder_v1` — LIFF 顧客下單
-- `get_member_preorders_v1` — LIFF 顧客查看自己的訂單
-- `check_staff_by_line_id_v1` — LIFF 判斷是否為 staff
-- `restock_session_product_v1` — LIFF staff 補貨
-- `add_shop_product_v1` — LIFF staff 上架商品（含 `p_is_limited`, `p_category`, `p_end_time`，自動設 `show_in_shop=true`）
-- `toggle_shop_product_v1` — LIFF staff 下架/重新上架商品
-- `update_product_end_time_v1` — LIFF staff 設定/延長截止時間（支援獨立商品 + 場次商品）
-- `get_shop_all_orders_v1` — LIFF staff 查看所有訂單
+- `get_session_products_v1` — 商城網站取得商品（顧客端，anon 角色可用）
+- `create_preorder_v1` — 商城顧客下單
+- `get_member_preorders_v1` — 商城顧客查看自己的訂單
+- `check_staff_by_line_id_v1` — 商城判斷是否為 staff
+- `restock_session_product_v1` — 商城 staff 補貨
+- `add_shop_product_v1` — 商城 staff 上架商品（含 `p_is_limited`, `p_category`, `p_end_time`，自動設 `show_in_shop=true`）
+- `toggle_shop_product_v1` — 商城 staff 下架/重新上架商品
+- `update_product_end_time_v1` — 商城 staff 設定/延長截止時間（支援獨立商品 + 場次商品）
+- `get_shop_all_orders_v1` — 商城 staff 查看所有訂單
 
 **賣貨便 Email 自動化**（Cloudflare Worker 呼叫，service_role 權限）
 - `process_myship_order_email` — 訂單成立通知：用賣場名稱比對結帳單，記錄 CM 訂單編號，狀態 `url_sent` → `ordered`
@@ -267,7 +268,7 @@ Supabase 專案 ID: `kashgsxlrdyuirijocld`
 ### RLS 重要規則
 
 - `products_select` 允許匿名讀取：`session_id IS NOT NULL AND status = 'active'` 或 `show_in_shop = true AND status = 'active'`
-- 這確保 Supabase Realtime 能推送商城商品的即時更新給 LIFF 顧客
+- 這確保 Supabase Realtime 能推送商城商品的即時更新給商城顧客
 
 ### Edge Functions
 - `line-webhook` — 接收 LINE Bot 訊息，處理下單、查詢等
@@ -292,23 +293,26 @@ Supabase 專案 ID: `kashgsxlrdyuirijocld`
 - 各租戶的 `myship_notify_email`（如 `mrsanapanman@plushub.cc`）用於接收賣貨便通知
 - 各租戶的 `forward_email` 控制轉寄目標（Worker 自動查詢並轉寄）
 
-## LIFF 商城架構
+## 商城網站架構（客人端）
+
+> ⚠️ **客人端商城早已是純網頁**（Next.js route + LINE Login OAuth），**不是 LIFF**。LIFF SDK / `use-liff.tsx` / `LiffProvider` 都已移除，登入改用 `hooks/use-line-auth.tsx`。舊 `/s/*` 只保留做 301 redirect 接舊連結。下方若還有「LIFF」字樣＝歷史殘留，一律理解為「商城網站」。
 
 ### 路由
-- `/s/shop/[tenantSlug]` — 商城主頁（唯一的顧客端頁面）
-- `/s` — LIFF 回調中繼頁，處理 OAuth 重定向後導回商城
+- `/shop/[tenantSlug]` — 商城主頁（唯一的顧客端頁面，純網頁）
+- `/share/[tenantSlug]/[productId]` — 商品分享頁（帶 OG 預覽卡）
+- `/s/*` — 舊 LIFF 連結 → middleware 301 / 元件 redirect 到 `/shop`
+- 登入包裝：`app/shop/[tenantSlug]/shop-providers.tsx` 用 `LineAuthProvider`（`use-line-auth`）
 
 ### 功能
 - 商品瀏覽（依分類篩選、搜尋）
 - 即時動態：Supabase Realtime 監聽 products 表，商品被購買時顯示 +N 動畫（Max 方案或 Staff 才啟用）
 - 熱門標記：sold_qty >= 5 顯示🔥標籤
 - 顧客下單（喊單）+ 查看自己訂單
-- **LIFF 結帳**：3 步驟 Modal（選擇出貨方式 → 確認 → 成功+匯款資訊+帳號複製）
+- **商城結帳**：3 步驟 Modal（選擇出貨方式 → 確認 → 成功+匯款資訊+帳號複製）
 - Staff 模式：上架商品（含拍照+相簿）、補貨、關閉收單、截止/延長時限
 - 商城外觀由後台 `/admin/t/[slug]/shop` 控制（banner、公告、主題色、分類排序）
 
 ### 效能優化
-- 商品在 LIFF init 完成前即可顯示（不等 `isReady`，只等 `isLoading`）
 - 圖片壓縮：上傳時 client-side WebP 壓縮（400px max width, 0.7 quality）
 - 圖片懶載入：前 4 張 `priority + eager`，其餘 `lazy`
 - 已移除 30 秒輪詢（Realtime 已取代）
@@ -317,7 +321,7 @@ Supabase 專案 ID: `kashgsxlrdyuirijocld`
 ### Dev 模式 Staff Override
 - URL 加 `?staff=1` 可在 localhost 強制開啟管理員模式（owner 角色）
 - 僅 `NODE_ENV === 'development'` 生效，production 不受影響
-- 範例：`http://localhost:3000/s/shop/mrsanpanman?staff=1`
+- 範例：`http://localhost:3000/shop/mrsanpanman?staff=1`
 
 ### 商品雙模式（預購/現貨）
 
@@ -336,26 +340,22 @@ Supabase 專案 ID: `kashgsxlrdyuirijocld`
 - **右上第一排**：預購/現貨（永遠顯示）
 - **右上第二排**：倒數時間（有限時才顯示）
 
-### LIFF Staff 上架 Modal
-從 LIFF 管理員模式上架商品時可設定：
+### 商城 Staff 上架 Modal
+從商城管理員模式上架商品時可設定：
 - 商品名稱、價格、圖片（拍照 or 相簿選取）
 - 預購/現貨切換（`is_limited`），現貨模式可設庫存
 - 分類標籤（從 `shopCategories` 取得選項）
 - 收單時限：不限時 / 30分 / 1hr / 2hr
 - 上架後自動 `show_in_shop = true`，直接進入商城
 
-### LIFF 分享連結
-- `getShopShareUrl(tenantSlug, customLiffId?)` → `https://liff.line.me/{liffId}/s/shop/{tenantSlug}`
-- `getLiffShareUrl(path, customLiffId?)` — 通用版
-- 定義在 `hooks/use-liff.tsx`，支援租戶專屬 LIFF ID 覆蓋
+### 商城分享連結
+- 商城主頁：`https://www.plushub.cc/shop/{tenantSlug}`（一般網址，直接貼 LINE / 社群即可）
+- 單品分享：`/share/{tenantSlug}/{productId}`（帶 OG 預覽卡）
+- （舊的 `getLiffShareUrl` / `getShopShareUrl` / `use-liff.tsx` / `liff.line.me` 連結已全部移除）
 
-### 多租戶 LIFF 隔離（已完成）
-
-- `tenants.liff_id` 欄位：可選，若設定則該租戶使用專屬 LIFF
-- `app/s/layout.tsx`：從 URL 解析 `tenantSlug`，查詢 `tenants.liff_id`，動態傳給 `LiffProvider`
-- `use-liff.tsx`：接收 `liffId` prop，初始化時使用租戶專屬或平台預設 LIFF ID
-- 分享連結函數支援 `customLiffId` 參數
-- **待完成**：後台設定頁加 LIFF ID 輸入框
+### 多租戶隔離
+- 商城以網址的 `tenantSlug` 區分租戶（`/shop/[tenantSlug]`）
+- `tenants.liff_id`：舊 LIFF 欄位，商城改純網頁後多為 legacy（少數分享/設定處仍讀得到，可忽略）
 
 ## 權限系統（RBAC）
 
@@ -369,7 +369,7 @@ viewer       → 唯讀存取
 
 - 判斷邏輯在 `hooks/use-permission.tsx`
 - super_admin 跨租戶存取時，敏感欄位會被 mask（付款資訊、LINE 金鑰）
-- 後台 RPC 使用 `auth.uid()` 驗證，LIFF 端使用 `p_line_user_id` 驗證
+- 後台 RPC 使用 `auth.uid()` 驗證，商城顧客端使用 `p_line_user_id` 驗證
 - `isCrossTenantAccess`：超管以訪客身份查看租戶時為 true
 
 ## 方案系統（Plan Gating）
@@ -379,8 +379,8 @@ viewer       → 唯讀存取
 | 方案 | 代碼 | 月繳 | 年繳 | 功能 |
 |------|------|------|------|------|
 | 基本版 | `basic` | NT$199 | NT$1,990（省$398） | 商品、訂單、結帳、會員管理（核心功能） |
-| 專業版 | `pro` | NT$699 | NT$6,990（省$1,398） | 基本版 + LIFF 商城、賣貨便 Email 自動化、Chrome 插件 |
-| 旗艦版 | `max` | — | — | 專業版 + LIFF Realtime 即時同步（給顧客端） |
+| 專業版 | `pro` | NT$699 | NT$6,990（省$1,398） | 基本版 + 商城網站、賣貨便 Email 自動化、Chrome 插件 |
+| 旗艦版 | `max` | — | — | 專業版 + 商城 Realtime 即時同步（給顧客端） |
 
 ### 訂閱生命週期
 
@@ -406,7 +406,7 @@ viewer       → 唯讀存取
 - 後台 sidebar 對 Basic 租戶鎖定 Pro 功能頁面，顯示🔒 + Pro Badge
 - 升降級：超管透過 `update_tenant_plan_v1` RPC 操作（支援 basic/pro/max）
 - 超管付款管理：支援目標方案選擇（Basic/Pro）+ 4 個快選金額按鈕（$199/$1,990/$699/$6,990）
-- LIFF Realtime：`tenant.plan === 'max'` 或 `isStaff` 才啟用即時同步
+- 商城 Realtime：`tenant.plan === 'max'` 或 `isStaff` 才啟用即時同步
 
 ## 出貨方式
 
@@ -464,7 +464,7 @@ pending → url_sent → ordered → shipped → completed
 - 公開路徑: `/login`, `/register`, `/forgot-password`, `/terms`, `/privacy`
 - 保護路徑: `/admin`, `/create-tenant`（需登入）
 - 跳過路徑: `/auth/redirect`, `/auth/callback`
-- LIFF 路徑: `/s/*`（不需要 Supabase Auth，用 LINE Login）
+- 商城路徑: `/shop/*`（顧客端，不需 Supabase Auth，用 LINE Login OAuth）；舊 `/s/*` 只做 redirect
 
 ### 安全注意事項
 - 前端無法直接查詢 `tenants` 的 `line_channel_token` / `line_channel_secret`（已 revoke SELECT）
@@ -493,7 +493,7 @@ pending → url_sent → ordered → shipped → completed
 | 6 | 付款收據 Email | 超管確認付款後自動寄信給店家 | 1 天 |
 | 7 | 登入/註冊 Rate Limiting | 防暴力破解（Supabase 內建 + 前端） | 1 天 |
 | 8 | ~~新手導覽~~ | ✅ 已完成（首版）— 新戶 LINE 未連接時 spotlight 導覽引導到 LINE 設定（`components/onboarding/onboarding-tour.tsx`）。之後可再擴充其他步驟 | — |
-| 9 | ~~多租戶 LIFF 隔離~~ | ✅ 已完成 — `LiffProvider` 動態取租戶 `liff_id`，layout 從 URL 解析 | — |
+| 9 | ~~多租戶商城隔離~~ | ✅ 已完成 — 商城網站以網址 `tenantSlug` 區分租戶 | — |
 | 10 | **新客手機簡訊驗證 (SMS OTP)** | 初次加入綁手機驗證壓棄單。設計已對齊（見 memory `project_sms_phone_verification`），待定成本模式（平台吸收+每租戶額度 vs 租戶自帶帳號）才動手；多租戶會勾到金流/計費、需 per-tenant 額度熔斷 | 2-3 天 |
 
 ### Phase 3：優化（🟢 Nice-to-have）
@@ -514,7 +514,7 @@ pending → url_sent → ordered → shipped → completed
 | 開店/加入流程 | 100% | |
 | 超管後台 | 100% | |
 | 商品/訂單/結帳管理 | 95% | 缺 CSV 匯出 |
-| LIFF 商城 | 95% | PC 外部瀏覽器有已知 Bug，LIFF 隔離已完成 |
+| 商城網站 | 95% | 純網頁（LINE Login OAuth），舊 LIFF PC Bug 已不適用 |
 | 方案/付款系統 | 100% | Basic $199/Pro $699 收費、30 天試用、到期停用 |
 | 法律條款（動態） | 100% | |
 | 賣貨便自動化 | 100% | |
@@ -526,7 +526,7 @@ pending → url_sent → ordered → shipped → completed
 
 ## 已知問題
 
-- **【Bug】PC 外部瀏覽器進不了 LIFF 商城**：`liff.init()` 的 `replaceState` 會在 redirect handler 的 `useEffect` 之前清掉 URL 參數，導致重定向失敗。目前跳過，主要用戶在 LINE 內瀏覽器。
+- **【已不適用】舊 LIFF 的 PC 瀏覽器 Bug**：商城已改純網頁（`/shop/[tenantSlug]` + LINE Login OAuth），原本 `liff.init()` 的 `replaceState` 清掉 URL 參數的問題不再存在。
 - **【已棄用】代購場次**：前端已全面移除，Supabase 的 `purchase_sessions` 表和場次 RPC 暫保留（舊資料相容）。商城商品用 `session_id IS NULL` 過濾排除場次商品。
 - `is_shipped`（checkouts）已棄用，改用 `shipping_status`
 
@@ -538,15 +538,15 @@ pending → url_sent → ordered → shipped → completed
 - **【完成】賣貨便 Email 自動化**：Cloudflare Worker + Email Routing，自動處理訂單成立 / 買家取貨通知。Worker 支援 per-tenant 轉寄（`forward_email`）、賣場名稱去除括號暱稱、RPC 前綴比對
 - **【完成】租戶建立審核機制**：`tenant_create_requests` 表 + 審核 RPC + 超管審核頁面
 - **【完成】Cloudflare Email Routing**：`admin@plushub.cc` → Gmail 轉發，`*@plushub.cc` catch-all → Worker → per-tenant 轉寄 + 賣貨便處理
-- **【完成】商品雙模式（預購/現貨）**：LIFF 商城以 `is_limited` 判斷模式，預購不限購、不完銷；現貨受庫存限制、可完銷
-- **【完成】LIFF 管理員模式改善**：上架 Modal 支援預購/現貨、分類、時限、拍照+相簿上傳
-- **【完成】LIFF 結帳功能**：3 步驟 Modal（出貨方式 → 確認 → 成功），支援賣貨便/宅配/自取，匯款資訊集中顯示 + 帳號快速複製
-- **【完成】LIFF 效能優化**：LIFF init 不阻塞商品渲染、圖片壓縮（400px/0.7）、懶載入、移除輪詢、directRpc 繞過 auth 阻塞
+- **【完成】商品雙模式（預購/現貨）**：商城網站以 `is_limited` 判斷模式，預購不限購、不完銷；現貨受庫存限制、可完銷
+- **【完成】商城管理員模式改善**：上架 Modal 支援預購/現貨、分類、時限、拍照+相簿上傳
+- **【完成】商城結帳功能**：3 步驟 Modal（出貨方式 → 確認 → 成功），支援賣貨便/宅配/自取，匯款資訊集中顯示 + 帳號快速複製
+- **【完成】商城效能優化**：圖片壓縮（400px/0.7）、懶載入、移除輪詢、directRpc 繞過 auth 阻塞
 - **【完成】服務條款 & 隱私政策**：`/terms`、`/privacy` 公開頁面（動態載入），建立租戶需勾選同意，所有認證頁 footer 含連結
 - **【完成】帳務頁面**：`/admin/t/[slug]/settings/billing`，支援 Basic/Pro 雙方案選擇、月繳/年繳切換、動態金額、免費祖父條款標記、到期提醒
 - **【完成】Chrome 插件賣場名稱修正**：回填 DB 的 `myship_store_name` 現在包含暱稱，與賣貨便實際賣場名稱一致
 - **【完成】Basic 收費化 + Pro 調價**：Basic NT$199/月、Pro NT$699/月（年繳 $1,990/$6,990）。新租戶 30 天免費試用，到期自動停用（`is_active=false`）。現有租戶 `plan_expires_at=NULL` 維持免費。儀表板到期提醒 Banner（琥珀/紅色）。Billing 頁面雙方案選擇 + 動態金額。超管付款管理目標方案選擇器 + 快選金額按鈕
-- **【完成】多租戶 LIFF 隔離**：`app/s/layout.tsx` 從 URL 解析 tenantSlug 查詢 `tenants.liff_id`，動態傳給 `LiffProvider`。各租戶可使用專屬 LIFF App
+- **【完成】商城改純網頁（移除 LIFF）**：客人端商城從 LIFF 遷移為純網頁 `/shop/[tenantSlug]` + LINE Login OAuth（`hooks/use-line-auth.tsx`）。舊 `/s/*` 以 301 redirect 接舊連結。各租戶以網址 `tenantSlug` 區分
 - **【完成】自訂 404 / Error 頁面**：`app/not-found.tsx`（品牌化 404）+ `app/error.tsx`（錯誤邊界，含重試按鈕）
 - **【完成】RPC `get_dashboard_init_v1` 擴展**：`current_tenant` 回傳 `plan_expires_at`、`subscription_starts_at`、`next_billing_date`，確保前端能讀取訂閱到期資訊
 
