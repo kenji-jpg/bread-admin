@@ -45,7 +45,7 @@ export async function middleware(request: NextRequest) {
     }
 
     // 不需要 auth 檢查的路由（避免循環或干擾 LIFF）
-    const skipAuthPaths = ['/auth/redirect', '/auth/callback', '/s', '/shop', '/api/line']
+    const skipAuthPaths = ['/auth/redirect', '/auth/callback', '/s', '/shop', '/api/line', '/api/ecpay']
     const shouldSkipAuth = skipAuthPaths.some(path =>
         pathname === path || pathname.startsWith(`${path}/`)
     )
