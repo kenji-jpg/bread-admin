@@ -562,14 +562,16 @@ export default function ShopPage() {
   const [coName, setCoName] = useState('')
   const [coPhone, setCoPhone] = useState('')
   const [coStore, setCoStore] = useState('')
+  const [coStoreId, setCoStoreId] = useState('')
   const [coAddress, setCoAddress] = useState('')
+  const [coPrefilled, setCoPrefilled] = useState(false)
   const [coSubmitting, setCoSubmitting] = useState(false)
   const [coDone, setCoDone] = useState<{ method: string; checkoutNo: string } | null>(null)
   const [coError, setCoError] = useState('')
 
   const openCheckout = useCallback(async () => {
     if (!tenant?.id || !profile?.userId) return
-    setIsCheckoutOpen(true); setCoDone(null); setCoError(''); setCoMethod(''); setCheckoutInit(null)
+    setIsCheckoutOpen(true); setCoDone(null); setCoError(''); setCoMethod(''); setCoPrefilled(false); setCheckoutInit(null)
     setCheckoutLoading(true)
     try {
       const { data } = await supabase.rpc('get_shop_checkout_init_v1', {
@@ -587,8 +589,14 @@ export default function ShopPage() {
       : m === 'delivery' ? checkoutInit?.prefill_delivery : null
     if (pre) {
       setCoName(pre.receiver_name || ''); setCoPhone(pre.receiver_phone || '')
-      setCoStore(pre.store_name || ''); setCoAddress(pre.address || '')
+      setCoStore(pre.store_name || ''); setCoStoreId(pre.store_id || ''); setCoAddress(pre.address || '')
+    } else {
+      setCoStoreId('')
     }
+    // 有帶入上次的寄送資料才提示（同方式才有舊資料）
+    const hasOld = m === 'seven_store' ? Boolean(pre?.receiver_name || pre?.store_name)
+      : m === 'delivery' ? Boolean(pre?.receiver_name || pre?.address) : false
+    setCoPrefilled(hasOld)
   }
 
   const submitCheckout = useCallback(async () => {
@@ -599,7 +607,7 @@ export default function ShopPage() {
         p_tenant_id: tenant.id, p_line_user_id: profile.userId,
         p_shipping_method: coMethod,
         p_receiver_name: coName || null, p_receiver_phone: coPhone || null,
-        p_store_name: coStore || null, p_address: coAddress || null,
+        p_store_name: coStore || null, p_store_id: coStoreId || null, p_address: coAddress || null,
       })
       if (error) throw error
       if (!data?.success) {
@@ -617,7 +625,7 @@ export default function ShopPage() {
       setCoDone({ method: coMethod, checkoutNo: data.checkout_no })
       loadMyOrders()
     } catch { setCoError('結帳失敗，請稍後再試') } finally { setCoSubmitting(false) }
-  }, [tenant?.id, profile?.userId, coMethod, coName, coPhone, coStore, coAddress, supabase, loadMyOrders])
+  }, [tenant?.id, profile?.userId, coMethod, coName, coPhone, coStore, coStoreId, coAddress, supabase, loadMyOrders])
 
   // 載入收藏
   const loadFavorites = useCallback(async () => {
@@ -3632,13 +3640,28 @@ export default function ShopPage() {
 
                     {(coMethod === 'seven_store' || coMethod === 'delivery') && (
                       <div className="space-y-2 mb-4">
+                        {coPrefilled && (
+                          <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: '#EAF7EF', color: '#2E7D50' }}>
+                            📋 已自動帶入你上次的寄送資料，如有變動請直接修改
+                          </p>
+                        )}
                         <input value={coName} onChange={(e) => setCoName(e.target.value)} placeholder="收件人姓名（真實姓名）"
                           className="w-full px-3 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #E8D5BE' }} />
                         <input value={coPhone} onChange={(e) => setCoPhone(e.target.value)} placeholder="聯絡電話" inputMode="tel"
                           className="w-full px-3 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #E8D5BE' }} />
                         {coMethod === 'seven_store' ? (
-                          <input value={coStore} onChange={(e) => setCoStore(e.target.value)} placeholder="7-11 店名（例：文五門市）"
-                            className="w-full px-3 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #E8D5BE' }} />
+                          <>
+                            <input value={coStore} onChange={(e) => setCoStore(e.target.value)} placeholder="7-11 店名（例：文五門市）"
+                              className="w-full px-3 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #E8D5BE' }} />
+                            <input value={coStoreId} onChange={(e) => setCoStoreId(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                              placeholder="7-11 店號（6 碼數字，選填）" inputMode="numeric"
+                              className="w-full px-3 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #E8D5BE' }} />
+                            <a href="https://emap.pcsc.com.tw/ecmap/default.aspx#" target="_blank" rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-xs font-medium px-1 py-0.5"
+                              style={{ color: '#E8912D' }}>
+                              🔎 不知道店號？查詢 7-11 店號（另開新頁）
+                            </a>
+                          </>
                         ) : (
                           <textarea value={coAddress} onChange={(e) => setCoAddress(e.target.value)} placeholder="收件地址" rows={2}
                             className="w-full px-3 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #E8D5BE' }} />
