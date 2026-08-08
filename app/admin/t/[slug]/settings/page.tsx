@@ -8,6 +8,7 @@ import { usePermission } from '@/hooks/use-permission'
 import { updateTenantSettings } from '@/hooks/use-secure-mutations'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -81,6 +82,17 @@ import {
 
 type AssignableRole = 'admin' | 'staff' | 'viewer'
 
+// 已收款確認通知的內建公版（客人訊息設定留空時使用）。佔位符：{單號}{金額}{店名}
+const DEFAULT_PAID_NOTICE =
+    `{店名}已確認收到您的付款🧡
+正在為您安排出貨，
+出貨後會再以 LINE 通知您，再請留意 📦
+
+📋 單號：{單號}
+💰 已收金額：\${金額}
+
+感謝您的訂購與支持 🫶🏻`
+
 const roleLabels: Record<string, string> = {
     owner: '擁有者',
     admin: '管理員',
@@ -110,7 +122,7 @@ export default function SettingsPage() {
     const [sevenPayment, setSevenPayment] = useState<{ bank: string; account: string; name: string }>({ bank: '', account: '', name: '' })
     const [showTokenGuide, setShowTokenGuide] = useState(false)
     // 客人訊息設定（settings.message_config）
-    const [msgCfg, setMsgCfg] = useState({ header: '', service_hours: '', deadline_days: '3', footer: '', remit_note: '' })
+    const [msgCfg, setMsgCfg] = useState({ header: '', service_hours: '', deadline_days: '3', footer: '', remit_note: '', paid_notice: '' })
     const [savingMsg, setSavingMsg] = useState(false)
     const supabase = createClient()
 
@@ -181,6 +193,7 @@ export default function SettingsPage() {
                 deadline_days: String(mc.deadline_days ?? '3'),
                 footer: mc.footer ?? '',
                 remit_note: mc.remit_note ?? '匯款後請回覆帳號後五碼',
+                paid_notice: mc.paid_notice ?? DEFAULT_PAID_NOTICE,
             })
         }
     }, [tenant])
@@ -195,6 +208,7 @@ export default function SettingsPage() {
                 deadline_days: Math.max(1, parseInt(msgCfg.deadline_days, 10) || 3),
                 footer: msgCfg.footer.trim(),
                 remit_note: msgCfg.remit_note.trim(),
+                paid_notice: msgCfg.paid_notice.trim(),
             }
             const result = await updateTenantSettings(supabase, tenant.id, { message_config: payload })
             if (!result.success) { toast.error(result.error || '儲存失敗'); setSavingMsg(false); return }
@@ -208,7 +222,7 @@ export default function SettingsPage() {
     }
 
     const resetMsgCfg = () => {
-        setMsgCfg({ header: tenant?.name ?? '', service_hours: '', deadline_days: '3', footer: '', remit_note: '匯款後請回覆帳號後五碼' })
+        setMsgCfg({ header: tenant?.name ?? '', service_hours: '', deadline_days: '3', footer: '', remit_note: '匯款後請回覆帳號後五碼', paid_notice: DEFAULT_PAID_NOTICE })
     }
 
     // 安全取得 payment_info（處理遮罩格式）
@@ -1244,7 +1258,7 @@ export default function SettingsPage() {
                                 <MessageCircle className="h-5 w-5 text-primary" />
                                 客人訊息設定
                             </CardTitle>
-                            <CardDescription>套用到系統主動發給客人的 LINE 訊息（開賣場、訂單成立、補款、未取提醒、客服）</CardDescription>
+                            <CardDescription>套用到系統主動發給客人的 LINE 訊息（開賣場、訂單成立、收款、補款、未取提醒、客服）</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className="grid gap-4 md:grid-cols-2">
@@ -1279,6 +1293,20 @@ export default function SettingsPage() {
                                 <Input value={msgCfg.footer} onChange={(e) => setMsgCfg({ ...msgCfg, footer: e.target.value })}
                                     placeholder="例：有問題請私訊我們 ❤️" className="rounded-xl" disabled={isCrossTenantAccess} />
                                 <p className="text-xs text-muted-foreground">附在每則通知最後。留空則不加。</p>
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <Label>已收款通知文案</Label>
+                                <Textarea value={msgCfg.paid_notice} onChange={(e) => setMsgCfg({ ...msgCfg, paid_notice: e.target.value })}
+                                    rows={8} placeholder={DEFAULT_PAID_NOTICE}
+                                    className="rounded-xl font-sans text-sm leading-relaxed" disabled={isCrossTenantAccess} />
+                                <p className="text-xs text-muted-foreground">
+                                    後台結帳單按「已收款」時（宅配／店到店）自動發給客人。可用佔位符
+                                    <code className="mx-1 rounded bg-muted px-1">{'{單號}'}</code>
+                                    <code className="mx-1 rounded bg-muted px-1">{'{金額}'}</code>
+                                    <code className="mx-1 rounded bg-muted px-1">{'{店名}'}</code>
+                                    ，發送時自動代入；結尾會接上方「署名」。賣貨便（取貨付款）不發送。
+                                </p>
                             </div>
 
                             {/* 預覽 */}

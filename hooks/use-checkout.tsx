@@ -210,6 +210,8 @@ interface UseCheckoutReturn {
     notifyCheckout: (checkoutId: string) => Promise<{ success: boolean; notify_status?: string; notify_error?: string | null; error?: string; message?: string }>
     /** 主動通知客人「已寄出」（notify-checkout-v1 kind=shipped，依出貨方式組不同訊息） */
     notifyShipped: (checkoutId: string) => Promise<{ success: boolean; notify_status?: string; notify_error?: string | null; error?: string; message?: string }>
+    /** 主動通知客人「已收款」（notify-checkout-v1 kind=paid，宅配/店到店；文案可自訂 message_config.paid_notice） */
+    notifyPaid: (checkoutId: string) => Promise<{ success: boolean; notify_status?: string; notify_error?: string | null; error?: string; message?: string }>
     updateShippingDetails: (checkoutId: string, fields: ShippingDetailsInput) => Promise<UpdateShippingDetailsResult>
 }
 
@@ -461,7 +463,7 @@ export const useCheckout = (tenantId: string): UseCheckoutReturn => {
     // kind='shipped' → 已寄出通知；未帶 kind → 初次/補款通知（依 payment_status）
     const notifyCheckout = useCallback(async (
         checkoutId: string,
-        kind?: 'shipped'
+        kind?: 'shipped' | 'paid'
     ): Promise<{ success: boolean; notify_status?: string; notify_error?: string | null; error?: string; message?: string }> => {
         try {
             const { data: { session } } = await supabase.auth.getSession()
@@ -515,6 +517,7 @@ export const useCheckout = (tenantId: string): UseCheckoutReturn => {
         changeShippingMethod,
         notifyCheckout,
         notifyShipped: (id) => notifyCheckout(id, 'shipped'),
+        notifyPaid: (id) => notifyCheckout(id, 'paid'),
         updateShippingDetails: (id, fields) => callRpc<UpdateShippingDetailsResult>('update_checkout_shipping_details_v1', {
             p_tenant_id: tenantId,
             p_checkout_id: id,

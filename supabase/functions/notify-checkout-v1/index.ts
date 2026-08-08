@@ -1,5 +1,8 @@
 // ============================================
-// 🔔 Edge Function: notify-checkout-v1 (v19)
+// 🔔 Edge Function: notify-checkout-v1 (v20)
+// v20: 新增 kind='paid' 已收款確認通知（宅配/店到店；賣貨便/自取略過）
+//      —— 文案讀 message_config.paid_notice（可自訂模板，佔位符 {單號}{金額}{店名}），
+//         留空用內建公版；結尾接署名(footer)。獨立路徑、不動「N 天」字樣
 // v19: 已寄出通知略過賣貨便（myship/myship_free）——賣貨便由 7-11 自行發取貨通知，避免重複
 // v18: 已寄出通知移除物流單號/寄件編號（實際不會有），純「已出貨」通知
 // v17: 新增 kind='shipped' 已寄出通知（宅配/店到店/自取各自訊息）
@@ -28,14 +31,24 @@ interface CheckoutItem { name?: string; variant_name?: string | null; qty?: numb
 interface PaymentInfo { bank?: string; name?: string; account?: string }
 
 // 客人訊息設定（tenants.settings.message_config）：套到最終訊息。預設值＝不改變原行為。
-interface MsgCfg { days: number; remit: string; footer: string }
+interface MsgCfg { days: number; remit: string; footer: string; header: string; paidNotice: string }
 const DEFAULT_REMIT = '匯款後請回覆帳號後五碼'
+// 已收款確認通知的內建公版（message_config.paid_notice 留空時使用）。佔位符 {單號}{金額}{店名}
+const DEFAULT_PAID_NOTICE =
+  `{店名}已確認收到您的付款🧡\n` +
+  `正在為您安排出貨，\n` +
+  `出貨後會再以 LINE 通知您，再請留意 📦\n\n` +
+  `📋 單號：{單號}\n` +
+  `💰 已收金額：\${金額}\n\n` +
+  `感謝您的訂購與支持 🫶🏻`
 function readMsgCfg(mc: Record<string, unknown> | null | undefined): MsgCfg {
   const m = mc || {}
   const days = parseInt(String(m.deadline_days ?? '')) || 3
   const remit = (String(m.remit_note ?? '').trim()) || DEFAULT_REMIT
   const footer = String(m.footer ?? '').trim()
-  return { days, remit, footer }
+  const header = String(m.header ?? '').trim()
+  const paidNotice = String(m.paid_notice ?? '').trim()
+  return { days, remit, footer, header, paidNotice }
 }
 function applyMsgCfg(msg: string, cfg: MsgCfg): string {
   let m = msg
@@ -260,7 +273,7 @@ serve(async (req) => {
     if (!member?.line_user_id) return json({ success: false, error: 'member_no_line', message: '會員未綁定 LINE' }, 422)
 
     const { data: tenant } = await supabase
-      .from('tenants').select('payment_info, settings, free_shipping_threshold, line_channel_access_token, line_channel_token').eq('id', tenant_id).maybeSingle()
+      .from('tenants').select('name, payment_info, settings, free_shipping_threshold, line_channel_access_token, line_channel_token').eq('id', tenant_id).maybeSingle()
     const lineToken = tenant?.line_channel_access_token || tenant?.line_channel_token
     if (!lineToken) return json({ success: false, error: 'missing_token', message: '店家未設定 LINE Channel Token' }, 422)
 
@@ -298,6 +311,35 @@ serve(async (req) => {
         notify_error: shipPush.ok ? null : shipPush.error,
         message_kind: 'shipped',
       }, shipPush.ok ? 200 : 502)
+    }
+
+    // ─── kind='paid'：已收款確認通知（宅配/店到店；獨立路徑，可自訂文案）───
+    if (kind === 'paid') {
+      const payMethod = checkout.shipping_method || 'delivery'
+      // 賣貨便＝取貨付款、自取＝當面付，沒有「先收款」情境 → 略過（回報 skipped，不算失敗）
+      if (payMethod !== 'delivery' && payMethod !== 'seven_store') {
+        return json({
+          success: true, checkout_id, checkout_no: checkout.checkout_no,
+          shipping_method: payMethod, notify_status: 'skipped',
+          skipped_reason: 'method_not_prepaid', message_kind: 'paid',
+        })
+      }
+      const storeName = msgCfg.header || tenant?.name || '我們'
+      const paidMsg = appendFooter(
+        (msgCfg.paidNotice || DEFAULT_PAID_NOTICE)
+          .replaceAll('{單號}', checkout.checkout_no)
+          .replaceAll('{金額}', (checkout.total_amount ?? 0).toLocaleString())
+          .replaceAll('{店名}', storeName),
+        msgCfg,
+      )
+      const paidPush = await pushToLine(member.line_user_id, paidMsg, lineToken)
+      return json({
+        success: paidPush.ok, checkout_id, checkout_no: checkout.checkout_no,
+        shipping_method: payMethod,
+        notify_status: paidPush.ok ? 'sent' : 'failed',
+        notify_error: paidPush.ok ? null : paidPush.error,
+        message_kind: 'paid',
+      }, paidPush.ok ? 200 : 502)
     }
 
     const itemsText = parseItems(checkout.checkout_items)

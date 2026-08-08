@@ -528,15 +528,31 @@ export default function CheckoutsPage() {
     // 標記客人已下單 (url_sent → ordered)
     const handleMarkOrdered = async () => {
         if (!markOrderedCheckout) return
+        const co = markOrderedCheckout
+        const method = co.shipping_method || 'myship'
 
         setIsUpdating(true)
         try {
-            const result = await checkoutApiRef.current.markOrdered(markOrderedCheckout.id, myshipOrderNo || undefined)
+            const result = await checkoutApiRef.current.markOrdered(co.id, myshipOrderNo || undefined)
             if (result.success) {
                 toast.success(result.message || '已標記客人下單')
                 setMarkOrderedCheckout(null)
                 setMyshipOrderNo('')
                 fetchCheckouts()
+                // 宅配/店到店：按「已收款」後主動通知客人收款確認（best-effort，失敗不影響狀態）
+                if (method === 'delivery' || method === 'seven_store') {
+                    checkoutApiRef.current.notifyPaid(co.id).then((notify) => {
+                        if (notify.success) {
+                            toast.success('已通知客人收款確認 📨')
+                        } else if (notify.notify_status === 'skipped') {
+                            /* 不適用此出貨方式，靜默 */
+                        } else if (notify.error === 'member_no_line' || notify.error === 'no_member') {
+                            toast.info('客人未綁定 LINE，未發送收款通知')
+                        } else {
+                            toast.info('收款通知未送出', { description: notify.message || notify.notify_error || '請稍後重試' })
+                        }
+                    }).catch(() => { /* 靜默降級 */ })
+                }
             } else {
                 toast.error(result.message || '標記失敗')
             }
